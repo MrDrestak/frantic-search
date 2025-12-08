@@ -1,0 +1,103 @@
+
+export enum GameType {
+  MTG = 'Magic: The Gathering',
+  POKEMON = 'Pokémon',
+  YUGIOH = 'Yu-Gi-Oh!'
+}
+
+export enum BinderType {
+  FOR_TRADE = 'For Trade/Sell',
+  WISHLIST = 'Wishlist',
+  COLLECTION = 'Personal Collection'
+}
+
+export enum CardCondition {
+  NM = 'Near Mint',
+  LP = 'Lightly Played',
+  MP = 'Moderately Played',
+  HP = 'Heavily Played',
+  DMG = 'Damaged'
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  whatsapp?: string;
+  preferredStore?: string;
+  isOnline?: boolean;
+}
+
+export interface Binder {
+  id: string;
+  userId: string;
+  game: GameType;
+  type: BinderType;
+  name: string;
+  coverImage?: string;
+  cardCount: number;
+  createdAt: number;
+}
+
+export interface Card {
+  id: string;
+  binderId: string;
+  userId: string;
+  scryfallId: string;
+  name: string;
+  setName: string;
+  collectorNumber: string;
+  imageUrl: string;
+  condition: CardCondition;
+  isFoil: boolean;
+  rarity: string;
+  price?: number; 
+  addedAt: number;
+  // Optional for optimization in Firestore queries
+  binderType?: BinderType; 
+}
+
+export interface MatchResult {
+  card: Card;
+  matchCard: Card;
+  seller: UserProfile;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: number;
+  read: boolean;
+}
+
+export interface ScryfallCard {
+  id: string;
+  oracle_id: string;
+  name: string;
+  set_name: string;
+  set: string;
+  collector_number: string;
+  image_uris?: {
+    normal: string;
+    small: string;
+  };
+  card_faces?: Array<{
+    image_uris?: {
+      normal: string;
+    };
+  }>;
+  rarity: string;
+  prices: {
+    usd: string | null;
+    usd_foil: string | null;
+  };
+  purchase_uris?: {
+    tcgplayer?: string;
+    cardmarket?: string;
+    cardhoarder?: string;
+    card_kingdom?: string;
+  };
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LotusExchange - TCG Marketplace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                slate: {
+                    950: '#020617',
+                }
+              },
+              animation: {
+                  'shine': 'shine 1s',
+              },
+              keyframes: {
+                  shine: {
+                      '100%': { left: '125%' },
+                  }
+              }
+            }
+          }
+        }
+    </script>
+    <style>
+        body { background-color: #020617; }
+        .ring-rainbow {
+            border-image: linear-gradient(to right, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7) 1;
+        }
+        .bg-rainbow {
+            background-image: linear-gradient(to right, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7);
+        }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
