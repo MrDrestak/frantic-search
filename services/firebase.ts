@@ -1,7 +1,7 @@
 
-import firebase from "firebase/app";
-import "firebase/auth";
-import "firebase/firestore";
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
+import "firebase/compat/firestore";
 
 // TODO: PASTE YOUR FIREBASE CONFIG HERE FROM THE CONSOLE
 const firebaseConfig = {
@@ -14,7 +14,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = firebase.initializeApp(firebaseConfig);
+// Check if apps are already initialized to avoid "already exists" error in dev hot-reload
+const app = !firebase.apps.length 
+  ? firebase.initializeApp(firebaseConfig) 
+  : firebase.app();
 
 // Export services
 export const auth = app.auth();

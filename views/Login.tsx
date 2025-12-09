@@ -1,14 +1,30 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { auth } from '../services/store';
+import { AlertTriangle } from 'lucide-react';
 
 interface LoginProps {
   onLogin: () => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const [error, setError] = useState<string | null>(null);
+
   const handleLogin = async () => {
-    await auth.login();
-    onLogin();
+    setError(null);
+    try {
+        await auth.login();
+        onLogin();
+    } catch (e: any) {
+        console.error(e);
+        let msg = "Login failed. Please try again.";
+        if (e.code === 'auth/operation-not-supported-in-this-environment') {
+            msg = "Login not supported in this preview environment. Please ensure you are running on a secure HTTPS connection or localhost.";
+        } else if (e.message) {
+            msg = e.message;
+        }
+        setError(msg);
+    }
   };
 
   return (
@@ -26,6 +42,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         <h1 className="text-3xl font-bold text-white mb-2">LotusExchange</h1>
         <p className="text-slate-400 mb-8">The premium marketplace for Magic: The Gathering collectors.</p>
+
+        {error && (
+            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-6 flex gap-3 items-start text-left">
+                <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                <p className="text-red-200 text-sm">{error}</p>
+            </div>
+        )}
 
         <button 
           onClick={handleLogin}

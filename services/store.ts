@@ -1,5 +1,5 @@
 
-import firebase from 'firebase/app';
+import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile } from '../types';
 
@@ -13,6 +13,10 @@ let currentUserProfile: UserProfile | null = null;
 export const auth = {
   login: async (): Promise<UserProfile> => {
     try {
+      // Fix for "Operation not supported in this environment"
+      // Explicitly sets persistence to LOCAL to ensure cookies/storage work correctly
+      await firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
       const result = await firebaseAuth.signInWithPopup(googleProvider);
       const user = result.user;
       
