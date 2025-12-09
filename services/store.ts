@@ -22,23 +22,42 @@ export const auth = {
       
       if (!user) throw new Error("Authentication failed");
 
+      // Check if user exists in Firestore to pull custom fields (whatsapp, store)
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      let customData = {};
+      if (userDoc.exists) {
+          customData = userDoc.data() || {};
+      }
+
       const profile: UserProfile = {
         id: user.uid,
         email: user.email || '',
         displayName: user.displayName || 'Unnamed Trader',
         photoURL: user.photoURL || undefined,
-        isOnline: true
+        isOnline: true,
+        ...customData // Merge saved data like whatsapp/store
       };
 
-      // Save/Update user profile in DB
-      // We use a custom ID (user.uid) for the document
-      // Note: In a real app, use setDoc with merge: true
       currentUserProfile = profile;
       return profile;
     } catch (error) {
       console.error("Login failed", error);
       throw error;
     }
+  },
+  loginAsGuest: async (): Promise<UserProfile> => {
+      // MOCK LOGIN for testing in environments where Google Auth is blocked
+      const guestId = 'guest_user_' + Math.floor(Math.random() * 1000);
+      const guestProfile: UserProfile = {
+          id: guestId,
+          email: 'guest@lotus.test',
+          displayName: 'Guest Trader',
+          photoURL: undefined,
+          isOnline: true
+      };
+      console.log("Logged in as Guest:", guestProfile);
+      currentUserProfile = guestProfile;
+      return guestProfile;
   },
   getCurrentUser: () => {
     if (currentUserProfile) return currentUserProfile;
@@ -53,6 +72,41 @@ export const auth = {
         };
     }
     return null;
+  },
+  updateProfile: async (updates: Partial<UserProfile>): Promise<void> => {
+      const user = firebaseAuth.currentUser;
+      const current = currentUserProfile;
+      
+      if (!user || !current) throw new Error("No user logged in");
+
+      try {
+          // 1. Update Firebase Auth (Display Name / Photo)
+          if (updates.displayName || updates.photoURL) {
+              await user.updateProfile({
+                  displayName: updates.displayName || user.displayName,
+                  photoURL: updates.photoURL || user.photoURL
+              });
+          }
+
+          // 2. Update Firestore "users" collection (Custom fields: whatsapp, store)
+          // We use set with merge: true to create the doc if it doesn't exist
+          const firestoreUpdates = {
+              displayName: updates.displayName || current.displayName,
+              email: current.email,
+              whatsapp: updates.whatsapp || null,
+              preferredStore: updates.preferredStore || null,
+              updatedAt: Date.now()
+          };
+          
+          await db.collection("users").doc(user.uid).set(firestoreUpdates, { merge: true });
+
+          // 3. Update local state
+          currentUserProfile = { ...current, ...updates };
+
+      } catch (error) {
+          console.error("Error updating profile:", error);
+          throw error;
+      }
   },
   logout: async () => {
       await firebaseAuth.signOut();
@@ -73,13 +127,20 @@ export const binderService = {
   },
 
   createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
-    const newBinder = {
-      ...binderData,
-      createdAt: Date.now(),
-      cardCount: 0
-    };
-    const docRef = await db.collection("binders").add(newBinder);
-    return { id: docRef.id, ...newBinder } as Binder;
+    try {
+        console.log("Creating binder...", binderData);
+        const newBinder = {
+          ...binderData,
+          createdAt: Date.now(),
+          cardCount: 0
+        };
+        const docRef = await db.collection("binders").add(newBinder);
+        console.log("Binder created with ID:", docRef.id);
+        return { id: docRef.id, ...newBinder } as Binder;
+    } catch (e) {
+        console.error("Detailed Create Binder Error:", e);
+        throw e;
+    }
   },
 
   deleteBinder: async (binderId: string) => {
@@ -113,15 +174,31 @@ export const cardService = {
     // Save card
     const docRef = await db.collection("cards").add(newCard);
     
-    // Update binder count (Optimistic or fetch-update)
-    // For simplicity, we won't implement atomic counters here, 
-    // but in production, use Cloud Functions or Transactions.
+    // Update binder count using atomic increment
+    await db.collection("binders").doc(cardData.binderId).update({
+        cardCount: firebase.firestore.FieldValue.increment(1)
+    });
     
     return { id: docRef.id, ...newCard } as Card;
   },
 
   removeCard: async (cardId: string) => {
-    await db.collection("cards").doc(cardId).delete();
+    const cardRef = db.collection("cards").doc(cardId);
+    const cardSnap = await cardRef.get();
+
+    if (!cardSnap.exists) return;
+    
+    const cardData = cardSnap.data();
+
+    // Delete card
+    await cardRef.delete();
+
+    // Decrement binder count
+    if (cardData && cardData.binderId) {
+        await db.collection("binders").doc(cardData.binderId).update({
+            cardCount: firebase.firestore.FieldValue.increment(-1)
+        });
+    }
   }
 };
 
@@ -186,15 +263,22 @@ export const matchingService = {
             // Let's rely on client-side filtering for the match
             const wantCard = myWants.find(w => w.name === candidate.name);
             if (wantCard) {
-                // Fetch seller profile (Mocked for now as we don't have a Users collection populated yet)
-                // In production: await getDoc(doc(db, "users", candidate.userId))
-                
-                const sellerProfile: UserProfile = {
+                // Fetch seller profile 
+                let sellerProfile: UserProfile = {
                     id: candidate.userId,
-                    displayName: 'Remote User', // Placeholder until User collection is robust
+                    displayName: 'Remote User', 
                     email: '',
                     isOnline: false
                 };
+
+                try {
+                    const userDoc = await db.collection("users").doc(candidate.userId).get();
+                    if (userDoc.exists) {
+                        sellerProfile = { ...sellerProfile, ...userDoc.data() };
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch seller details", e);
+                }
 
                 matches.push({
                     card: wantCard,

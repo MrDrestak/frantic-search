@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { auth } from '../services/store';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, User } from 'lucide-react';
 
 interface LoginProps {
   onLogin: () => void;
@@ -26,6 +26,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError(msg);
     }
   };
+
+  const handleGuestLogin = async () => {
+      setError(null);
+      try {
+          await auth.loginAsGuest();
+          onLogin();
+      } catch (e: any) {
+          console.error(e);
+          setError("Guest login failed: " + e.message);
+      }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -58,7 +69,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           Sign in with Google
         </button>
 
-        <p className="text-xs text-slate-500 mt-4">
+        <div className="flex items-center w-full my-4">
+            <div className="flex-1 border-t border-slate-700"></div>
+            <span className="px-3 text-slate-500 text-xs uppercase tracking-wider">Testing Options</span>
+            <div className="flex-1 border-t border-slate-700"></div>
+        </div>
+
+        <button 
+          onClick={handleGuestLogin}
+          className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-6 rounded-lg flex items-center justify-center gap-3 transition-colors border border-slate-700"
+        >
+          <User size={18} />
+          Continue as Guest (Test Mode)
+        </button>
+
+        <p className="text-xs text-slate-500 mt-6">
           By signing in, you agree to our Terms of Service and Privacy Policy.
         </p>
       </div>

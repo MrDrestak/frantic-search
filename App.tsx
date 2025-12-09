@@ -1,9 +1,11 @@
+
 import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import Login from './views/Login';
 import Binders from './views/Binders';
 import BinderDetail from './views/BinderDetail';
 import MarketMatch from './views/MarketMatch';
+import Profile from './views/Profile';
 import { auth } from './services/store';
 
 const App: React.FC = () => {
@@ -45,16 +47,7 @@ const App: React.FC = () => {
     }
 
     if (currentPage === 'profile') {
-        return (
-             <div className="p-8">
-                 <h2 className="text-2xl font-bold text-white mb-4">User Profile</h2>
-                 <div className="bg-slate-900 p-6 rounded-xl border border-slate-800">
-                     <p className="text-slate-300">Name: {auth.getCurrentUser()?.displayName}</p>
-                     <p className="text-slate-300">Email: {auth.getCurrentUser()?.email}</p>
-                     <p className="text-slate-300 mt-4 text-sm bg-slate-950 p-4 rounded">To implement: Edit profile, set preferred store, WhatsApp number.</p>
-                 </div>
-             </div>
-        )
+        return <Profile />;
     }
 
     return <div>Page not found</div>;

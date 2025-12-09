@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { binderService, auth } from '../services/store';
 import { Binder, BinderType, GameType } from '../types';
@@ -30,16 +31,21 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     e.preventDefault();
     if (!currentUser || !newBinderName.trim()) return;
 
-    await binderService.createBinder({
-      userId: currentUser.id,
-      game: GameType.MTG,
-      type: newBinderType,
-      name: newBinderName
-    });
-    
-    setNewBinderName('');
-    setIsCreating(false);
-    loadBinders();
+    try {
+        await binderService.createBinder({
+            userId: currentUser.id,
+            game: GameType.MTG,
+            type: newBinderType,
+            name: newBinderName
+        });
+        
+        setNewBinderName('');
+        setIsCreating(false);
+        loadBinders();
+    } catch (error: any) {
+        console.error("Failed to create binder", error);
+        alert("Failed to create binder. " + (error.message || ""));
+    }
   };
 
   return (
@@ -121,7 +127,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
       )}
 
       {/* Binder Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {binders.map(binder => (
           <BinderCard 
             key={binder.id} 
