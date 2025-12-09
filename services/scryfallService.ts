@@ -7,10 +7,8 @@ export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
   if (!query || query.length < 3) return [];
   
   try {
-    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`, {
-        mode: 'cors',
-        credentials: 'omit'
-    });
+    // Simplified fetch: Scryfall is a public API, standard fetch works best.
+    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`);
 
     if (!response.ok) {
         console.warn(`Scryfall API error: ${response.status} ${response.statusText}`);
@@ -29,10 +27,7 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
     if (!oracleId) return [];
     try {
         // Fetch all prints, ordered by release date descending
-        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`, {
-            mode: 'cors',
-            credentials: 'omit'
-        });
+        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`);
 
         if (!response.ok) {
             console.warn(`Scryfall versions error: ${response.status} ${response.statusText}`);

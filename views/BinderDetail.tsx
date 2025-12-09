@@ -117,7 +117,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       condition: condition,
       isFoil: isFoil,
       rarity: selectedCard.rarity,
-      price: price
+      price: price,
+      game: binder.game // Pass the binder's game type
     });
 
     // Reset UI
@@ -134,6 +135,14 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       // Immediate deletion, no confirmation
       await cardService.removeCard(cardId);
       loadData();
+  }
+
+  const handleToggleShowcase = async (card: Card) => {
+      if (!card.id) return;
+      const newState = !card.isShowcase;
+      await cardService.toggleShowcase(card.id, newState);
+      // Optimistic update locally
+      setCards(prev => prev.map(c => c.id === card.id ? { ...c, isShowcase: newState } : c));
   }
 
   const handleConfirmDeleteBinder = async () => {
@@ -209,7 +218,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                       condition: cond,
                       isFoil: isFoil,
                       rarity: match.rarity,
-                      price: price
+                      price: price,
+                      game: binder.game // Pass the binder's game type
                   });
               }
           } catch (e) {
@@ -495,7 +505,14 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       <div className="flex-1 overflow-y-auto pr-2 pb-20">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {cards.map(card => (
-                <MTGCard key={card.id} card={card} onRemove={() => handleRemoveCard(card.id)} />
+                <MTGCard 
+                    key={card.id} 
+                    card={card} 
+                    onRemove={() => handleRemoveCard(card.id)} 
+                    // Only enable showcase toggling if this is a "For Trade" binder
+                    enableShowcase={binder.type === BinderType.FOR_TRADE}
+                    onToggleShowcase={() => handleToggleShowcase(card)}
+                />
             ))}
             {cards.length === 0 && (
                 <div className="col-span-full text-center py-20 text-slate-500">

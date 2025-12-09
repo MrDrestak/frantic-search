@@ -54,8 +54,14 @@ export interface Card {
   rarity: string;
   price?: number; 
   addedAt: number;
-  // Optional for optimization in Firestore queries
-  binderType?: BinderType; 
+  binderType?: BinderType;
+  isShowcase?: boolean;
+  game?: string; // Added game property
+}
+
+export interface ShowcaseItem extends Card {
+  sellerName: string;
+  sellerId: string;
 }
 
 export interface MatchResult {

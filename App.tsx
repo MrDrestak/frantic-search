@@ -6,6 +6,7 @@ import Binders from './views/Binders';
 import BinderDetail from './views/BinderDetail';
 import MarketMatch from './views/MarketMatch';
 import Profile from './views/Profile';
+import Showcase from './views/Showcase';
 import { auth } from './services/store';
 import { Loader2 } from 'lucide-react';
 
@@ -92,6 +93,10 @@ const App: React.FC = () => {
               setViewingProfileId(userId);
           }}
       />;
+    }
+
+    if (currentPage === 'showcase') {
+        return <Showcase />;
     }
 
     if (currentPage === 'messages') {

@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Home, Layers, ShoppingBag, MessageSquare, User } from 'lucide-react';
+import { Layers, ShoppingBag, MessageSquare, User, Star } from 'lucide-react';
 
 interface NavbarProps {
   currentPage: string;
@@ -11,7 +12,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
   const navItems = [
     { id: 'dashboard', icon: Layers, label: 'Binders' },
     { id: 'market', icon: ShoppingBag, label: 'Market' },
-    { id: 'messages', icon: MessageSquare, label: 'Messages' },
+    { id: 'showcase', icon: Star, label: 'Showcase' },
+    // { id: 'messages', icon: MessageSquare, label: 'Messages' }, // Hidden for now
     { id: 'profile', icon: User, label: 'Profile' },
   ];
 

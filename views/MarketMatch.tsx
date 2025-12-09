@@ -91,10 +91,10 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                             )}
 
                             <button 
-                                onClick={() => onOpenChat(match.seller.id)}
+                                onClick={() => onViewProfile(match.seller.id)}
                                 className="w-full bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded flex items-center justify-center gap-2 transition-colors"
                             >
-                                <MessageCircle size={16} /> Contact Seller
+                                <User size={16} /> Contact Seller
                             </button>
                        </div>
                    </div>

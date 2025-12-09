@@ -1,11 +1,11 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem } from '../types';
 
 // CONVERSION UTILS
 // Firestore returns data as objects; we need to attach the ID
-const mapDoc = (doc: any) => ({ id: doc.id, ...doc.data() });
+const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
 
 // AUTH SERVICE
 let currentUserProfile: UserProfile | null = null;
@@ -28,7 +28,7 @@ export const auth = {
       
       let customData = {};
       if (userDoc.exists) {
-          customData = userDoc.data() || {};
+          customData = (userDoc.data() as any) || {};
       }
 
       // Prepare profile object
@@ -54,7 +54,7 @@ export const auth = {
       // Clear guest flag if we successfully logged in with Google
       localStorage.removeItem('lotus_is_guest');
       return profile;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
       throw error;
     }
@@ -83,10 +83,10 @@ export const auth = {
       try {
           const doc = await db.collection("users").doc(userId).get();
           if (doc.exists) {
-              return { id: doc.id, ...doc.data() } as UserProfile;
+              return { id: doc.id, ...(doc.data() as any) } as UserProfile;
           }
           return null;
-      } catch (e) {
+      } catch (e: any) {
           console.error("Error fetching public profile", e);
           return null;
       }
@@ -128,7 +128,7 @@ export const auth = {
           // 3. Update local state
           currentUserProfile = { ...current, ...updates };
 
-      } catch (error) {
+      } catch (error: any) {
           console.error("Error updating profile:", error);
           throw error;
       }
@@ -151,7 +151,7 @@ export const auth = {
         let customData = {};
         try {
             const userDoc = await userRef.get();
-            if (userDoc.exists) customData = userDoc.data() || {};
+            if (userDoc.exists) customData = (userDoc.data() as any) || {};
         } catch(e) { console.warn("Offline or error fetching profile", e); }
 
         const profile: UserProfile = {
@@ -193,7 +193,7 @@ export const binderService = {
     try {
         const snapshot = await db.collection("binders").where("userId", "==", userId).get();
         return snapshot.docs.map(doc => mapDoc(doc) as Binder);
-    } catch (e) {
+    } catch (e: any) {
         console.error("Error fetching binders", e);
         return [];
     }
@@ -210,7 +210,7 @@ export const binderService = {
         const docRef = await db.collection("binders").add(newBinder);
         console.log("Binder created with ID:", docRef.id);
         return { id: docRef.id, ...newBinder } as Binder;
-    } catch (e) {
+    } catch (e: any) {
         console.error("Detailed Create Binder Error:", e);
         throw e;
     }
@@ -241,7 +241,9 @@ export const cardService = {
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
     const newCard = {
       ...cardData,
-      addedAt: Date.now()
+      addedAt: Date.now(),
+      isShowcase: false, // Default to false
+      game: cardData.game || GameType.MTG // Default to MTG if not specified
     };
     
     // Save card
@@ -272,8 +274,64 @@ export const cardService = {
             cardCount: firebase.firestore.FieldValue.increment(-1)
         });
     }
+  },
+
+  toggleShowcase: async (cardId: string, isShowcase: boolean) => {
+      await db.collection("cards").doc(cardId).update({ isShowcase });
   }
 };
+
+// SHOWCASE SERVICE
+export const showcaseService = {
+    getShowcaseItems: async (game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
+        try {
+            // Get all cards marked as showcase
+            // NOTE: We removed .orderBy("addedAt", "desc") to avoid Index Required errors in development
+            // We will sort them in memory instead.
+            const snapshot = await db.collection("cards")
+                .where("isShowcase", "==", true)
+                .limit(50)
+                .get();
+
+            let cards = snapshot.docs.map(doc => mapDoc(doc) as Card);
+            
+            // Sort in memory
+            cards = cards.sort((a, b) => b.addedAt - a.addedAt);
+            
+            // We need to fetch user details for each card to show the seller name
+            // Get unique user IDs to avoid duplicate fetches
+            const userIds: string[] = [...new Set(cards.map(c => c.userId))];
+            const userMap = new Map<string, string>(); // userId -> displayName
+
+            // Fetch users (parallel)
+            await Promise.all(userIds.map(async (uid: string) => {
+                try {
+                    const userDoc = await db.collection("users").doc(uid).get();
+                    if (userDoc.exists) {
+                        userMap.set(uid, (userDoc.data() as any)?.displayName || 'Unknown Trader');
+                    } else {
+                        userMap.set(uid, 'Unknown Trader');
+                    }
+                } catch (e: any) {
+                    console.warn(`Failed to fetch user ${uid}`, e);
+                    userMap.set(uid, 'Unknown Trader');
+                }
+            }));
+
+            // Combine card data with seller name
+            const items: ShowcaseItem[] = cards.map(card => ({
+                ...card,
+                sellerId: card.userId,
+                sellerName: userMap.get(card.userId) || 'Unknown Trader'
+            }));
+
+            return items;
+        } catch (e: any) {
+            console.error("Error fetching showcase items", e);
+            return [];
+        }
+    }
+}
 
 // MATCHING SERVICE (The Core Feature)
 export const matchingService = {
@@ -307,11 +365,11 @@ export const matchingService = {
     const matches: MatchResult[] = [];
     
     // To optimize, we loop through myWants unique names
-    const uniqueWantNames = [...new Set(myWants.map(w => w.name))];
+    const uniqueWantNames: string[] = [...new Set(myWants.map(w => w.name))];
     
     // Batch queries (limit to 10 for 'in' operator)
     // For MVP, we will query specifically for the first 10 wanted cards
-    const namesToSearch = uniqueWantNames.slice(0, 10); 
+    const namesToSearch: string[] = uniqueWantNames.slice(0, 10); 
     
     if (namesToSearch.length > 0) {
         const marketSnap = await db.collection("cards")
@@ -322,7 +380,10 @@ export const matchingService = {
 
         // 4. Filter candidates
         for (const candidate of candidates) {
-            if (candidate.userId === currentUserId) continue; // Skip my own cards
+            // Ensure userId is a string
+            const candidateUserId = String(candidate.userId);
+            
+            if (candidateUserId === currentUserId) continue; // Skip my own cards
 
             // Check if this card belongs to a "FOR_TRADE" binder
             // We need to fetch the binder info. 
@@ -338,18 +399,18 @@ export const matchingService = {
             if (wantCard) {
                 // Fetch seller profile 
                 let sellerProfile: UserProfile = {
-                    id: candidate.userId,
+                    id: candidateUserId,
                     displayName: 'Remote User', 
                     email: '',
                     isOnline: false
                 };
 
                 try {
-                    const userDoc = await db.collection("users").doc(candidate.userId).get();
+                    const userDoc = await db.collection("users").doc(candidateUserId).get();
                     if (userDoc.exists) {
-                        sellerProfile = { ...sellerProfile, ...userDoc.data() };
+                        sellerProfile = { ...sellerProfile, ...(userDoc.data() as any) };
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.warn("Could not fetch seller details", e);
                 }
 
