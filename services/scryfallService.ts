@@ -7,8 +7,15 @@ export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
   if (!query || query.length < 3) return [];
   
   try {
-    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`);
-    if (!response.ok) return [];
+    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`, {
+        mode: 'cors',
+        credentials: 'omit'
+    });
+
+    if (!response.ok) {
+        console.warn(`Scryfall API error: ${response.status} ${response.statusText}`);
+        return [];
+    }
     
     const data = await response.json();
     return data.data || [];
@@ -22,8 +29,15 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
     if (!oracleId) return [];
     try {
         // Fetch all prints, ordered by release date descending
-        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`);
-        if (!response.ok) return [];
+        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`, {
+            mode: 'cors',
+            credentials: 'omit'
+        });
+
+        if (!response.ok) {
+            console.warn(`Scryfall versions error: ${response.status} ${response.statusText}`);
+            return [];
+        }
         const data = await response.json();
         return data.data || [];
     } catch (error) {
