@@ -16,6 +16,9 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   
+  // Filter State
+  const [filterText, setFilterText] = useState('');
+
   // Search Flow State
   const [showSearch, setShowSearch] = useState(false);
   const [searchStep, setSearchStep] = useState<'QUERY' | 'VERSIONS' | 'CONFIG'>('QUERY');
@@ -234,6 +237,10 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       loadData();
   };
 
+  const filteredCards = cards.filter(card => 
+    card.name.toLowerCase().includes(filterText.toLowerCase())
+  );
+
   if (!binder) return <div className="p-8 text-white">Loading binder...</div>;
 
   return (
@@ -331,6 +338,28 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
              </button>
         </div>
       </header>
+      
+      {/* Filter Bar */}
+      <div className="flex-none">
+          <div className="relative">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+             <input 
+                 type="text"
+                 placeholder="Filter cards by name..."
+                 value={filterText}
+                 onChange={(e) => setFilterText(e.target.value)}
+                 className="w-full bg-slate-900/50 border border-slate-800 rounded-lg pl-10 pr-10 py-3 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 focus:outline-none transition-all"
+             />
+             {filterText && (
+                 <button 
+                    onClick={() => setFilterText('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white p-1"
+                 >
+                     <X size={16} />
+                 </button>
+             )}
+          </div>
+      </div>
 
       {/* Add Card Wizard Overlay */}
       {showSearch && (
@@ -504,7 +533,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       {/* Cards Grid */}
       <div className="flex-1 overflow-y-auto pr-2 pb-20">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {cards.map(card => (
+            {filteredCards.map(card => (
                 <MTGCard 
                     key={card.id} 
                     card={card} 
@@ -520,6 +549,13 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                     <p>This binder is empty.</p>
                     <button onClick={() => setShowSearch(true)} className="text-violet-400 underline mt-2">Start adding cards</button>
                 </div>
+            )}
+            
+            {cards.length > 0 && filteredCards.length === 0 && (
+                 <div className="col-span-full text-center py-12 text-slate-500">
+                    <p>No cards match "{filterText}"</p>
+                    <button onClick={() => setFilterText('')} className="text-violet-400 hover:text-violet-300 mt-2 text-sm font-medium">Clear Filter</button>
+                 </div>
             )}
         </div>
       </div>
