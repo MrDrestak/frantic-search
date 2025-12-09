@@ -31,6 +31,15 @@ const Profile: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // Validation: WhatsApp must be exactly 9 digits if provided
+    if (whatsapp) {
+        const isValidFormat = /^\d{9}$/.test(whatsapp);
+        if (!isValidFormat) {
+            alert("WhatsApp number must be exactly 9 digits.");
+            return;
+        }
+    }
     
     setIsSaving(true);
     try {
@@ -154,10 +163,10 @@ const Profile: React.FC = () => {
                                         value={whatsapp}
                                         onChange={(e) => setWhatsapp(e.target.value)}
                                         className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                                        placeholder="e.g. 51999888777"
+                                        placeholder="e.g. 999888777 (9 digits)"
                                     />
                                 </div>
-                                <p className="text-xs text-slate-500 mt-1">Numbers only. Used for trade coordination.</p>
+                                <p className="text-xs text-slate-500 mt-1">Numbers only. Must be exactly 9 digits.</p>
                             </div>
 
                             {/* Preferred Store */}
