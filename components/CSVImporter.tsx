@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Upload, ArrowRight, Check, X, FileText, AlertCircle } from 'lucide-react';
 import { parseCSV, CSVParseResult } from '../services/scryfallService';
@@ -116,14 +117,14 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
         <div className="p-6 overflow-y-auto flex-1">
           
           {step === 'upload' && (
-            <div className="text-center py-10 border-2 border-dashed border-slate-700 rounded-xl hover:border-violet-500 hover:bg-slate-800/30 transition-all cursor-pointer relative">
+            <label className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-slate-700 rounded-xl hover:border-violet-500 hover:bg-slate-800/30 transition-all cursor-pointer relative">
               <input 
                 type="file" 
                 accept=".csv"
                 onChange={handleFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
               />
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-4 pointer-events-none">
                 <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
                     <FileText size={32} />
                 </div>
@@ -132,7 +133,7 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
                     <p className="text-sm text-slate-400">or drag and drop file here</p>
                 </div>
               </div>
-            </div>
+            </label>
           )}
 
           {step === 'map' && parsedData && (
