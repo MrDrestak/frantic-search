@@ -51,6 +51,8 @@ export const auth = {
       }, { merge: true });
 
       currentUserProfile = profile;
+      // Clear guest flag if we successfully logged in with Google
+      localStorage.removeItem('lotus_is_guest');
       return profile;
     } catch (error) {
       console.error("Login failed", error);
@@ -58,8 +60,11 @@ export const auth = {
     }
   },
   loginAsGuest: async (): Promise<UserProfile> => {
-      // MOCK LOGIN for testing in environments where Google Auth is blocked
-      const guestId = 'guest_user_' + Math.floor(Math.random() * 1000);
+      // PERSISTENT GUEST LOGIN
+      const guestId = localStorage.getItem('lotus_guest_id') || 'guest_' + Math.floor(Math.random() * 10000);
+      localStorage.setItem('lotus_guest_id', guestId);
+      localStorage.setItem('lotus_is_guest', 'true');
+      
       const guestProfile: UserProfile = {
           id: guestId,
           email: 'guest@lotus.test',
@@ -72,18 +77,7 @@ export const auth = {
       return guestProfile;
   },
   getCurrentUser: () => {
-    if (currentUserProfile) return currentUserProfile;
-    // Fallback if page refreshed (simplified for this stage)
-    const fUser = firebaseAuth.currentUser;
-    if (fUser) {
-        return {
-            id: fUser.uid,
-            email: fUser.email || '',
-            displayName: fUser.displayName || 'Trader',
-            photoURL: fUser.photoURL || undefined
-        };
-    }
-    return null;
+    return currentUserProfile;
   },
   getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
       try {
@@ -101,9 +95,17 @@ export const auth = {
       const user = firebaseAuth.currentUser;
       const current = currentUserProfile;
       
-      if (!user || !current) throw new Error("No user logged in");
+      if (!current) throw new Error("No user logged in");
 
       try {
+          // If Guest, just update local state
+          if (localStorage.getItem('lotus_is_guest') === 'true') {
+             currentUserProfile = { ...current, ...updates };
+             return;
+          }
+
+          if (!user) throw new Error("No Firebase user found");
+
           // 1. Update Firebase Auth (Display Name / Photo)
           if (updates.displayName || updates.photoURL) {
               await user.updateProfile({
@@ -112,8 +114,7 @@ export const auth = {
               });
           }
 
-          // 2. Update Firestore "users" collection (Custom fields: whatsapp, store)
-          // We use set with merge: true to create the doc if it doesn't exist
+          // 2. Update Firestore "users" collection
           const firestoreUpdates = {
               displayName: updates.displayName || current.displayName,
               email: current.email,
@@ -133,8 +134,56 @@ export const auth = {
       }
   },
   logout: async () => {
+      localStorage.removeItem('lotus_is_guest');
+      // We keep guest_id so if they come back as guest they have same ID (optional)
+      // localStorage.removeItem('lotus_guest_id'); 
       await firebaseAuth.signOut();
       currentUserProfile = null;
+  },
+  /**
+   * Listen for auth state changes to persist login across refreshes
+   */
+  subscribe: (callback: (user: UserProfile | null) => void) => {
+    return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        // User found in Firebase session
+        const userRef = db.collection("users").doc(firebaseUser.uid);
+        let customData = {};
+        try {
+            const userDoc = await userRef.get();
+            if (userDoc.exists) customData = userDoc.data() || {};
+        } catch(e) { console.warn("Offline or error fetching profile", e); }
+
+        const profile: UserProfile = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'Unnamed Trader',
+            photoURL: firebaseUser.photoURL || undefined,
+            isOnline: true,
+            ...customData
+        };
+        currentUserProfile = profile;
+        callback(profile);
+      } else {
+        // No Firebase user, check for Guest persistence
+        const isGuest = localStorage.getItem('lotus_is_guest');
+        if (isGuest === 'true') {
+             const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
+             const guestProfile: UserProfile = {
+                id: guestId,
+                email: 'guest@lotus.test',
+                displayName: 'Guest Trader',
+                photoURL: undefined,
+                isOnline: true
+             };
+             currentUserProfile = guestProfile;
+             callback(guestProfile);
+        } else {
+             currentUserProfile = null;
+             callback(null);
+        }
+      }
+    });
   }
 };
 
