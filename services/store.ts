@@ -1,16 +1,5 @@
 
-import { 
-    collection, 
-    addDoc, 
-    getDocs, 
-    query, 
-    where, 
-    deleteDoc, 
-    doc, 
-    updateDoc, 
-    writeBatch 
-} from 'firebase/firestore';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import firebase from 'firebase/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile } from '../types';
 
@@ -24,9 +13,11 @@ let currentUserProfile: UserProfile | null = null;
 export const auth = {
   login: async (): Promise<UserProfile> => {
     try {
-      const result = await signInWithPopup(firebaseAuth, googleProvider);
+      const result = await firebaseAuth.signInWithPopup(googleProvider);
       const user = result.user;
       
+      if (!user) throw new Error("Authentication failed");
+
       const profile: UserProfile = {
         id: user.uid,
         email: user.email || '',
@@ -60,7 +51,7 @@ export const auth = {
     return null;
   },
   logout: async () => {
-      await signOut(firebaseAuth);
+      await firebaseAuth.signOut();
       currentUserProfile = null;
   }
 };
@@ -69,9 +60,8 @@ export const auth = {
 export const binderService = {
   getUserBinders: async (userId: string): Promise<Binder[]> => {
     try {
-        const q = query(collection(db, "binders"), where("userId", "==", userId));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => mapDoc(doc) as Binder);
+        const snapshot = await db.collection("binders").where("userId", "==", userId).get();
+        return snapshot.docs.map(doc => mapDoc(doc) as Binder);
     } catch (e) {
         console.error("Error fetching binders", e);
         return [];
@@ -84,19 +74,18 @@ export const binderService = {
       createdAt: Date.now(),
       cardCount: 0
     };
-    const docRef = await addDoc(collection(db, "binders"), newBinder);
+    const docRef = await db.collection("binders").add(newBinder);
     return { id: docRef.id, ...newBinder } as Binder;
   },
 
   deleteBinder: async (binderId: string) => {
     // 1. Delete the binder document
-    await deleteDoc(doc(db, "binders", binderId));
+    await db.collection("binders").doc(binderId).delete();
 
     // 2. Delete all cards in that binder (Batch delete)
-    const q = query(collection(db, "cards"), where("binderId", "==", binderId));
-    const snapshot = await getDocs(q);
+    const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
     
-    const batch = writeBatch(db);
+    const batch = db.batch();
     snapshot.docs.forEach((d) => {
         batch.delete(d.ref);
     });
@@ -107,8 +96,7 @@ export const binderService = {
 // CARD SERVICE
 export const cardService = {
   getCardsInBinder: async (binderId: string): Promise<Card[]> => {
-    const q = query(collection(db, "cards"), where("binderId", "==", binderId));
-    const snapshot = await getDocs(q);
+    const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
     return snapshot.docs.map(doc => mapDoc(doc) as Card);
   },
 
@@ -119,7 +107,7 @@ export const cardService = {
     };
     
     // Save card
-    const docRef = await addDoc(collection(db, "cards"), newCard);
+    const docRef = await db.collection("cards").add(newCard);
     
     // Update binder count (Optimistic or fetch-update)
     // For simplicity, we won't implement atomic counters here, 
@@ -129,7 +117,7 @@ export const cardService = {
   },
 
   removeCard: async (cardId: string) => {
-    await deleteDoc(doc(db, "cards", cardId));
+    await db.collection("cards").doc(cardId).delete();
   }
 };
 
@@ -137,12 +125,11 @@ export const cardService = {
 export const matchingService = {
   findMatches: async (currentUserId: string): Promise<MatchResult[]> => {
     // 1. Get MY Wishlist Binders
-    const myBinderQ = query(
-        collection(db, "binders"), 
-        where("userId", "==", currentUserId),
-        where("type", "==", BinderType.WISHLIST)
-    );
-    const myBinderSnap = await getDocs(myBinderQ);
+    const myBinderSnap = await db.collection("binders")
+        .where("userId", "==", currentUserId)
+        .where("type", "==", BinderType.WISHLIST)
+        .get();
+        
     const myBinderIds = myBinderSnap.docs.map(d => d.id);
 
     if (myBinderIds.length === 0) return [];
@@ -151,8 +138,7 @@ export const matchingService = {
     // Firestore "in" query allows max 10 items. If > 10 binders, this breaks.
     // For MVP, we fetch cards one binder at a time or fetch all cards for user.
     // Let's fetch all cards for the user and filter in memory for simplicity.
-    const myCardsQ = query(collection(db, "cards"), where("userId", "==", currentUserId));
-    const myCardsSnap = await getDocs(myCardsQ);
+    const myCardsSnap = await db.collection("cards").where("userId", "==", currentUserId).get();
     const allMyCards = myCardsSnap.docs.map(d => mapDoc(d) as Card);
     
     const myWants = allMyCards.filter(c => myBinderIds.includes(c.binderId));
@@ -174,11 +160,10 @@ export const matchingService = {
     const namesToSearch = uniqueWantNames.slice(0, 10); 
     
     if (namesToSearch.length > 0) {
-        const marketQ = query(
-            collection(db, "cards"), 
-            where("name", "in", namesToSearch)
-        );
-        const marketSnap = await getDocs(marketQ);
+        const marketSnap = await db.collection("cards")
+            .where("name", "in", namesToSearch)
+            .get();
+
         const candidates = marketSnap.docs.map(d => mapDoc(d) as Card);
 
         // 4. Filter candidates
