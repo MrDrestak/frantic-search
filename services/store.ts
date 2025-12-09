@@ -23,12 +23,15 @@ export const auth = {
       if (!user) throw new Error("Authentication failed");
 
       // Check if user exists in Firestore to pull custom fields (whatsapp, store)
-      const userDoc = await db.collection("users").doc(user.uid).get();
+      const userRef = db.collection("users").doc(user.uid);
+      const userDoc = await userRef.get();
+      
       let customData = {};
       if (userDoc.exists) {
           customData = userDoc.data() || {};
       }
 
+      // Prepare profile object
       const profile: UserProfile = {
         id: user.uid,
         email: user.email || '',
@@ -37,6 +40,15 @@ export const auth = {
         isOnline: true,
         ...customData // Merge saved data like whatsapp/store
       };
+
+      // CRITICAL FIX: Always update Firestore on login.
+      // This ensures other users can find this user's Name in the Market Match.
+      await userRef.set({
+          displayName: profile.displayName,
+          email: profile.email,
+          photoURL: profile.photoURL,
+          lastLogin: Date.now()
+      }, { merge: true });
 
       currentUserProfile = profile;
       return profile;
@@ -72,6 +84,18 @@ export const auth = {
         };
     }
     return null;
+  },
+  getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
+      try {
+          const doc = await db.collection("users").doc(userId).get();
+          if (doc.exists) {
+              return { id: doc.id, ...doc.data() } as UserProfile;
+          }
+          return null;
+      } catch (e) {
+          console.error("Error fetching public profile", e);
+          return null;
+      }
   },
   updateProfile: async (updates: Partial<UserProfile>): Promise<void> => {
       const user = firebaseAuth.currentUser;

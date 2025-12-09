@@ -12,12 +12,32 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedBinderId, setSelectedBinderId] = useState<string | null>(null);
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
   if (!isAuthenticated) {
     return <Login onLogin={() => setIsAuthenticated(true)} />;
   }
 
+  const handleNavigation = (page: string) => {
+      setCurrentPage(page);
+      setSelectedBinderId(null);
+      setViewingProfileId(null);
+  };
+
   const renderContent = () => {
+    // Priority: Viewing a specific profile (other than mine, usually from Market)
+    if (viewingProfileId) {
+        return (
+            <Profile 
+                viewingUserId={viewingProfileId} 
+                onBack={() => {
+                    setViewingProfileId(null);
+                    setCurrentPage('market'); // Return to market
+                }} 
+            />
+        );
+    }
+
     if (currentPage === 'dashboard') {
       if (selectedBinderId) {
         return (
@@ -31,10 +51,15 @@ const App: React.FC = () => {
     }
     
     if (currentPage === 'market') {
-      return <MarketMatch onOpenChat={(userId) => {
-          console.log("Open chat with", userId);
-          setCurrentPage('messages'); // Placeholder navigation
-      }} />;
+      return <MarketMatch 
+          onOpenChat={(userId) => {
+             console.log("Open chat with", userId);
+             setCurrentPage('messages'); // Placeholder navigation
+          }} 
+          onViewProfile={(userId) => {
+              setViewingProfileId(userId);
+          }}
+      />;
     }
 
     if (currentPage === 'messages') {
@@ -60,10 +85,7 @@ const App: React.FC = () => {
       </div>
       <Navbar 
         currentPage={currentPage === 'dashboard' && selectedBinderId ? 'dashboard' : currentPage} 
-        setPage={(page) => {
-            setCurrentPage(page);
-            setSelectedBinderId(null);
-        }} 
+        setPage={handleNavigation} 
         user={auth.getCurrentUser()}
       />
     </div>

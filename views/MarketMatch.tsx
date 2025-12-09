@@ -1,14 +1,16 @@
+
 import React, { useEffect, useState } from 'react';
 import { matchingService, auth } from '../services/store';
 import { MatchResult } from '../types';
-import { MessageCircle, User, Star, MapPin } from 'lucide-react';
+import { MessageCircle, User, MapPin } from 'lucide-react';
 import { getCardImage } from '../services/scryfallService';
 
 interface MarketMatchProps {
     onOpenChat: (userId: string) => void;
+    onViewProfile: (userId: string) => void;
 }
 
-const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat }) => {
+const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) => {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,14 +73,13 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat }) => {
                                         {match.seller.displayName.charAt(0)}
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-white">{match.seller.displayName}</p>
-                                        <div className="flex text-xs text-yellow-500">
-                                            <Star size={10} fill="currentColor" />
-                                            <Star size={10} fill="currentColor" />
-                                            <Star size={10} fill="currentColor" />
-                                            <Star size={10} fill="currentColor" />
-                                            <Star size={10} fill="currentColor" />
-                                        </div>
+                                        <button 
+                                            onClick={() => onViewProfile(match.seller.id)}
+                                            className="text-sm font-bold text-white hover:text-violet-400 hover:underline text-left"
+                                        >
+                                            {match.seller.displayName}
+                                        </button>
+                                        <p className="text-xs text-slate-500">Trader</p>
                                     </div>
                                 </div>
                             </div>

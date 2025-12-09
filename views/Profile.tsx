@@ -2,30 +2,47 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
 import { UserProfile } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft } from 'lucide-react';
 
-const Profile: React.FC = () => {
+interface ProfileProps {
+    viewingUserId?: string | null;
+    onBack?: () => void;
+}
+
+const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Form State
   const [nickname, setNickname] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [store, setStore] = useState('');
 
+  const isOwnProfile = !viewingUserId || viewingUserId === auth.getCurrentUser()?.id;
+
   useEffect(() => {
     loadProfile();
-  }, []);
+  }, [viewingUserId]);
 
-  const loadProfile = () => {
-    const currentUser = auth.getCurrentUser();
-    if (currentUser) {
-        setUser(currentUser);
-        setNickname(currentUser.displayName || '');
-        setWhatsapp(currentUser.whatsapp || '');
-        setStore(currentUser.preferredStore || '');
+  const loadProfile = async () => {
+    setIsLoading(true);
+    if (isOwnProfile) {
+        // Load MY profile
+        const currentUser = auth.getCurrentUser();
+        if (currentUser) {
+            setUser(currentUser);
+            setNickname(currentUser.displayName || '');
+            setWhatsapp(currentUser.whatsapp || '');
+            setStore(currentUser.preferredStore || '');
+        }
+    } else if (viewingUserId) {
+        // Load OTHER profile
+        const publicProfile = await auth.getUserPublicProfile(viewingUserId);
+        setUser(publicProfile);
     }
+    setIsLoading(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -68,14 +85,23 @@ const Profile: React.FC = () => {
     }
   };
 
-  if (!user) return <div className="p-8 text-center text-slate-500">Loading Profile...</div>;
+  if (isLoading) return <div className="p-8 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Profile...</div>;
+  
+  if (!user) return <div className="p-8 text-center text-slate-500">User not found.</div>;
 
   return (
     <div className="p-4 md:p-8 pb-24">
       <div className="max-w-2xl mx-auto">
-        <header className="mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">My Profile</h1>
-            <p className="text-slate-400">Manage your trader identity and contact info.</p>
+        <header className="mb-8 flex items-center gap-4">
+            {!isOwnProfile && onBack && (
+                <button onClick={onBack} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                    <ArrowLeft size={20} />
+                </button>
+            )}
+            <div>
+                <h1 className="text-2xl font-bold text-white mb-2">{isOwnProfile ? 'My Profile' : 'Trader Profile'}</h1>
+                <p className="text-slate-400">{isOwnProfile ? 'Manage your trader identity.' : 'View trader details and reputation.'}</p>
+            </div>
         </header>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
@@ -99,16 +125,20 @@ const Profile: React.FC = () => {
                         <div className="flex justify-between items-start mb-6">
                             <div>
                                 <h2 className="text-2xl font-bold text-white">{user.displayName}</h2>
-                                <p className="text-slate-400 flex items-center gap-2 text-sm mt-1">
-                                    <Mail size={14} /> {user.email}
-                                </p>
+                                {isOwnProfile && (
+                                    <p className="text-slate-400 flex items-center gap-2 text-sm mt-1">
+                                        <Mail size={14} /> {user.email}
+                                    </p>
+                                )}
                             </div>
-                            <button 
-                                onClick={() => setIsEditing(true)}
-                                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors border border-slate-700"
-                            >
-                                <Edit2 size={16} /> Edit Profile
-                            </button>
+                            {isOwnProfile && (
+                                <button 
+                                    onClick={() => setIsEditing(true)}
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors border border-slate-700"
+                                >
+                                    <Edit2 size={16} /> Edit Profile
+                                </button>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
@@ -118,7 +148,15 @@ const Profile: React.FC = () => {
                                      <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
                                          <Phone size={16} />
                                      </div>
-                                     <span className="font-mono text-lg">{user.whatsapp || "Not set"}</span>
+                                     <span className="font-mono text-lg">
+                                        {user.whatsapp ? (
+                                            isOwnProfile ? user.whatsapp : (
+                                                <a href={`https://wa.me/${user.whatsapp}`} target="_blank" rel="noreferrer" className="hover:underline hover:text-green-400">
+                                                    {user.whatsapp}
+                                                </a>
+                                            )
+                                        ) : "Not set"}
+                                     </span>
                                  </div>
                              </div>
 
