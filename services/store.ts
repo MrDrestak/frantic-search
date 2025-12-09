@@ -1,4 +1,3 @@
-
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem } from '../types';
@@ -300,7 +299,7 @@ export const showcaseService = {
             
             // We need to fetch user details for each card to show the seller name
             // Get unique user IDs to avoid duplicate fetches
-            const userIds: string[] = [...new Set(cards.map(c => c.userId))];
+            const userIds: string[] = Array.from(new Set(cards.map(c => c.userId)));
             const userMap = new Map<string, string>(); // userId -> displayName
 
             // Fetch users (parallel)
@@ -365,7 +364,7 @@ export const matchingService = {
     const matches: MatchResult[] = [];
     
     // To optimize, we loop through myWants unique names
-    const uniqueWantNames: string[] = [...new Set(myWants.map(w => w.name))];
+    const uniqueWantNames: string[] = Array.from(new Set(myWants.map(w => w.name)));
     
     // Batch queries (limit to 10 for 'in' operator)
     // For MVP, we will query specifically for the first 10 wanted cards

@@ -2,9 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { showcaseService } from '../services/store';
 import { ShowcaseItem, GameType } from '../types';
-import { Star, Search, Filter, User } from 'lucide-react';
+import { Star, Search, Filter, User, ExternalLink } from 'lucide-react';
 
-const Showcase: React.FC = () => {
+interface ShowcaseProps {
+    onViewProfile: (userId: string) => void;
+}
+
+const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
   const [items, setItems] = useState<ShowcaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -88,7 +92,7 @@ const Showcase: React.FC = () => {
       ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
               {filteredItems.map(item => (
-                  <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden group hover:border-amber-500/50 transition-all shadow-lg hover:shadow-amber-900/10">
+                  <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden group hover:border-amber-500/50 transition-all shadow-lg hover:shadow-amber-900/10 flex flex-col">
                       <div className="relative aspect-[2.5/3.5] overflow-hidden">
                           <img 
                               src={item.imageUrl} 
@@ -107,18 +111,28 @@ const Showcase: React.FC = () => {
                           </div>
                       </div>
                       
-                      <div className="p-4">
+                      <div className="p-4 flex flex-col flex-1">
                           <h3 className="font-bold text-white truncate text-lg mb-1">{item.name}</h3>
-                          <div className="flex justify-between items-center text-xs text-slate-400 mb-3">
+                          <div className="flex justify-between items-center text-xs text-slate-400 mb-4">
                               <span className="bg-slate-800 px-1.5 py-0.5 rounded">{item.setName}</span>
                               <span className="uppercase font-medium">{item.condition}</span>
                           </div>
                           
-                          <div className="pt-3 border-t border-slate-800 flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-200">
-                                  <User size={12} />
-                              </div>
-                              <span className="text-sm text-slate-300 truncate">{item.sellerName}</span>
+                          <div className="mt-auto pt-3 border-t border-slate-800">
+                              <button 
+                                onClick={() => onViewProfile(item.sellerId)}
+                                className="w-full flex items-center justify-between gap-2 bg-slate-950 hover:bg-violet-600/10 border border-slate-800 hover:border-violet-500/50 p-2 rounded-lg transition-all group/btn"
+                              >
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    <div className="w-6 h-6 shrink-0 rounded-full bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-200 group-hover/btn:bg-violet-600 group-hover/btn:text-white transition-colors">
+                                        <User size={12} />
+                                    </div>
+                                    <span className="text-sm text-slate-300 group-hover/btn:text-white truncate font-medium">
+                                        {item.sellerName}
+                                    </span>
+                                  </div>
+                                  <ExternalLink size={14} className="text-slate-500 group-hover/btn:text-violet-400" />
+                              </button>
                           </div>
                       </div>
                   </div>

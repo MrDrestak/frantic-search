@@ -65,7 +65,12 @@ const App: React.FC = () => {
                 viewingUserId={viewingProfileId} 
                 onBack={() => {
                     setViewingProfileId(null);
-                    handleNavigation('market'); // Return to market
+                    // If we were in showcase, go back to showcase, else market
+                    if (currentPage === 'showcase') {
+                         handleNavigation('showcase');
+                    } else {
+                         handleNavigation('market');
+                    }
                 }} 
             />
         );
@@ -96,7 +101,7 @@ const App: React.FC = () => {
     }
 
     if (currentPage === 'showcase') {
-        return <Showcase />;
+        return <Showcase onViewProfile={(userId) => setViewingProfileId(userId)} />;
     }
 
     if (currentPage === 'messages') {
