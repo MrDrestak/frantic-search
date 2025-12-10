@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 
@@ -218,6 +218,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
       } else if (tier === SubscriptionTier.RARE) {
           color = 'bg-amber-600 text-white ring-1 ring-amber-400 shadow-lg shadow-amber-900/20';
           Icon = Crown;
+      } else if (tier === SubscriptionTier.MYTHIC) {
+          color = 'bg-purple-600 text-white ring-1 ring-purple-400 shadow-lg shadow-purple-900/40';
+          Icon = Zap;
       }
 
       return (
@@ -259,9 +262,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6">
             {/* Banner / Header */}
-            <div className={`h-32 relative ${user.subscriptionTier === SubscriptionTier.RARE ? 'bg-gradient-to-r from-amber-700/50 to-orange-900/50' : 'bg-gradient-to-r from-violet-900/50 to-indigo-900/50'}`}>
+            <div className={`h-32 relative ${
+                user.subscriptionTier === SubscriptionTier.MYTHIC ? 'bg-gradient-to-r from-purple-900 to-fuchsia-900' :
+                user.subscriptionTier === SubscriptionTier.RARE ? 'bg-gradient-to-r from-amber-700/50 to-orange-900/50' : 
+                'bg-gradient-to-r from-violet-900/50 to-indigo-900/50'
+            }`}>
                 <div className="absolute -bottom-10 left-6">
-                    <div className={`w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden shadow-lg ${user.subscriptionTier === SubscriptionTier.RARE ? 'ring-2 ring-amber-500' : ''}`}>
+                    <div className={`w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden shadow-lg ${
+                        user.subscriptionTier === SubscriptionTier.MYTHIC ? 'ring-2 ring-purple-500' :
+                        user.subscriptionTier === SubscriptionTier.RARE ? 'ring-2 ring-amber-500' : ''
+                    }`}>
                         {user.photoURL ? (
                             <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" />
                         ) : (
@@ -297,12 +307,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                                         >
                                             <Edit2 size={16} /> Edit Profile
                                         </button>
-                                        <button 
-                                            onClick={() => setShowSubscriptionModal(true)}
-                                            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20 justify-center"
-                                        >
-                                            <Crown size={16} /> Upgrade Plan
-                                        </button>
+                                        
+                                        {/* Don't show upgrade button for Mythic users */}
+                                        {user.subscriptionTier !== SubscriptionTier.MYTHIC && (
+                                            <button 
+                                                onClick={() => setShowSubscriptionModal(true)}
+                                                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20 justify-center"
+                                            >
+                                                <Crown size={16} /> Upgrade Plan
+                                            </button>
+                                        )}
                                     </>
                                 )}
                             </div>

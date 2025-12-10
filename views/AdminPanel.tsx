@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown } from 'lucide-react';
 import { configService, auth, adminService } from '../services/store';
 import { GlobalConfig, SubscriptionTier } from '../types';
 
@@ -13,6 +13,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isWiping, setIsWiping] = useState(false);
+    
+    // Partner Management
+    const [partnerEmail, setPartnerEmail] = useState('');
+    const [isAssigning, setIsAssigning] = useState(false);
+
     const [user] = useState(auth.getCurrentUser());
 
     useEffect(() => {
@@ -42,6 +47,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             alert("Failed to save settings.");
         }
         setIsSaving(false);
+    };
+
+    const handleAssignMythic = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!partnerEmail) return;
+
+        setIsAssigning(true);
+        try {
+            await adminService.assignTierByEmail(partnerEmail, SubscriptionTier.MYTHIC);
+            alert(`Success! ${partnerEmail} is now a Mythic partner.`);
+            setPartnerEmail('');
+        } catch (e: any) {
+            alert("Failed to assign Mythic tier: " + e.message);
+        }
+        setIsAssigning(false);
     };
 
     const handleWipeDatabase = async () => {
@@ -118,6 +138,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
             </header>
 
+            {/* Config Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -136,6 +157,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <tr key={tier} className="hover:bg-slate-800/30 transition-colors">
                                     <td className="p-4 font-bold text-white">
                                         <span className={`px-2 py-1 rounded text-xs uppercase ${
+                                            tier === SubscriptionTier.MYTHIC ? 'bg-purple-600 text-white shadow shadow-purple-500/50' :
                                             tier === SubscriptionTier.RARE ? 'bg-amber-500/20 text-amber-500' :
                                             tier === SubscriptionTier.UNCOMMON ? 'bg-slate-500/20 text-slate-300' :
                                             'bg-slate-700/50 text-slate-400'
@@ -185,21 +207,52 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
             </div>
 
-            <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-6">
-                <h3 className="text-red-500 font-bold mb-2 flex items-center gap-2">
-                    <Trash2 size={20} /> Danger Zone
-                </h3>
-                <p className="text-sm text-slate-400 mb-4">
-                    These actions are destructive and cannot be undone. Use for testing or resetting the environment.
-                </p>
-                <button 
-                    onClick={handleWipeDatabase}
-                    disabled={isWiping}
-                    className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold transition-all w-full md:w-auto justify-center"
-                >
-                    {isWiping ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
-                    Wipe Database (Reset Tests)
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Mythic Partner Manager */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                        <Crown size={20} className="text-purple-500" /> Manage Store Partners
+                    </h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                        Manually assign the "Mythic" tier to TCG Stores. This allows them to create bulk auctions but restricts "Wishlist" creation.
+                    </p>
+                    <form onSubmit={handleAssignMythic} className="flex gap-2">
+                        <input 
+                            type="email" 
+                            placeholder="Store Google Email (e.g. store@gmail.com)"
+                            value={partnerEmail}
+                            onChange={(e) => setPartnerEmail(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                            required
+                        />
+                        <button 
+                            type="submit"
+                            disabled={isAssigning}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"
+                        >
+                            {isAssigning ? <Loader2 className="animate-spin" size={18} /> : <UserCheck size={18} />}
+                            Promote
+                        </button>
+                    </form>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-6">
+                    <h3 className="text-red-500 font-bold mb-2 flex items-center gap-2">
+                        <Trash2 size={20} /> Danger Zone
+                    </h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                        These actions are destructive and cannot be undone. Use for testing or resetting the environment.
+                    </p>
+                    <button 
+                        onClick={handleWipeDatabase}
+                        disabled={isWiping}
+                        className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold transition-all w-full md:w-auto justify-center"
+                    >
+                        {isWiping ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+                        Wipe Database (Reset Tests)
+                    </button>
+                </div>
             </div>
         </div>
     );

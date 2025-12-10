@@ -23,10 +23,10 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPage('dashboard')}>
             <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">L</span>
+              <span className="text-white font-bold text-lg">FS</span>
             </div>
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 hidden md:block">
-              LotusExchange
+              Frantic Search
             </span>
           </div>
 

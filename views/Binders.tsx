@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { binderService, auth, subscriptionService } from '../services/store';
-import { Binder, BinderType, GameType } from '../types';
+import { Binder, BinderType, GameType, SubscriptionTier } from '../types';
 import BinderCard from '../components/BinderCard';
 import { Plus, X, Lock, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
@@ -19,6 +19,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const currentUser = auth.getCurrentUser();
+  const isMythic = currentUser?.subscriptionTier === SubscriptionTier.MYTHIC;
 
   useEffect(() => {
     loadBinders();
@@ -35,6 +36,12 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     if (!currentUser || !newBinderName.trim()) return;
 
     try {
+        // Prevent Wishlist for Mythic via logic (double check)
+        if (isMythic && newBinderType === BinderType.WISHLIST) {
+            alert("Stores (Mythic Tier) cannot create Wishlists.");
+            return;
+        }
+
         // WhatsApp Validation for Auctions
         if (newBinderType === BinderType.AUCTION) {
             if (!currentUser.whatsapp) {
@@ -140,17 +147,28 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                   >
                     For Trade / Sell
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewBinderType(BinderType.WISHLIST)}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                      newBinderType === BinderType.WISHLIST 
-                      ? 'bg-pink-600/20 border-pink-500 text-pink-300' 
-                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    Wishlist
-                  </button>
+                  
+                  {/* Wishlist Button - Disabled/Hidden for Mythic */}
+                  {isMythic ? (
+                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/50 text-slate-600 text-sm font-medium flex flex-col items-center justify-center opacity-50 cursor-not-allowed text-center">
+                          <Lock size={16} className="mb-1" />
+                          <span>Wishlist</span>
+                          <span className="text-[9px] uppercase">N/A for Store</span>
+                      </div>
+                  ) : (
+                      <button
+                        type="button"
+                        onClick={() => setNewBinderType(BinderType.WISHLIST)}
+                        className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                          newBinderType === BinderType.WISHLIST 
+                          ? 'bg-pink-600/20 border-pink-500 text-pink-300' 
+                          : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                      >
+                        Wishlist
+                      </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setNewBinderType(BinderType.AUCTION)}

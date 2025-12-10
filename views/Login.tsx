@@ -48,11 +48,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       <div className="z-10 w-full max-w-md bg-slate-900/80 backdrop-blur-md border border-slate-800 p-8 rounded-2xl shadow-2xl text-center">
         <div className="w-16 h-16 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl mx-auto mb-6 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <span className="text-3xl font-bold text-white">L</span>
+            <span className="text-3xl font-bold text-white">FS</span>
         </div>
         
-        <h1 className="text-3xl font-bold text-white mb-2">LotusExchange</h1>
-        <p className="text-slate-400 mb-8">The premium marketplace for Magic: The Gathering collectors.</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Frantic Search</h1>
+        <p className="text-slate-400 mb-8">The best GameHub for all TCG, like Magic: The Gathering, Pokémon, Yu-Gi-Oh! and more.</p>
 
         {error && (
             <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-6 flex gap-3 items-start text-left">

@@ -23,7 +23,8 @@ export enum CardCondition {
 export enum SubscriptionTier {
   COMMON = 'Common',
   UNCOMMON = 'Uncommon',
-  RARE = 'Rare'
+  RARE = 'Rare',
+  MYTHIC = 'Mythic'
 }
 
 export enum AuctionStatus {
@@ -44,6 +45,7 @@ export interface GlobalConfig {
   [SubscriptionTier.COMMON]: TierLimits;
   [SubscriptionTier.UNCOMMON]: TierLimits;
   [SubscriptionTier.RARE]: TierLimits;
+  [SubscriptionTier.MYTHIC]: TierLimits;
 }
 
 export interface UserProfile {

@@ -32,6 +32,13 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxAuctionCardsPerBinder: 15, 
         pricePerMonth: 15 
     },
+    [SubscriptionTier.MYTHIC]: { 
+        maxTradeBinders: 100, 
+        maxShowcaseItems: 500, 
+        maxAuctionBinders: 10, 
+        maxAuctionCardsPerBinder: 50, 
+        pricePerMonth: 0 // Reserved for stores (custom)
+    },
 };
 
 // AUTH SERVICE
@@ -74,7 +81,8 @@ export const auth = {
           email: profile.email,
           photoURL: profile.photoURL,
           lastLogin: Date.now(),
-          subscriptionTier: profile.subscriptionTier,
+          // Don't overwrite tier if it exists (allows admin to set Mythic)
+          subscriptionTier: customData.subscriptionTier || profile.subscriptionTier,
           isAdmin: profile.isAdmin
       }, { merge: true });
 
@@ -232,9 +240,10 @@ export const configService = {
                 // Merge with defaults to ensure new keys (auction) exist even if DB is old
                 const data = doc.data() as GlobalConfig;
                 currentConfig = {
-                    [SubscriptionTier.COMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.COMMON], ...data[SubscriptionTier.COMMON] },
-                    [SubscriptionTier.UNCOMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.UNCOMMON], ...data[SubscriptionTier.UNCOMMON] },
-                    [SubscriptionTier.RARE]: { ...DEFAULT_CONFIG[SubscriptionTier.RARE], ...data[SubscriptionTier.RARE] },
+                    [SubscriptionTier.COMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.COMMON], ...(data[SubscriptionTier.COMMON] || {}) },
+                    [SubscriptionTier.UNCOMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.UNCOMMON], ...(data[SubscriptionTier.UNCOMMON] || {}) },
+                    [SubscriptionTier.RARE]: { ...DEFAULT_CONFIG[SubscriptionTier.RARE], ...(data[SubscriptionTier.RARE] || {}) },
+                    [SubscriptionTier.MYTHIC]: { ...DEFAULT_CONFIG[SubscriptionTier.MYTHIC], ...(data[SubscriptionTier.MYTHIC] || {}) },
                 };
             } else {
                 // Initialize default config if missing
@@ -329,6 +338,18 @@ export const subscriptionService = {
 
 // ADMIN SERVICE
 export const adminService = {
+    assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
+        const snapshot = await db.collection("users").where("email", "==", email).get();
+        if (snapshot.empty) {
+            throw new Error(`User with email ${email} not found.`);
+        }
+        const userDoc = snapshot.docs[0];
+        await userDoc.ref.update({ subscriptionTier: tier });
+        
+        // Return true on success
+        return true;
+    },
+
     wipeDatabase: async () => {
         const deleteCollection = async (path: string) => {
             const ref = db.collection(path);
