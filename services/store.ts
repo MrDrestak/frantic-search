@@ -1,3 +1,4 @@
+
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem } from '../types';
@@ -242,7 +243,13 @@ export const cardService = {
       ...cardData,
       addedAt: Date.now(),
       isShowcase: false, // Default to false
-      game: cardData.game || GameType.MTG // Default to MTG if not specified
+      game: cardData.game || GameType.MTG, // Default to MTG if not specified
+      
+      // FIX: Firestore throws if a field is undefined. Default to null.
+      purchaseUrl: cardData.purchaseUrl ?? null,
+      customPrice: cardData.customPrice ?? null,
+      currency: cardData.currency ?? null,
+      price: cardData.price ?? 0, 
     };
     
     // Save card
@@ -254,6 +261,13 @@ export const cardService = {
     });
     
     return { id: docRef.id, ...newCard } as Card;
+  },
+
+  updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
+      await db.collection("cards").doc(cardId).update({ 
+          customPrice,
+          currency
+      });
   },
 
   removeCard: async (cardId: string) => {

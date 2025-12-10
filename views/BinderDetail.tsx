@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign } from 'lucide-react';
 
 interface BinderDetailProps {
   binderId: string;
@@ -41,6 +41,11 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   // Delete Confirmation State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Price Modal State
+  const [editingPriceCard, setEditingPriceCard] = useState<Card | null>(null);
+  const [priceInput, setPriceInput] = useState<string>('');
+  const [currencyInput, setCurrencyInput] = useState<'USD' | 'PEN'>('USD');
 
   useEffect(() => {
     loadData();
@@ -121,6 +126,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       isFoil: isFoil,
       rarity: selectedCard.rarity,
       price: price,
+      purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
       game: binder.game // Pass the binder's game type
     });
 
@@ -147,6 +153,25 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       // Optimistic update locally
       setCards(prev => prev.map(c => c.id === card.id ? { ...c, isShowcase: newState } : c));
   }
+
+  const handleOpenPriceModal = (card: Card) => {
+      setEditingPriceCard(card);
+      setPriceInput(card.customPrice ? card.customPrice.toString() : '');
+      setCurrencyInput(card.currency || 'USD');
+  };
+
+  const handleSavePrice = async () => {
+      if (!editingPriceCard) return;
+      
+      const price = parseFloat(priceInput);
+      if (isNaN(price)) return; // Simple validation
+
+      await cardService.updatePrice(editingPriceCard.id, price, currencyInput);
+      
+      // Optimistic Update
+      setCards(prev => prev.map(c => c.id === editingPriceCard.id ? { ...c, customPrice: price, currency: currencyInput } : c));
+      setEditingPriceCard(null);
+  };
 
   const handleConfirmDeleteBinder = async () => {
       if (binder) {
@@ -222,6 +247,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                       isFoil: isFoil,
                       rarity: match.rarity,
                       price: price,
+                      purchaseUrl: match.purchase_uris?.card_kingdom || null,
                       game: binder.game // Pass the binder's game type
                   });
               }
@@ -300,6 +326,71 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                 </div>
             </div>
         </div>
+      )}
+
+      {/* My Offer Price Modal */}
+      {editingPriceCard && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-sm w-full p-6 shadow-2xl animate-in fade-in zoom-in-95">
+                  <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-xl font-bold text-white">Set My Offer</h3>
+                      <button onClick={() => setEditingPriceCard(null)} className="text-slate-400 hover:text-white">
+                          <X size={20} />
+                      </button>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-4">
+                      Set the price you want for <span className="text-white font-medium">{editingPriceCard.name}</span>.
+                  </p>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Currency</label>
+                          <div className="grid grid-cols-2 gap-2">
+                              <button 
+                                type="button" 
+                                onClick={() => setCurrencyInput('USD')}
+                                className={`py-2 px-3 rounded border text-sm font-medium ${currencyInput === 'USD' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                              >
+                                  USD ($)
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={() => setCurrencyInput('PEN')}
+                                className={`py-2 px-3 rounded border text-sm font-medium ${currencyInput === 'PEN' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                              >
+                                  SOL (S/)
+                              </button>
+                          </div>
+                      </div>
+                      
+                      <div>
+                          <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Price</label>
+                          <div className="relative">
+                              <div className="absolute left-3 top-2.5 text-slate-400 font-bold">
+                                  {currencyInput === 'USD' ? '$' : 'S/'}
+                              </div>
+                              <input 
+                                  type="number" 
+                                  step="0.01"
+                                  min="0"
+                                  value={priceInput}
+                                  onChange={(e) => setPriceInput(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-violet-500 outline-none text-lg font-mono"
+                                  placeholder="0.00"
+                                  autoFocus
+                              />
+                          </div>
+                      </div>
+
+                      <button 
+                          onClick={handleSavePrice}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 mt-2"
+                      >
+                          <DollarSign size={18} /> Save Offer
+                      </button>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* Header */}
@@ -541,6 +632,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                     // Only enable showcase toggling if this is a "For Trade" binder
                     enableShowcase={binder.type === BinderType.FOR_TRADE}
                     onToggleShowcase={() => handleToggleShowcase(card)}
+                    onSetPrice={() => handleOpenPriceModal(card)}
                 />
             ))}
             {cards.length === 0 && (

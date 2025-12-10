@@ -106,7 +106,13 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
                           )}
                           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950 to-transparent p-4 pt-12">
                                 <div className="text-2xl font-bold text-white drop-shadow-md">
-                                    ${item.price?.toFixed(2) || '---'}
+                                    {item.customPrice && item.customPrice > 0 ? (
+                                         <span className="text-green-400">
+                                             {item.currency === 'PEN' ? 'S/' : '$'} {item.customPrice.toFixed(2)}
+                                         </span>
+                                    ) : (
+                                         <span>${item.price?.toFixed(2) || '---'}</span>
+                                    )}
                                 </div>
                           </div>
                       </div>

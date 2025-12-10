@@ -53,10 +53,13 @@ export interface Card {
   isFoil: boolean;
   rarity: string;
   price?: number; 
+  customPrice?: number; // User defined price
+  currency?: 'USD' | 'PEN'; // User defined currency
+  purchaseUrl?: string; // Card Kingdom link
   addedAt: number;
   binderType?: BinderType;
   isShowcase?: boolean;
-  game?: string; // Added game property
+  game?: string;
 }
 
 export interface ShowcaseItem extends Card {

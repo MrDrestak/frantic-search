@@ -1,16 +1,30 @@
 
 import React from 'react';
 import { Card } from '../types';
-import { Sparkles, X, Star } from 'lucide-react';
+import { Sparkles, X, Star, Link, DollarSign } from 'lucide-react';
 
 interface MTGCardProps {
   card: Card;
   onRemove?: () => void;
   onToggleShowcase?: () => void;
+  onSetPrice?: () => void;
   enableShowcase?: boolean;
 }
 
-const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, enableShowcase }) => {
+const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onSetPrice, enableShowcase }) => {
+  
+  const handleCKLink = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      // If we have a saved URL (from new imports), use it.
+      if (card.purchaseUrl) {
+          window.open(card.purchaseUrl, '_blank');
+      } else {
+          // Fallback search for older cards
+          const searchUrl = `https://www.cardkingdom.com/catalog/search?search=header&filter%5Bname%5D=${encodeURIComponent(card.name)}`;
+          window.open(searchUrl, '_blank');
+      }
+  };
+
   return (
     <div className="flex flex-col gap-1">
       <div className="relative group perspective-1000">
@@ -34,13 +48,21 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, ena
               </div>
           )}
 
-          {/* Price Tag */}
-          {card.price && card.price > 0 && (
-             <div className="absolute top-2 left-2 bg-slate-900/80 backdrop-blur text-green-400 text-[10px] md:text-xs font-bold px-2 py-0.5 rounded shadow-sm border border-slate-700/50 flex items-center gap-1 z-20">
-                <span className="text-slate-400 text-[8px] uppercase">Est</span>
-                ${card.price.toFixed(2)}
-             </div>
-          )}
+          {/* Price Tag (Prioritize Custom Price) */}
+          <div className="absolute top-2 left-2 z-20 flex flex-col items-start gap-1">
+              {card.customPrice && card.customPrice > 0 ? (
+                  <div className="bg-violet-600 text-white text-[10px] md:text-xs font-bold px-2 py-1 rounded shadow-lg border border-violet-400 flex items-center gap-1">
+                    {card.currency === 'PEN' ? 'S/' : '$'} {card.customPrice.toFixed(2)}
+                  </div>
+              ) : (
+                  card.price && card.price > 0 && (
+                     <div className="bg-slate-900/80 backdrop-blur text-green-400 text-[10px] md:text-xs font-bold px-2 py-0.5 rounded shadow-sm border border-slate-700/50 flex items-center gap-1">
+                        <span className="text-slate-400 text-[8px] uppercase">Est</span>
+                        ${card.price.toFixed(2)}
+                     </div>
+                  )
+              )}
+          </div>
 
           {/* Overlay Info */}
           <div className="absolute bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-sm p-2 transform translate-y-full group-hover:translate-y-0 transition-transform z-20">
@@ -56,6 +78,7 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, ena
         </div>
       </div>
       
+      {/* Action Bar */}
       <div className="flex gap-1 mt-1">
           {onRemove && (
              <button 
@@ -64,25 +87,50 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, ena
                     e.stopPropagation();
                     onRemove();
                 }}
-                className="flex-1 bg-slate-800 hover:bg-red-900/40 hover:text-red-400 text-slate-500 text-xs py-1.5 rounded flex items-center justify-center gap-1 transition-colors border border-slate-700 hover:border-red-800"
+                title="Remove Card"
+                className="bg-slate-800 hover:bg-red-900/40 hover:text-red-400 text-slate-500 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border border-slate-700 hover:border-red-800 flex-1"
              >
-                <X size={12} /> Remove
+                <X size={14} />
              </button>
           )}
+
+          {/* Card Kingdom Link (Always Available) */}
+          <button
+              type="button"
+              onClick={handleCKLink}
+              title="Buy on Card Kingdom"
+              className="bg-slate-800 hover:bg-orange-900/40 hover:text-orange-400 text-slate-500 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border border-slate-700 hover:border-orange-800 flex-1"
+          >
+              <Link size={14} />
+          </button>
           
-          {enableShowcase && onToggleShowcase && (
-              <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleShowcase();
-                }}
-                title={card.isShowcase ? "Remove from Showcase" : "Add to Showcase"}
-                className={`flex-1 text-xs py-1.5 rounded flex items-center justify-center gap-1 transition-colors border ${card.isShowcase ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 hover:bg-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-amber-200 hover:border-amber-700'}`}
-              >
-                  <Star size={12} fill={card.isShowcase ? "currentColor" : "none"} /> 
-                  {card.isShowcase ? 'Showcase' : 'Showcase'}
-              </button>
+          {/* My Offer / Showcase Buttons (Only for Trade Binders) */}
+          {enableShowcase && (
+            <>
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSetPrice) onSetPrice();
+                    }}
+                    title="Set My Offer"
+                    className={`flex-1 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border ${card.customPrice ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-green-200 hover:border-green-700'}`}
+                >
+                     <DollarSign size={14} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (onToggleShowcase) onToggleShowcase();
+                    }}
+                    title={card.isShowcase ? "Remove from Showcase" : "Add to Showcase"}
+                    className={`flex-1 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border ${card.isShowcase ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 hover:bg-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-amber-200 hover:border-amber-700'}`}
+                >
+                    <Star size={14} fill={card.isShowcase ? "currentColor" : "none"} /> 
+                </button>
+            </>
           )}
       </div>
     </div>

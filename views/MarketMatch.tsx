@@ -59,8 +59,21 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                                    {match.matchCard.isFoil && <span className="bg-rainbow text-transparent bg-clip-text text-xs font-bold border border-yellow-500/30 px-1 rounded">FOIL</span>}
                                </div>
                                <p className="text-slate-400 text-sm">{match.card.setName}</p>
-                               <div className="mt-2 flex gap-2">
+                               <div className="mt-2 flex gap-2 items-center">
                                    <span className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded">Condition: {match.matchCard.condition}</span>
+                                   
+                                   {/* Price Display: Custom Offer or Estimate */}
+                                   {match.matchCard.customPrice && match.matchCard.customPrice > 0 ? (
+                                        <span className="text-xs bg-green-900/40 text-green-400 px-2 py-1 rounded border border-green-800 font-bold">
+                                            Ask: {match.matchCard.currency === 'PEN' ? 'S/' : '$'} {match.matchCard.customPrice.toFixed(2)}
+                                        </span>
+                                   ) : (
+                                        match.matchCard.price && match.matchCard.price > 0 && (
+                                            <span className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700/50">
+                                                Est: ${match.matchCard.price.toFixed(2)}
+                                            </span>
+                                        )
+                                   )}
                                </div>
                            </div>
                        </div>
