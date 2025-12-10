@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { cardService, binderService, auth, subscriptionService } from '../services/store';
+import { cardService, binderService, auth, subscriptionService, BINDER_CARD_LIMIT } from '../services/store';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
 import { Card, Binder, ScryfallCard, CardCondition, BinderType } from '../types';
 import MTGCard from '../components/MTGCard';
@@ -113,35 +113,45 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const handleAddCard = async () => {
     if (!selectedCard || !binder) return;
+    
+    // UI Check for Limit
+    if (cards.length >= BINDER_CARD_LIMIT) {
+        alert(`Cannot add more cards. This binder has reached the limit of ${BINDER_CARD_LIMIT} cards.`);
+        return;
+    }
 
-    // Calculate Price
-    const priceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
-    const price = priceStr ? parseFloat(priceStr) : 0;
+    try {
+        // Calculate Price
+        const priceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
+        const price = priceStr ? parseFloat(priceStr) : 0;
 
-    await cardService.addCard({
-      binderId: binder.id,
-      userId: binder.userId,
-      scryfallId: selectedCard.id,
-      name: selectedCard.name,
-      setName: selectedCard.set_name,
-      collectorNumber: selectedCard.collector_number,
-      imageUrl: getCardImage(selectedCard),
-      condition: condition,
-      isFoil: isFoil,
-      rarity: selectedCard.rarity,
-      price: price,
-      purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
-      game: binder.game // Pass the binder's game type
-    });
+        await cardService.addCard({
+        binderId: binder.id,
+        userId: binder.userId,
+        scryfallId: selectedCard.id,
+        name: selectedCard.name,
+        setName: selectedCard.set_name,
+        collectorNumber: selectedCard.collector_number,
+        imageUrl: getCardImage(selectedCard),
+        condition: condition,
+        isFoil: isFoil,
+        rarity: selectedCard.rarity,
+        price: price,
+        purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
+        game: binder.game // Pass the binder's game type
+        });
 
-    // Reset UI
-    setSelectedCard(null);
-    setSearchQuery('');
-    setSearchResults([]);
-    setVersionResults([]);
-    setSearchStep('QUERY');
-    setShowSearch(false);
-    loadData();
+        // Reset UI
+        setSelectedCard(null);
+        setSearchQuery('');
+        setSearchResults([]);
+        setVersionResults([]);
+        setSearchStep('QUERY');
+        setShowSearch(false);
+        loadData();
+    } catch (e: any) {
+        alert("Failed to add card: " + e.message);
+    }
   };
 
   const handleRemoveCard = async (cardId: string) => {
@@ -199,11 +209,29 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const handleBatchImport = async (mappedRows: any[]) => {
       if (!binder) return;
-      setShowCSV(false);
-      setImportProgress({ current: 0, total: mappedRows.length });
 
-      for (let i = 0; i < mappedRows.length; i++) {
-          const row = mappedRows[i];
+      // LIMIT CHECK
+      const currentCount = cards.length;
+      const availableSlots = BINDER_CARD_LIMIT - currentCount;
+
+      if (availableSlots <= 0) {
+          alert(`This binder is full (Max ${BINDER_CARD_LIMIT} cards). Cannot import more cards.`);
+          return;
+      }
+
+      let rowsToProcess = mappedRows;
+      let limitReached = false;
+
+      if (mappedRows.length > availableSlots) {
+          rowsToProcess = mappedRows.slice(0, availableSlots);
+          limitReached = true;
+      }
+
+      setShowCSV(false);
+      setImportProgress({ current: 0, total: rowsToProcess.length });
+
+      for (let i = 0; i < rowsToProcess.length; i++) {
+          const row = rowsToProcess[i];
           if (!row.name) continue;
 
           try {
@@ -271,12 +299,18 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
               console.error(`Failed to import ${row.name}`, e);
           }
           
-          setImportProgress({ current: i + 1, total: mappedRows.length });
+          setImportProgress({ current: i + 1, total: rowsToProcess.length });
           await new Promise(r => setTimeout(r, 200)); 
       }
 
       setImportProgress(null);
       loadData();
+      
+      if (limitReached) {
+          setTimeout(() => {
+              alert(`Import completed partially. Only the first ${rowsToProcess.length} cards were imported to respect the binder limit of ${BINDER_CARD_LIMIT} cards.`);
+          }, 500);
+      }
   };
 
   const filteredCards = cards.filter(card => 
@@ -434,7 +468,9 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                 {binder.type}
             </span>
           </h1>
-          <p className="text-slate-400">{cards.length} Cards collected</p>
+          <p className="text-slate-400">
+            {cards.length} / {BINDER_CARD_LIMIT} Cards collected
+          </p>
         </div>
         <div className="ml-auto flex gap-2">
              <button 

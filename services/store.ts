@@ -6,6 +6,9 @@ import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchRe
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
 
+// CONSTANTS
+export const BINDER_CARD_LIMIT = 25;
+
 // DEFAULTS
 const DEFAULT_CONFIG: GlobalConfig = {
     [SubscriptionTier.COMMON]: { maxTradeBinders: 1, maxShowcaseItems: 3, pricePerMonth: 0 },
@@ -281,6 +284,34 @@ export const subscriptionService = {
     }
 };
 
+// ADMIN SERVICE
+export const adminService = {
+    wipeDatabase: async () => {
+        const deleteCollection = async (path: string) => {
+            const ref = db.collection(path);
+            while (true) {
+                const snap = await ref.limit(100).get();
+                if (snap.empty) break;
+                const batch = db.batch();
+                snap.docs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+        };
+
+        try {
+            console.log("Starting DB Wipe...");
+            await deleteCollection('users');
+            await deleteCollection('binders');
+            await deleteCollection('cards');
+            console.log("DB Wipe Complete.");
+            return true;
+        } catch (e) {
+            console.error("DB Wipe Failed", e);
+            throw e;
+        }
+    }
+};
+
 // BINDER SERVICE
 export const binderService = {
   getUserBinders: async (userId: string): Promise<Binder[]> => {
@@ -309,13 +340,24 @@ export const binderService = {
   },
 
   deleteBinder: async (binderId: string) => {
+    // 1. Delete Binder Document
     await db.collection("binders").doc(binderId).delete();
+    
+    // 2. Query all cards in this binder
     const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
-    const batch = db.batch();
-    snapshot.docs.forEach((d) => {
-        batch.delete(d.ref);
-    });
-    await batch.commit();
+    
+    // 3. Batch delete cards (Firestore limits batch to 500 ops)
+    const CHUNK_SIZE = 450;
+    const docs = snapshot.docs;
+
+    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        const batch = db.batch();
+        chunk.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+    }
   }
 };
 
@@ -327,6 +369,12 @@ export const cardService = {
   },
 
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
+    // 1. Check Binder Limit
+    const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
+    if (countSnap.size >= BINDER_CARD_LIMIT) {
+        throw new Error(`Binder Limit Reached. Max ${BINDER_CARD_LIMIT} cards allowed.`);
+    }
+
     const newCard = {
       ...cardData,
       addedAt: Date.now(),
