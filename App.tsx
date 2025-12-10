@@ -24,8 +24,16 @@ const App: React.FC = () => {
   const [selectedBinderId, setSelectedBinderId] = useState<string | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
-  // Check for persistent session on mount
+  // Check for persistent session and URL params on mount
   useEffect(() => {
+    // URL Params Check for shared profiles
+    const params = new URLSearchParams(window.location.search);
+    const traderId = params.get('trader');
+    if (traderId) {
+        setViewingProfileId(traderId);
+        setCurrentPage('profile'); // Force profile view regardless of last page
+    }
+
     const unsubscribe = auth.subscribe((user) => {
       if (user) {
         setIsAuthenticated(true);
@@ -69,6 +77,9 @@ const App: React.FC = () => {
                 viewingUserId={viewingProfileId} 
                 onBack={() => {
                     setViewingProfileId(null);
+                    // Clear the URL param without refreshing
+                    window.history.replaceState({}, '', window.location.pathname);
+
                     // If we were in showcase, go back to showcase, else market
                     if (currentPage === 'showcase') {
                          handleNavigation('showcase');

@@ -466,6 +466,31 @@ export const cardService = {
     return snapshot.docs.map(doc => mapDoc(doc) as Card);
   },
 
+  getTraderInventory: async (userId: string): Promise<Card[]> => {
+    try {
+        // 1. Get all cards for the user
+        const cardSnap = await db.collection("cards").where("userId", "==", userId).get();
+        const allCards = cardSnap.docs.map(doc => mapDoc(doc) as Card);
+
+        // 2. Get user binders to identify types
+        const binderSnap = await db.collection("binders").where("userId", "==", userId).get();
+        const tradeBinderIds = new Set<string>();
+        
+        binderSnap.docs.forEach(doc => {
+            const data = doc.data() as Binder;
+            if (data.type === BinderType.FOR_TRADE || data.type === BinderType.COLLECTION) {
+                tradeBinderIds.add(doc.id);
+            }
+        });
+
+        // 3. Filter cards that belong to eligible binders
+        return allCards.filter(card => tradeBinderIds.has(card.binderId));
+    } catch (e) {
+        console.error("Error fetching trader inventory", e);
+        return [];
+    }
+  },
+
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
     const binderRef = db.collection("binders").doc(cardData.binderId);
     const binderSnap = await binderRef.get();

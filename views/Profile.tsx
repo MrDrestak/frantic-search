@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth } from '../services/store';
+import { auth, cardService } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
+import MTGCard from '../components/MTGCard';
 
 interface ProfileProps {
     viewingUserId?: string | null;
@@ -60,6 +61,11 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const [bidderNames, setBidderNames] = useState<Record<string, string>>({});
   const [showAuctions, setShowAuctions] = useState(false);
 
+  // Storefront State
+  const [storefrontCards, setStorefrontCards] = useState<Card[]>([]);
+  const [storefrontSearch, setStorefrontSearch] = useState('');
+  const [isLoadingStorefront, setIsLoadingStorefront] = useState(false);
+
   // Form State
   const [nickname, setNickname] = useState('');
   const [storeName, setStoreName] = useState('');
@@ -79,11 +85,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   const loadProfile = async () => {
     setIsLoading(true);
+    let targetId = viewingUserId;
+
     if (isOwnProfile) {
         // Load MY profile
         const currentUser = auth.getCurrentUser();
         if (currentUser) {
             setUser(currentUser);
+            targetId = currentUser.id;
             setNickname(currentUser.displayName || '');
             setStoreName(currentUser.preferredStore || '');
             
@@ -98,13 +107,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     setCountryCode(match.code);
                     setLocalPhone(storedWhatsapp.slice(match.code.length));
                 } else {
-                    // Fallback: If no match found, assume legacy data (likely Peru without code or just raw number)
-                    // If length is 9, likely Peru local.
                     if (storedWhatsapp.length === 9) {
                         setCountryCode('51');
                         setLocalPhone(storedWhatsapp);
                     } else {
-                        // Unknown format, put everything in local
                         setLocalPhone(storedWhatsapp);
                     }
                 }
@@ -121,8 +127,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         // Load OTHER profile
         const publicProfile = await auth.getUserPublicProfile(viewingUserId);
         setUser(publicProfile);
-        // Do not load auctions for other users
     }
+    
+    // Load Storefront Inventory for ANY profile
+    if (targetId) {
+        setIsLoadingStorefront(true);
+        const inventory = await cardService.getTraderInventory(targetId);
+        setStorefrontCards(inventory);
+        setIsLoadingStorefront(false);
+    }
+
     setIsLoading(false);
   };
 
@@ -233,6 +247,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
     loadProfile(); // Reset form state
   };
 
+  const handleShareProfile = () => {
+      if (!user) return;
+      const url = `${window.location.origin}/?trader=${user.id}`;
+      navigator.clipboard.writeText(url).then(() => {
+          alert("Profile link copied to clipboard! Share it on Facebook or Discord.");
+      });
+  };
+
   const renderTierBadge = (tier: SubscriptionTier) => {
       let color = 'bg-slate-700 text-slate-300';
       let Icon = Shield;
@@ -259,6 +281,11 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Helper to find store data
   const currentStoreData = STORES.find(s => s.name === user?.preferredStore);
 
+  // Filter Storefront Cards
+  const filteredStorefront = storefrontCards.filter(c => 
+      c.name.toLowerCase().includes(storefrontSearch.toLowerCase())
+  );
+
   if (isLoading) return <div className="p-8 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Profile...</div>;
   
   if (!user) return <div className="p-8 text-center text-slate-500">User not found.</div>;
@@ -276,16 +303,29 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       )}
 
       <div className="max-w-3xl mx-auto">
-        <header className="mb-8 flex items-center gap-4">
-            {!isOwnProfile && onBack && (
-                <button onClick={onBack} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-                    <ArrowLeft size={20} />
+        <header className="mb-8 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                {!isOwnProfile && onBack && (
+                    <button onClick={onBack} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <ArrowLeft size={20} />
+                    </button>
+                )}
+                <div>
+                    <h1 className="text-2xl font-bold text-white mb-2">{isOwnProfile ? 'My Profile' : 'Trader Profile'}</h1>
+                    <p className="text-slate-400">{isOwnProfile ? 'Manage your trader identity & public storefront.' : 'View trader details and inventory.'}</p>
+                </div>
+            </div>
+            
+            {/* Share Button */}
+            {!isEditing && (
+                <button 
+                    onClick={handleShareProfile}
+                    className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-slate-700 shadow-lg"
+                    title="Copy Public Link"
+                >
+                    <Share2 size={18} /> <span className="hidden md:inline">Share Profile</span>
                 </button>
             )}
-            <div>
-                <h1 className="text-2xl font-bold text-white mb-2">{isOwnProfile ? 'My Profile' : 'Trader Profile'}</h1>
-                <p className="text-slate-400">{isOwnProfile ? 'Manage your trader identity.' : 'View trader details and reputation.'}</p>
-            </div>
         </header>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6">
@@ -557,11 +597,59 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             </div>
         </div>
 
+        {/* PUBLIC STOREFRONT SECTION */}
+        {!isEditing && (
+            <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+                        <Layers size={20} />
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Public Storefront</h2>
+                </div>
+                
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
+                     {/* Search Bar */}
+                     <div className="mb-6 relative">
+                        <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
+                        <input 
+                            type="text"
+                            placeholder="Search this trader's inventory..."
+                            value={storefrontSearch}
+                            onChange={(e) => setStorefrontSearch(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                     </div>
+
+                     {isLoadingStorefront ? (
+                         <div className="text-center py-10 text-slate-500">
+                             <Loader2 className="animate-spin mx-auto mb-2" />
+                             Loading inventory...
+                         </div>
+                     ) : (
+                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                             {filteredStorefront.map(card => (
+                                 <MTGCard 
+                                    key={card.id} 
+                                    card={card}
+                                    enableShowcase={false} // Read only view
+                                 />
+                             ))}
+                             {filteredStorefront.length === 0 && (
+                                 <div className="col-span-full text-center py-10 text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
+                                     <p>{storefrontCards.length === 0 ? "This trader has no cards listed for trade." : "No cards match your search."}</p>
+                                 </div>
+                             )}
+                         </div>
+                     )}
+                </div>
+            </div>
+        )}
+
         {/* Admin Panel Button */}
         {isOwnProfile && user.isAdmin && onAdminClick && (
             <button
                 onClick={onAdminClick}
-                className="w-full bg-red-900/20 hover:bg-red-900/30 border border-red-900/50 text-red-400 p-4 rounded-xl flex items-center justify-between group transition-all mb-6"
+                className="w-full mt-6 bg-red-900/20 hover:bg-red-900/30 border border-red-900/50 text-red-400 p-4 rounded-xl flex items-center justify-between group transition-all mb-6"
             >
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-red-500/10 rounded-lg">
@@ -578,7 +666,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         
         {/* Auctions History Section - ONLY VISIBLE ON OWN PROFILE */}
         {isOwnProfile && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
+            <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-bold text-white flex items-center gap-2">
                         <Gavel size={20} className="text-amber-500" /> 
