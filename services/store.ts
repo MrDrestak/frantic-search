@@ -1,58 +1,64 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig } from '../types';
 
 // CONVERSION UTILS
-// Firestore returns data as objects; we need to attach the ID
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
+
+// DEFAULTS
+const DEFAULT_CONFIG: GlobalConfig = {
+    [SubscriptionTier.COMMON]: { maxTradeBinders: 1, maxShowcaseItems: 3, pricePerMonth: 0 },
+    [SubscriptionTier.UNCOMMON]: { maxTradeBinders: 3, maxShowcaseItems: 10, pricePerMonth: 5 },
+    [SubscriptionTier.RARE]: { maxTradeBinders: 10, maxShowcaseItems: 50, pricePerMonth: 15 },
+};
 
 // AUTH SERVICE
 let currentUserProfile: UserProfile | null = null;
+let currentConfig: GlobalConfig = DEFAULT_CONFIG;
 
 export const auth = {
   login: async (): Promise<UserProfile> => {
     try {
-      // Fix for "Operation not supported in this environment"
-      // Explicitly sets persistence to LOCAL to ensure cookies/storage work correctly
       await firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
       const result = await firebaseAuth.signInWithPopup(googleProvider);
       const user = result.user;
       
       if (!user) throw new Error("Authentication failed");
 
-      // Check if user exists in Firestore to pull custom fields (whatsapp, store)
       const userRef = db.collection("users").doc(user.uid);
       const userDoc = await userRef.get();
       
-      let customData = {};
+      let customData: any = {};
       if (userDoc.exists) {
-          customData = (userDoc.data() as any) || {};
+          customData = userDoc.data() || {};
       }
 
-      // Prepare profile object
       const profile: UserProfile = {
         id: user.uid,
         email: user.email || '',
         displayName: user.displayName || 'Unnamed Trader',
         photoURL: user.photoURL || undefined,
         isOnline: true,
-        ...customData // Merge saved data like whatsapp/store
+        subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON, // Default to Common
+        isAdmin: customData.isAdmin || false,
+        ...customData
       };
 
-      // CRITICAL FIX: Always update Firestore on login.
-      // This ensures other users can find this user's Name in the Market Match.
       await userRef.set({
           displayName: profile.displayName,
           email: profile.email,
           photoURL: profile.photoURL,
-          lastLogin: Date.now()
+          lastLogin: Date.now(),
+          subscriptionTier: profile.subscriptionTier
       }, { merge: true });
 
       currentUserProfile = profile;
-      // Clear guest flag if we successfully logged in with Google
       localStorage.removeItem('lotus_is_guest');
+      
+      // Load config on login
+      await configService.loadConfig();
+
       return profile;
     } catch (error: any) {
       console.error("Login failed", error);
@@ -60,7 +66,6 @@ export const auth = {
     }
   },
   loginAsGuest: async (): Promise<UserProfile> => {
-      // PERSISTENT GUEST LOGIN
       const guestId = localStorage.getItem('lotus_guest_id') || 'guest_' + Math.floor(Math.random() * 10000);
       localStorage.setItem('lotus_guest_id', guestId);
       localStorage.setItem('lotus_is_guest', 'true');
@@ -70,10 +75,13 @@ export const auth = {
           email: 'guest@lotus.test',
           displayName: 'Guest Trader',
           photoURL: undefined,
-          isOnline: true
+          isOnline: true,
+          subscriptionTier: SubscriptionTier.COMMON,
+          isAdmin: false
       };
-      console.log("Logged in as Guest:", guestProfile);
+      
       currentUserProfile = guestProfile;
+      await configService.loadConfig();
       return guestProfile;
   },
   getCurrentUser: () => {
@@ -83,7 +91,13 @@ export const auth = {
       try {
           const doc = await db.collection("users").doc(userId).get();
           if (doc.exists) {
-              return { id: doc.id, ...(doc.data() as any) } as UserProfile;
+              const data = doc.data() as any;
+              // Ensure tier exists
+              return { 
+                  id: doc.id, 
+                  ...data,
+                  subscriptionTier: data.subscriptionTier || SubscriptionTier.COMMON
+              } as UserProfile;
           }
           return null;
       } catch (e: any) {
@@ -98,7 +112,6 @@ export const auth = {
       if (!current) throw new Error("No user logged in");
 
       try {
-          // If Guest, just update local state
           if (localStorage.getItem('lotus_is_guest') === 'true') {
              currentUserProfile = { ...current, ...updates };
              return;
@@ -106,7 +119,6 @@ export const auth = {
 
           if (!user) throw new Error("No Firebase user found");
 
-          // 1. Update Firebase Auth (Display Name / Photo)
           if (updates.displayName || updates.photoURL) {
               await user.updateProfile({
                   displayName: updates.displayName || user.displayName,
@@ -114,7 +126,6 @@ export const auth = {
               });
           }
 
-          // 2. Update Firestore "users" collection
           const firestoreUpdates = {
               displayName: updates.displayName || current.displayName,
               email: current.email,
@@ -124,8 +135,6 @@ export const auth = {
           };
           
           await db.collection("users").doc(user.uid).set(firestoreUpdates, { merge: true });
-
-          // 3. Update local state
           currentUserProfile = { ...current, ...updates };
 
       } catch (error: any) {
@@ -135,23 +144,17 @@ export const auth = {
   },
   logout: async () => {
       localStorage.removeItem('lotus_is_guest');
-      // We keep guest_id so if they come back as guest they have same ID (optional)
-      // localStorage.removeItem('lotus_guest_id'); 
       await firebaseAuth.signOut();
       currentUserProfile = null;
   },
-  /**
-   * Listen for auth state changes to persist login across refreshes
-   */
   subscribe: (callback: (user: UserProfile | null) => void) => {
     return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        // User found in Firebase session
         const userRef = db.collection("users").doc(firebaseUser.uid);
-        let customData = {};
+        let customData: any = {};
         try {
             const userDoc = await userRef.get();
-            if (userDoc.exists) customData = (userDoc.data() as any) || {};
+            if (userDoc.exists) customData = userDoc.data() || {};
         } catch(e) { console.warn("Offline or error fetching profile", e); }
 
         const profile: UserProfile = {
@@ -160,12 +163,14 @@ export const auth = {
             displayName: firebaseUser.displayName || 'Unnamed Trader',
             photoURL: firebaseUser.photoURL || undefined,
             isOnline: true,
+            subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
+            isAdmin: customData.isAdmin || false,
             ...customData
         };
         currentUserProfile = profile;
+        await configService.loadConfig(); // Ensure config is loaded
         callback(profile);
       } else {
-        // No Firebase user, check for Guest persistence
         const isGuest = localStorage.getItem('lotus_is_guest');
         if (isGuest === 'true') {
              const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
@@ -174,9 +179,12 @@ export const auth = {
                 email: 'guest@lotus.test',
                 displayName: 'Guest Trader',
                 photoURL: undefined,
-                isOnline: true
+                isOnline: true,
+                subscriptionTier: SubscriptionTier.COMMON,
+                isAdmin: false
              };
              currentUserProfile = guestProfile;
+             await configService.loadConfig();
              callback(guestProfile);
         } else {
              currentUserProfile = null;
@@ -185,6 +193,85 @@ export const auth = {
       }
     });
   }
+};
+
+// CONFIG SERVICE
+export const configService = {
+    loadConfig: async () => {
+        try {
+            const doc = await db.collection("settings").doc("global").get();
+            if (doc.exists) {
+                currentConfig = doc.data() as GlobalConfig;
+            } else {
+                // Initialize default config if missing
+                await db.collection("settings").doc("global").set(DEFAULT_CONFIG);
+                currentConfig = DEFAULT_CONFIG;
+            }
+        } catch (e) {
+            console.warn("Using default config (offline)", e);
+            currentConfig = DEFAULT_CONFIG;
+        }
+        return currentConfig;
+    },
+    getConfig: () => currentConfig,
+    updateConfig: async (newConfig: GlobalConfig) => {
+        await db.collection("settings").doc("global").set(newConfig);
+        currentConfig = newConfig;
+    }
+};
+
+// SUBSCRIPTION SERVICE
+export const subscriptionService = {
+    upgradeUser: async (tier: SubscriptionTier) => {
+        const user = currentUserProfile;
+        if (!user) return;
+        
+        // In a real app, this would verify payment token on backend
+        // Here we just update the Firestore doc directly
+        if (localStorage.getItem('lotus_is_guest') !== 'true') {
+            await db.collection("users").doc(user.id).update({
+                subscriptionTier: tier
+            });
+        }
+        
+        // Update local state
+        currentUserProfile = { ...user, subscriptionTier: tier };
+    },
+    
+    // Check if user has reached their limit
+    checkLimit: async (type: 'TRADE_BINDER' | 'SHOWCASE_ITEM'): Promise<{ allowed: boolean; limit: number; current: number }> => {
+        if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
+        
+        const tier = currentUserProfile.subscriptionTier;
+        const limits = currentConfig[tier];
+        
+        if (type === 'TRADE_BINDER') {
+            const binders = await binderService.getUserBinders(currentUserProfile.id);
+            const tradeBinders = binders.filter(b => b.type === BinderType.FOR_TRADE);
+            return {
+                allowed: tradeBinders.length < limits.maxTradeBinders,
+                limit: limits.maxTradeBinders,
+                current: tradeBinders.length
+            };
+        }
+        
+        if (type === 'SHOWCASE_ITEM') {
+            // Count user's showcase items
+            // Optimization: In production, store 'showcaseCount' on user profile to avoid query
+            const snapshot = await db.collection("cards")
+                .where("userId", "==", currentUserProfile.id)
+                .where("isShowcase", "==", true)
+                .get();
+            
+            return {
+                allowed: snapshot.size < limits.maxShowcaseItems,
+                limit: limits.maxShowcaseItems,
+                current: snapshot.size
+            };
+        }
+
+        return { allowed: true, limit: 999, current: 0 };
+    }
 };
 
 // BINDER SERVICE
@@ -201,14 +288,12 @@ export const binderService = {
 
   createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
     try {
-        console.log("Creating binder...", binderData);
         const newBinder = {
           ...binderData,
           createdAt: Date.now(),
           cardCount: 0
         };
         const docRef = await db.collection("binders").add(newBinder);
-        console.log("Binder created with ID:", docRef.id);
         return { id: docRef.id, ...newBinder } as Binder;
     } catch (e: any) {
         console.error("Detailed Create Binder Error:", e);
@@ -217,12 +302,8 @@ export const binderService = {
   },
 
   deleteBinder: async (binderId: string) => {
-    // 1. Delete the binder document
     await db.collection("binders").doc(binderId).delete();
-
-    // 2. Delete all cards in that binder (Batch delete)
     const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
-    
     const batch = db.batch();
     snapshot.docs.forEach((d) => {
         batch.delete(d.ref);
@@ -242,20 +323,16 @@ export const cardService = {
     const newCard = {
       ...cardData,
       addedAt: Date.now(),
-      isShowcase: false, // Default to false
-      game: cardData.game || GameType.MTG, // Default to MTG if not specified
-      
-      // FIX: Firestore throws if a field is undefined. Default to null.
+      isShowcase: false, 
+      game: cardData.game || GameType.MTG,
       purchaseUrl: cardData.purchaseUrl ?? null,
       customPrice: cardData.customPrice ?? null,
       currency: cardData.currency ?? null,
       price: cardData.price ?? 0, 
     };
     
-    // Save card
     const docRef = await db.collection("cards").add(newCard);
     
-    // Update binder count using atomic increment
     await db.collection("binders").doc(cardData.binderId).update({
         cardCount: firebase.firestore.FieldValue.increment(1)
     });
@@ -273,15 +350,9 @@ export const cardService = {
   removeCard: async (cardId: string) => {
     const cardRef = db.collection("cards").doc(cardId);
     const cardSnap = await cardRef.get();
-
     if (!cardSnap.exists) return;
-    
     const cardData = cardSnap.data();
-
-    // Delete card
     await cardRef.delete();
-
-    // Decrement binder count
     if (cardData && cardData.binderId) {
         await db.collection("binders").doc(cardData.binderId).update({
             cardCount: firebase.firestore.FieldValue.increment(-1)
@@ -298,25 +369,17 @@ export const cardService = {
 export const showcaseService = {
     getShowcaseItems: async (game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
         try {
-            // Get all cards marked as showcase
-            // NOTE: We removed .orderBy("addedAt", "desc") to avoid Index Required errors in development
-            // We will sort them in memory instead.
             const snapshot = await db.collection("cards")
                 .where("isShowcase", "==", true)
                 .limit(50)
                 .get();
 
             let cards = snapshot.docs.map(doc => mapDoc(doc) as Card);
-            
-            // Sort in memory
             cards = cards.sort((a, b) => b.addedAt - a.addedAt);
             
-            // We need to fetch user details for each card to show the seller name
-            // Get unique user IDs to avoid duplicate fetches
             const userIds: string[] = Array.from(new Set(cards.map(c => c.userId)));
-            const userMap = new Map<string, string>(); // userId -> displayName
+            const userMap = new Map<string, string>(); 
 
-            // Fetch users (parallel)
             await Promise.all(userIds.map(async (uid: string) => {
                 try {
                     const userDoc = await db.collection("users").doc(uid).get();
@@ -331,7 +394,6 @@ export const showcaseService = {
                 }
             }));
 
-            // Combine card data with seller name
             const items: ShowcaseItem[] = cards.map(card => ({
                 ...card,
                 sellerId: card.userId,
@@ -346,42 +408,25 @@ export const showcaseService = {
     }
 }
 
-// MATCHING SERVICE (The Core Feature)
+// MATCHING SERVICE
 export const matchingService = {
   findMatches: async (currentUserId: string): Promise<MatchResult[]> => {
-    // 1. Get MY Wishlist Binders
     const myBinderSnap = await db.collection("binders")
         .where("userId", "==", currentUserId)
         .where("type", "==", BinderType.WISHLIST)
         .get();
         
     const myBinderIds = myBinderSnap.docs.map(d => d.id);
-
     if (myBinderIds.length === 0) return [];
 
-    // 2. Get MY Wishlist Cards
-    // Firestore "in" query allows max 10 items. If > 10 binders, this breaks.
-    // For MVP, we fetch cards one binder at a time or fetch all cards for user.
-    // Let's fetch all cards for the user and filter in memory for simplicity.
     const myCardsSnap = await db.collection("cards").where("userId", "==", currentUserId).get();
     const allMyCards = myCardsSnap.docs.map(d => mapDoc(d) as Card);
     
     const myWants = allMyCards.filter(c => myBinderIds.includes(c.binderId));
-    
     if (myWants.length === 0) return [];
-
-    // 3. Find matching cards in the GLOBAL market
-    // Strategy: We want cards where (userId != me) AND (name IN [myWants.names])
-    // Firestore cannot do "!= me" easily combined with other filters.
-    // We will query for cards by Name.
     
     const matches: MatchResult[] = [];
-    
-    // To optimize, we loop through myWants unique names
     const uniqueWantNames: string[] = Array.from(new Set(myWants.map(w => w.name)));
-    
-    // Batch queries (limit to 10 for 'in' operator)
-    // For MVP, we will query specifically for the first 10 wanted cards
     const namesToSearch: string[] = uniqueWantNames.slice(0, 10); 
     
     if (namesToSearch.length > 0) {
@@ -391,31 +436,18 @@ export const matchingService = {
 
         const candidates = marketSnap.docs.map(d => mapDoc(d) as Card);
 
-        // 4. Filter candidates
         for (const candidate of candidates) {
-            // Ensure userId is a string
             const candidateUserId = String(candidate.userId);
-            
-            if (candidateUserId === currentUserId) continue; // Skip my own cards
+            if (candidateUserId === currentUserId) continue; 
 
-            // Check if this card belongs to a "FOR_TRADE" binder
-            // We need to fetch the binder info. 
-            // NOTE: In a production app, we should store "binderType" on the card object 
-            // to avoid this extra read!
-            // Let's assume for MVP we check the binder now.
-            
-            // Optimization: We could fetch all binders for this user, but let's do one-by-one for safety
-            // or modify the Card model to include 'binderType'.
-            
-            // Let's rely on client-side filtering for the match
             const wantCard = myWants.find(w => w.name === candidate.name);
             if (wantCard) {
-                // Fetch seller profile 
                 let sellerProfile: UserProfile = {
                     id: candidateUserId,
                     displayName: 'Remote User', 
                     email: '',
-                    isOnline: false
+                    isOnline: false,
+                    subscriptionTier: SubscriptionTier.COMMON
                 };
 
                 try {
@@ -441,8 +473,6 @@ export const matchingService = {
 };
 
 export const messagingService = {
-    // For MVP, we won't implement real-time Firestore chat yet
-    // because it requires setting up listeners.
     getMessages: async (userId: string): Promise<ChatMessage[]> => {
         return [];
     },

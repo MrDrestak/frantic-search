@@ -1,9 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
-import { binderService, auth } from '../services/store';
+import { binderService, auth, subscriptionService } from '../services/store';
 import { Binder, BinderType, GameType } from '../types';
 import BinderCard from '../components/BinderCard';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Lock } from 'lucide-react';
+import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BindersProps {
   onSelectBinder: (binderId: string) => void;
@@ -14,6 +15,8 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newBinderName, setNewBinderName] = useState('');
   const [newBinderType, setNewBinderType] = useState<BinderType>(BinderType.FOR_TRADE);
+  
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const currentUser = auth.getCurrentUser();
 
@@ -32,6 +35,15 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     if (!currentUser || !newBinderName.trim()) return;
 
     try {
+        // Limit Check for Trade Binders
+        if (newBinderType === BinderType.FOR_TRADE) {
+            const check = await subscriptionService.checkLimit('TRADE_BINDER');
+            if (!check.allowed) {
+                setShowUpgradeModal(true);
+                return;
+            }
+        }
+
         await binderService.createBinder({
             userId: currentUser.id,
             game: GameType.MTG,
@@ -50,6 +62,17 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24">
+      {/* Upgrade Modal */}
+      {showUpgradeModal && currentUser && (
+          <SubscriptionModal 
+            onClose={() => setShowUpgradeModal(false)}
+            currentTier={currentUser.subscriptionTier}
+            onUpgrade={() => {
+                // User upgraded. They can now click "Create" again to proceed.
+            }}
+          />
+      )}
+
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">Your Binders</h1>

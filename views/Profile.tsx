@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
-import { UserProfile } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft } from 'lucide-react';
+import { UserProfile, SubscriptionTier } from '../types';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star } from 'lucide-react';
+import SubscriptionModal from '../components/SubscriptionModal';
 
 interface ProfileProps {
     viewingUserId?: string | null;
@@ -14,6 +15,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
   // Form State
   const [nickname, setNickname] = useState('');
@@ -49,7 +51,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
     e.preventDefault();
     if (!user) return;
 
-    // Validation: WhatsApp must be exactly 9 digits if provided
     if (whatsapp) {
         const isValidFormat = /^\d{9}$/.test(whatsapp);
         if (!isValidFormat) {
@@ -77,12 +78,31 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
 
   const handleCancel = () => {
     setIsEditing(false);
-    // Reset form to current user values
     if (user) {
         setNickname(user.displayName);
         setWhatsapp(user.whatsapp || '');
         setStore(user.preferredStore || '');
     }
+  };
+
+  const renderTierBadge = (tier: SubscriptionTier) => {
+      let color = 'bg-slate-700 text-slate-300';
+      let Icon = Shield;
+      
+      if (tier === SubscriptionTier.UNCOMMON) {
+          color = 'bg-slate-500 text-white ring-1 ring-slate-400';
+          Icon = Star;
+      } else if (tier === SubscriptionTier.RARE) {
+          color = 'bg-amber-600 text-white ring-1 ring-amber-400 shadow-lg shadow-amber-900/20';
+          Icon = Crown;
+      }
+
+      return (
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${color}`}>
+              <Icon size={12} fill="currentColor" />
+              {tier}
+          </div>
+      );
   };
 
   if (isLoading) return <div className="p-8 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Profile...</div>;
@@ -91,6 +111,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
 
   return (
     <div className="p-4 md:p-8 pb-24">
+      {showSubscriptionModal && user && (
+          <SubscriptionModal 
+            onClose={() => setShowSubscriptionModal(false)}
+            currentTier={user.subscriptionTier}
+            onUpgrade={() => {
+                loadProfile(); // Refresh to show new tier
+            }}
+          />
+      )}
+
       <div className="max-w-2xl mx-auto">
         <header className="mb-8 flex items-center gap-4">
             {!isOwnProfile && onBack && (
@@ -106,15 +136,19 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
             {/* Banner / Header */}
-            <div className="h-32 bg-gradient-to-r from-violet-900/50 to-indigo-900/50 relative">
+            <div className={`h-32 relative ${user.subscriptionTier === SubscriptionTier.RARE ? 'bg-gradient-to-r from-amber-700/50 to-orange-900/50' : 'bg-gradient-to-r from-violet-900/50 to-indigo-900/50'}`}>
                 <div className="absolute -bottom-10 left-6">
-                    <div className="w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden shadow-lg">
+                    <div className={`w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden shadow-lg ${user.subscriptionTier === SubscriptionTier.RARE ? 'ring-2 ring-amber-500' : ''}`}>
                         {user.photoURL ? (
                             <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" />
                         ) : (
                             <User size={40} className="text-slate-500" />
                         )}
                     </div>
+                </div>
+                {/* Subscription Badge Positioned Top Right */}
+                <div className="absolute top-4 right-4">
+                    {renderTierBadge(user.subscriptionTier)}
                 </div>
             </div>
 
@@ -131,14 +165,24 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
                                     </p>
                                 )}
                             </div>
-                            {isOwnProfile && (
-                                <button 
-                                    onClick={() => setIsEditing(true)}
-                                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors border border-slate-700"
-                                >
-                                    <Edit2 size={16} /> Edit Profile
-                                </button>
-                            )}
+                            <div className="flex flex-col gap-2">
+                                {isOwnProfile && (
+                                    <>
+                                        <button 
+                                            onClick={() => setIsEditing(true)}
+                                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors border border-slate-700 justify-center"
+                                        >
+                                            <Edit2 size={16} /> Edit Profile
+                                        </button>
+                                        <button 
+                                            onClick={() => setShowSubscriptionModal(true)}
+                                            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20 justify-center"
+                                        >
+                                            <Crown size={16} /> Upgrade Plan
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">

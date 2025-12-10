@@ -19,6 +19,24 @@ export enum CardCondition {
   DMG = 'Damaged'
 }
 
+export enum SubscriptionTier {
+  COMMON = 'Common',
+  UNCOMMON = 'Uncommon',
+  RARE = 'Rare'
+}
+
+export interface TierLimits {
+  maxTradeBinders: number;
+  maxShowcaseItems: number;
+  pricePerMonth: number;
+}
+
+export interface GlobalConfig {
+  [SubscriptionTier.COMMON]: TierLimits;
+  [SubscriptionTier.UNCOMMON]: TierLimits;
+  [SubscriptionTier.RARE]: TierLimits;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -27,6 +45,8 @@ export interface UserProfile {
   whatsapp?: string;
   preferredStore?: string;
   isOnline?: boolean;
+  subscriptionTier: SubscriptionTier;
+  isAdmin?: boolean;
 }
 
 export interface Binder {

@@ -1,11 +1,12 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { cardService, binderService, auth } from '../services/store';
+import { cardService, binderService, auth, subscriptionService } from '../services/store';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
 import { Card, Binder, ScryfallCard, CardCondition, BinderType } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
 import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign } from 'lucide-react';
+import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
   binderId: string;
@@ -46,6 +47,9 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [editingPriceCard, setEditingPriceCard] = useState<Card | null>(null);
   const [priceInput, setPriceInput] = useState<string>('');
   const [currencyInput, setCurrencyInput] = useState<'USD' | 'PEN'>('USD');
+  
+  // Upgrade Modal State
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -148,7 +152,19 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const handleToggleShowcase = async (card: Card) => {
       if (!card.id) return;
+      
       const newState = !card.isShowcase;
+
+      // Limit Check when turning ON showcase
+      if (newState) {
+          const check = await subscriptionService.checkLimit('SHOWCASE_ITEM');
+          const currentUser = auth.getCurrentUser();
+          if (!check.allowed && currentUser) {
+               setShowUpgradeModal(true);
+               return;
+          }
+      }
+
       await cardService.toggleShowcase(card.id, newState);
       // Optimistic update locally
       setCards(prev => prev.map(c => c.id === card.id ? { ...c, isShowcase: newState } : c));
@@ -267,10 +283,23 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
     card.name.toLowerCase().includes(filterText.toLowerCase())
   );
 
+  const currentUser = auth.getCurrentUser();
+
   if (!binder) return <div className="p-8 text-white">Loading binder...</div>;
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24 h-screen flex flex-col relative">
+      {/* Upgrade Modal */}
+      {showUpgradeModal && currentUser && (
+          <SubscriptionModal 
+            onClose={() => setShowUpgradeModal(false)}
+            currentTier={currentUser.subscriptionTier}
+            onUpgrade={() => {
+                // User upgraded.
+            }}
+          />
+      )}
+
       {/* Loading Overlay for Import */}
       {importProgress && (
         <div className="fixed inset-0 bg-slate-950/90 z-[60] flex flex-col items-center justify-center p-4">

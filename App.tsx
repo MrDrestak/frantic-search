@@ -7,8 +7,9 @@ import BinderDetail from './views/BinderDetail';
 import MarketMatch from './views/MarketMatch';
 import Profile from './views/Profile';
 import Showcase from './views/Showcase';
+import AdminPanel from './views/AdminPanel';
 import { auth } from './services/store';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -56,6 +57,8 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return <Login onLogin={() => setIsAuthenticated(true)} />;
   }
+
+  const currentUser = auth.getCurrentUser();
 
   const renderContent = () => {
     // Priority: Viewing a specific profile (other than mine, usually from Market)
@@ -117,6 +120,10 @@ const App: React.FC = () => {
         return <Profile />;
     }
 
+    if (currentPage === 'admin') {
+        return <AdminPanel onBack={() => handleNavigation('profile')} />;
+    }
+
     return <div>Page not found</div>;
   };
 
@@ -125,10 +132,22 @@ const App: React.FC = () => {
       <div className="max-w-7xl mx-auto md:pt-16 min-h-screen">
         {renderContent()}
       </div>
+      
+      {/* Admin Button Float (Only for Admins) */}
+      {currentUser?.isAdmin && currentPage !== 'admin' && (
+          <button 
+             onClick={() => handleNavigation('admin')}
+             className="fixed top-4 right-4 z-50 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-lg"
+             title="Admin Panel"
+          >
+             <ShieldAlert size={20} />
+          </button>
+      )}
+
       <Navbar 
         currentPage={currentPage === 'dashboard' && selectedBinderId ? 'dashboard' : currentPage} 
         setPage={handleNavigation} 
-        user={auth.getCurrentUser()}
+        user={currentUser}
       />
     </div>
   );
