@@ -473,10 +473,12 @@ export const cardService = {
       customPrice: cardData.customPrice ?? null,
       currency: cardData.currency ?? null,
       price: cardData.price ?? 0,
+      currentBid: cardData.basePrice || 0,
       
-      // Defaults for auction
-      auctionStatus: cardData.auctionStatus || (cardData.binderType === BinderType.AUCTION ? AuctionStatus.ACTIVE : undefined),
-      currentBid: cardData.basePrice || 0
+      // Defaults for auction - Use conditional spread to ensure 'undefined' is never passed as a value
+      ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && {
+          auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE
+      })
     };
     
     const docRef = await db.collection("cards").add(newCard);
