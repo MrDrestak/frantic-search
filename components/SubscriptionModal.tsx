@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Check, X, Crown, Shield, Star } from 'lucide-react';
+import { Check, X, Crown, Shield, Star, Gavel } from 'lucide-react';
 import { SubscriptionTier, GlobalConfig } from '../types';
 import { configService, subscriptionService } from '../services/store';
 
@@ -55,6 +55,17 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                         <Check size={16} className="text-green-500" />
                         <span>Max <b>{details.maxShowcaseItems}</b> Showcase Items</span>
                     </div>
+                    
+                    {/* Auction Limits */}
+                    <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Gavel size={16} className="text-amber-500" />
+                        <span>Max <b>{details.maxAuctionBinders}</b> Auction Binders</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Gavel size={16} className="text-amber-500" />
+                        <span>Max <b>{details.maxAuctionCardsPerBinder}</b> Cards per Auction</span>
+                    </div>
+
                     <div className="flex items-center gap-2 text-sm text-slate-300">
                         <Check size={16} className="text-green-500" />
                         <span>Unlimited Wishlists</span>

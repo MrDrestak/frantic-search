@@ -16,6 +16,7 @@ interface BinderDetailProps {
 const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
+  const [currentLimit, setCurrentLimit] = useState(BINDER_CARD_LIMIT);
   
   // Filter State
   const [filterText, setFilterText] = useState('');
@@ -68,6 +69,16 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
     const binderCards = await cardService.getCardsInBinder(binderId);
     setCards(binderCards);
+
+    // Calculate Limit based on Type
+    if (currentBinder) {
+        if (currentBinder.type === BinderType.AUCTION) {
+            const check = await subscriptionService.checkLimit('AUCTION_CARD', currentBinder.id);
+            setCurrentLimit(check.limit);
+        } else {
+            setCurrentLimit(BINDER_CARD_LIMIT);
+        }
+    }
   };
 
   // Debounced Search
@@ -128,7 +139,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         if (binder.type === BinderType.AUCTION) {
             const check = await subscriptionService.checkLimit('AUCTION_CARD', binder.id);
             if (!check.allowed) {
-                alert(`Cannot add more cards. Your tier limit for Auction Cards is ${check.limit}.`);
+                setShowUpgradeModal(true);
                 return;
             }
             
@@ -517,7 +528,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             </span>
           </h1>
           <p className="text-slate-400">
-            {cards.length} / {BINDER_CARD_LIMIT} Cards collected
+            {cards.length} / {currentLimit} Cards collected
           </p>
         </div>
         <div className="ml-auto flex gap-2">

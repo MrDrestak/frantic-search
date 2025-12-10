@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Binder, BinderType } from '../types';
-import { Heart, Store } from 'lucide-react';
+import { Heart, Store, Gavel } from 'lucide-react';
 
 interface BinderCardProps {
   binder: Binder;
@@ -10,14 +10,19 @@ interface BinderCardProps {
 
 const BinderCard: React.FC<BinderCardProps> = ({ binder, onClick }) => {
   const isWishlist = binder.type === BinderType.WISHLIST;
+  const isAuction = binder.type === BinderType.AUCTION;
   
   return (
     <div 
       onClick={onClick}
       className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-5 cursor-pointer hover:bg-slate-800/80 hover:border-slate-700 transition-all group shadow-sm"
     >
-      <div className={`p-4 rounded-xl flex items-center justify-center shadow-lg ${isWishlist ? 'bg-pink-500/10 text-pink-500 shadow-pink-900/10' : 'bg-cyan-500/10 text-cyan-500 shadow-cyan-900/10'}`}>
-        {isWishlist ? <Heart size={32} /> : <Store size={32} />}
+      <div className={`p-4 rounded-xl flex items-center justify-center shadow-lg ${
+          isWishlist ? 'bg-pink-500/10 text-pink-500 shadow-pink-900/10' : 
+          isAuction ? 'bg-amber-500/10 text-amber-500 shadow-amber-900/10' :
+          'bg-cyan-500/10 text-cyan-500 shadow-cyan-900/10'
+      }`}>
+        {isWishlist ? <Heart size={32} /> : isAuction ? <Gavel size={32} /> : <Store size={32} />}
       </div>
       
       <div className="flex flex-col">
