@@ -34,11 +34,23 @@ export enum AuctionStatus {
 }
 
 export interface TierLimits {
+  // Trade Settings
   maxTradeBinders: number;
-  maxShowcaseItems: number;
+  maxCardsPerTradeBinder: number;
+
+  // Wishlist Settings
+  maxWishlistBinders: number;
+  maxCardsPerWishlistBinder: number;
+
+  // Auction Settings
   maxAuctionBinders: number;
   maxAuctionCardsPerBinder: number;
+
+  // General Settings
+  maxShowcaseItems: number;
   maxCardAlerts: number;
+  
+  // Pricing
   pricePerMonth: number;
   currency: 'USD' | 'PEN';
 }

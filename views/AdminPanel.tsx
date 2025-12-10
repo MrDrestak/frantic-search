@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell } from 'lucide-react';
 import { configService, auth, adminService } from '../services/store';
 import { GlobalConfig, SubscriptionTier, TierLimits } from '../types';
 
@@ -91,9 +91,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             
             // Only parse as number if it's not the currency field
             if (field !== 'currency') {
-                // Allow empty string to be 0 for better typing experience, 
-                // though usually specific handling for controlled inputs is better.
-                // Here we keep it simple for the admin panel.
                 finalValue = value === '' ? 0 : parseFloat(value);
             }
 
@@ -134,7 +131,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         Admin Control Panel <ShieldAlert size={20} className="text-red-500" />
                     </h1>
-                    <p className="text-slate-400">Configure system limits and subscription tiers.</p>
+                    <p className="text-slate-400">Configure system limits per subscription tier.</p>
                 </div>
                 <div className="ml-auto flex gap-3">
                     <button 
@@ -148,114 +145,162 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
             </header>
 
-            {/* Config Table */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-950 border-b border-slate-800">
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Tier</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Trade Binders</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Showcase</th>
-                                <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Max Auctions</th>
-                                <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Cards/Auction</th>
-                                <th className="p-4 text-violet-400 font-medium uppercase text-sm tracking-wider">Max Alerts</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly ($)</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                            {Object.values(SubscriptionTier).map((tier) => (
-                                <tr key={tier} className="hover:bg-slate-800/30 transition-colors">
-                                    <td className="p-4 font-bold text-white">
-                                        <span className={`px-2 py-1 rounded text-xs uppercase ${
-                                            tier === SubscriptionTier.MYTHIC ? 'bg-purple-600 text-white shadow shadow-purple-500/50' :
-                                            tier === SubscriptionTier.RARE ? 'bg-amber-500/20 text-amber-500' :
-                                            tier === SubscriptionTier.UNCOMMON ? 'bg-slate-500/20 text-slate-300' :
-                                            'bg-slate-700/50 text-slate-400'
-                                        }`}>
-                                            {tier}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        <input 
-                                            type="number" 
-                                            value={config[tier].maxTradeBinders}
-                                            onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)}
-                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className="p-4">
-                                        <input 
-                                            type="number" 
-                                            value={config[tier].maxShowcaseItems}
-                                            onChange={(e) => handleChange(tier, 'maxShowcaseItems', e.target.value)}
-                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className="p-4">
-                                        <input 
-                                            type="number" 
-                                            value={config[tier].maxAuctionBinders}
-                                            onChange={(e) => handleChange(tier, 'maxAuctionBinders', e.target.value)}
-                                            className="bg-slate-950 border border-amber-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-amber-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className="p-4">
-                                        <input 
-                                            type="number" 
-                                            value={config[tier].maxAuctionCardsPerBinder}
-                                            onChange={(e) => handleChange(tier, 'maxAuctionCardsPerBinder', e.target.value)}
-                                            className="bg-slate-950 border border-amber-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-amber-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className="p-4">
-                                        <input 
-                                            type="number" 
-                                            value={config[tier].maxCardAlerts}
-                                            onChange={(e) => handleChange(tier, 'maxCardAlerts', e.target.value)}
-                                            className="bg-slate-950 border border-violet-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className="p-4 text-slate-500">
-                                        <div className="flex gap-2 min-w-[150px]">
-                                            <input 
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                value={config[tier].pricePerMonth}
-                                                onChange={(e) => handleChange(tier, 'pricePerMonth', e.target.value)}
-                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
-                                            />
-                                            <select 
-                                                value={config[tier].currency || 'USD'}
-                                                onChange={(e) => handleChange(tier, 'currency', e.target.value)}
-                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white text-xs focus:ring-2 focus:ring-violet-500 outline-none flex-1"
-                                            >
-                                                <option value="USD">USD $</option>
-                                                <option value="PEN">PEN S/</option>
-                                            </select>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Main Configuration Grid */}
+            <div className="space-y-8">
+                {Object.values(SubscriptionTier).map((tier) => (
+                    <div key={tier} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+                         <div className={`px-6 py-4 flex justify-between items-center ${
+                             tier === SubscriptionTier.MYTHIC ? 'bg-purple-900/20 border-b border-purple-500/20' :
+                             tier === SubscriptionTier.RARE ? 'bg-amber-900/20 border-b border-amber-500/20' :
+                             tier === SubscriptionTier.UNCOMMON ? 'bg-slate-800/50 border-b border-slate-700' :
+                             'bg-slate-950 border-b border-slate-800'
+                         }`}>
+                             <div className="flex items-center gap-3">
+                                 {tier === SubscriptionTier.MYTHIC && <Crown className="text-purple-500" size={24} />}
+                                 <h2 className="text-xl font-bold text-white">{tier} Tier</h2>
+                             </div>
+                             
+                             {/* Price Config */}
+                             <div className="flex items-center gap-2 bg-slate-950 rounded-lg p-1.5 border border-slate-700">
+                                 <DollarSign size={16} className="text-green-500 ml-2" />
+                                 <input 
+                                     type="number"
+                                     min="0"
+                                     step="0.01"
+                                     value={config[tier].pricePerMonth}
+                                     onChange={(e) => handleChange(tier, 'pricePerMonth', e.target.value)}
+                                     className="bg-transparent text-white w-16 text-right outline-none font-bold"
+                                     placeholder="0.00"
+                                 />
+                                 <select 
+                                     value={config[tier].currency || 'USD'}
+                                     onChange={(e) => handleChange(tier, 'currency', e.target.value)}
+                                     className="bg-slate-800 text-slate-300 text-xs rounded px-1 py-1 outline-none border-l border-slate-700"
+                                 >
+                                     <option value="USD">USD</option>
+                                     <option value="PEN">PEN</option>
+                                 </select>
+                             </div>
+                         </div>
+
+                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                             {/* Trade Config */}
+                             <div className="space-y-3">
+                                 <h4 className="text-indigo-400 font-bold text-sm uppercase flex items-center gap-2 mb-2">
+                                     <Layers size={16} /> Trade / Sell
+                                 </h4>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Max Binders</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxTradeBinders}
+                                         onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                     />
+                                 </div>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Cards per Binder</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxCardsPerTradeBinder}
+                                         onChange={(e) => handleChange(tier, 'maxCardsPerTradeBinder', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                     />
+                                 </div>
+                             </div>
+
+                             {/* Wishlist Config */}
+                             <div className="space-y-3">
+                                 <h4 className="text-pink-400 font-bold text-sm uppercase flex items-center gap-2 mb-2">
+                                     <Heart size={16} /> Wishlist
+                                 </h4>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Max Binders</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxWishlistBinders}
+                                         onChange={(e) => handleChange(tier, 'maxWishlistBinders', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-pink-500"
+                                     />
+                                 </div>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Cards per Binder</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxCardsPerWishlistBinder}
+                                         onChange={(e) => handleChange(tier, 'maxCardsPerWishlistBinder', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-pink-500"
+                                     />
+                                 </div>
+                             </div>
+
+                             {/* Auction Config */}
+                             <div className="space-y-3">
+                                 <h4 className="text-amber-400 font-bold text-sm uppercase flex items-center gap-2 mb-2">
+                                     <Gavel size={16} /> Auctions
+                                 </h4>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Max Binders</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxAuctionBinders}
+                                         onChange={(e) => handleChange(tier, 'maxAuctionBinders', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-amber-500"
+                                     />
+                                 </div>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Cards per Binder</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxAuctionCardsPerBinder}
+                                         onChange={(e) => handleChange(tier, 'maxAuctionCardsPerBinder', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-amber-500"
+                                     />
+                                 </div>
+                             </div>
+
+                             {/* General Config */}
+                             <div className="space-y-3">
+                                 <h4 className="text-slate-400 font-bold text-sm uppercase flex items-center gap-2 mb-2">
+                                     General
+                                 </h4>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1 flex items-center gap-1"><Bell size={12}/> Max Alerts</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxCardAlerts}
+                                         onChange={(e) => handleChange(tier, 'maxCardAlerts', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-violet-500"
+                                     />
+                                 </div>
+                                 <div>
+                                     <label className="text-xs text-slate-500 block mb-1">Max Showcase Items</label>
+                                     <input 
+                                         type="number"
+                                         value={config[tier].maxShowcaseItems}
+                                         onChange={(e) => handleChange(tier, 'maxShowcaseItems', e.target.value)}
+                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-violet-500"
+                                     />
+                                 </div>
+                             </div>
+                         </div>
+                    </div>
+                ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
                 {/* Mythic Partner Manager */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
                     <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                         <Crown size={20} className="text-purple-500" /> Manage Store Partners
                     </h3>
                     <p className="text-sm text-slate-400 mb-4">
-                        Manually assign the "Mythic" tier to TCG Stores. This allows them to create bulk auctions but restricts "Wishlist" creation.
+                        Manually assign the "Mythic" tier to TCG Stores.
                     </p>
                     <form onSubmit={handleAssignMythic} className="flex gap-2">
                         <input 
                             type="email" 
-                            placeholder="Store Google Email (e.g. store@gmail.com)"
+                            placeholder="Store Google Email"
                             value={partnerEmail}
                             onChange={(e) => setPartnerEmail(e.target.value)}
                             className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
@@ -278,15 +323,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <Trash2 size={20} /> Danger Zone
                     </h3>
                     <p className="text-sm text-slate-400 mb-4">
-                        These actions are destructive and cannot be undone. Use for testing or resetting the environment.
+                        Resetting the environment will delete all data.
                     </p>
                     <button 
                         onClick={handleWipeDatabase}
                         disabled={isWiping}
-                        className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold transition-all w-full md:w-auto justify-center"
+                        className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold transition-all w-full justify-center"
                     >
                         {isWiping ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
-                        Wipe Database (Reset Tests)
+                        Wipe Database
                     </button>
                 </div>
             </div>

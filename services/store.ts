@@ -7,42 +7,55 @@ import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchRe
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
 
 // CONSTANTS
-export const BINDER_CARD_LIMIT = 25;
+// Deprecated: BINDER_CARD_LIMIT is now dynamic per tier/binder type.
+export const BINDER_CARD_LIMIT = 25; 
 
 // DEFAULTS
 const DEFAULT_CONFIG: GlobalConfig = {
     [SubscriptionTier.COMMON]: { 
         maxTradeBinders: 1, 
-        maxShowcaseItems: 3, 
+        maxCardsPerTradeBinder: 20,
+        maxWishlistBinders: 1,
+        maxCardsPerWishlistBinder: 20,
         maxAuctionBinders: 1, 
         maxAuctionCardsPerBinder: 1, 
+        maxShowcaseItems: 3, 
         maxCardAlerts: 1,
         pricePerMonth: 0,
         currency: 'USD'
     },
     [SubscriptionTier.UNCOMMON]: { 
         maxTradeBinders: 3, 
-        maxShowcaseItems: 10, 
+        maxCardsPerTradeBinder: 50,
+        maxWishlistBinders: 3,
+        maxCardsPerWishlistBinder: 50,
         maxAuctionBinders: 2, 
         maxAuctionCardsPerBinder: 10, 
+        maxShowcaseItems: 10, 
         maxCardAlerts: 5,
         pricePerMonth: 5,
         currency: 'USD'
     },
     [SubscriptionTier.RARE]: { 
         maxTradeBinders: 10, 
-        maxShowcaseItems: 50, 
+        maxCardsPerTradeBinder: 100,
+        maxWishlistBinders: 10,
+        maxCardsPerWishlistBinder: 100,
         maxAuctionBinders: 3, 
         maxAuctionCardsPerBinder: 15, 
+        maxShowcaseItems: 50, 
         maxCardAlerts: 20,
         pricePerMonth: 15,
         currency: 'USD'
     },
     [SubscriptionTier.MYTHIC]: { 
         maxTradeBinders: 100, 
-        maxShowcaseItems: 500, 
+        maxCardsPerTradeBinder: 500,
+        maxWishlistBinders: 0, // Stores don't need wishlists
+        maxCardsPerWishlistBinder: 0,
         maxAuctionBinders: 10, 
         maxAuctionCardsPerBinder: 50, 
+        maxShowcaseItems: 500, 
         maxCardAlerts: 100,
         pricePerMonth: 0, // Reserved for stores (custom)
         currency: 'USD'
@@ -245,13 +258,20 @@ export const configService = {
         try {
             const doc = await db.collection("settings").doc("global").get();
             if (doc.exists) {
-                // Merge with defaults to ensure new keys (auction) exist even if DB is old
+                // Merge with defaults to ensure new keys exist even if DB is old
                 const data = doc.data() as GlobalConfig;
+                
+                // Helper to merge nested objects
+                const mergeTier = (tier: SubscriptionTier) => ({
+                    ...DEFAULT_CONFIG[tier],
+                    ...(data[tier] || {})
+                });
+
                 currentConfig = {
-                    [SubscriptionTier.COMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.COMMON], ...(data[SubscriptionTier.COMMON] || {}) },
-                    [SubscriptionTier.UNCOMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.UNCOMMON], ...(data[SubscriptionTier.UNCOMMON] || {}) },
-                    [SubscriptionTier.RARE]: { ...DEFAULT_CONFIG[SubscriptionTier.RARE], ...(data[SubscriptionTier.RARE] || {}) },
-                    [SubscriptionTier.MYTHIC]: { ...DEFAULT_CONFIG[SubscriptionTier.MYTHIC], ...(data[SubscriptionTier.MYTHIC] || {}) },
+                    [SubscriptionTier.COMMON]: mergeTier(SubscriptionTier.COMMON),
+                    [SubscriptionTier.UNCOMMON]: mergeTier(SubscriptionTier.UNCOMMON),
+                    [SubscriptionTier.RARE]: mergeTier(SubscriptionTier.RARE),
+                    [SubscriptionTier.MYTHIC]: mergeTier(SubscriptionTier.MYTHIC),
                 };
             } else {
                 // Initialize default config if missing
@@ -277,20 +297,17 @@ export const subscriptionService = {
         const user = currentUserProfile;
         if (!user) return;
         
-        // In a real app, this would verify payment token on backend
-        // Here we just update the Firestore doc directly
         if (localStorage.getItem('lotus_is_guest') !== 'true') {
             await db.collection("users").doc(user.id).update({
                 subscriptionTier: tier
             });
         }
         
-        // Update local state
         currentUserProfile = { ...user, subscriptionTier: tier };
     },
     
     // Check if user has reached their limit
-    checkLimit: async (type: 'TRADE_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
+    checkLimit: async (type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
         if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
         
         const tier = currentUserProfile.subscriptionTier;
@@ -298,11 +315,21 @@ export const subscriptionService = {
         
         if (type === 'TRADE_BINDER') {
             const binders = await binderService.getUserBinders(currentUserProfile.id);
-            const tradeBinders = binders.filter(b => b.type === BinderType.FOR_TRADE);
+            const tradeBinders = binders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
             return {
                 allowed: tradeBinders.length < limits.maxTradeBinders,
                 limit: limits.maxTradeBinders,
                 current: tradeBinders.length
+            };
+        }
+
+        if (type === 'WISHLIST_BINDER') {
+            const binders = await binderService.getUserBinders(currentUserProfile.id);
+            const wishBinders = binders.filter(b => b.type === BinderType.WISHLIST);
+            return {
+                allowed: wishBinders.length < limits.maxWishlistBinders,
+                limit: limits.maxWishlistBinders,
+                current: wishBinders.length
             };
         }
 
@@ -316,18 +343,22 @@ export const subscriptionService = {
             };
         }
 
-        if (type === 'AUCTION_CARD' && binderId) {
+        // Card Limits Checks (Used for UI Display primarily, addCard does its own check to be safe)
+        if ((type === 'AUCTION_CARD' || type === 'TRADE_CARD' || type === 'WISHLIST_CARD') && binderId) {
             const cards = await cardService.getCardsInBinder(binderId);
+            let limit = 0;
+            if (type === 'AUCTION_CARD') limit = limits.maxAuctionCardsPerBinder;
+            if (type === 'TRADE_CARD') limit = limits.maxCardsPerTradeBinder;
+            if (type === 'WISHLIST_CARD') limit = limits.maxCardsPerWishlistBinder;
+
             return {
-                allowed: cards.length < limits.maxAuctionCardsPerBinder,
-                limit: limits.maxAuctionCardsPerBinder,
+                allowed: cards.length < limit,
+                limit: limit,
                 current: cards.length
             };
         }
         
         if (type === 'SHOWCASE_ITEM') {
-            // Count user's showcase items
-            // Optimization: In production, store 'showcaseCount' on user profile to avoid query
             const snapshot = await db.collection("cards")
                 .where("userId", "==", currentUserProfile.id)
                 .where("isShowcase", "==", true)
@@ -353,8 +384,6 @@ export const adminService = {
         }
         const userDoc = snapshot.docs[0];
         await userDoc.ref.update({ subscriptionTier: tier });
-        
-        // Return true on success
         return true;
     },
 
@@ -412,13 +441,10 @@ export const binderService = {
   },
 
   deleteBinder: async (binderId: string) => {
-    // 1. Delete Binder Document
     await db.collection("binders").doc(binderId).delete();
     
-    // 2. Query all cards in this binder
     const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
     
-    // 3. Batch delete cards (Firestore limits batch to 500 ops)
     const CHUNK_SIZE = 450;
     const docs = snapshot.docs;
 
@@ -441,34 +467,40 @@ export const cardService = {
   },
 
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
-    // 1. Check Binder Limit
-    // First, check general card limit (25)
-    // NOTE: For Auction Binders, the limit is strictly handled by Subscription Tier logic passed in. 
-    // But we still respect the hard 25 cap if not overridden, though auction limits are usually lower.
-    
-    // 2. Check Role-Based Limits if it's an Auction Binder
     const binderRef = db.collection("binders").doc(cardData.binderId);
     const binderSnap = await binderRef.get();
     
     if (binderSnap.exists) {
         const binder = binderSnap.data() as Binder;
         
-        // Safety count check
+        // Dynamic Limit Check
+        // 1. Get User's Tier (We can use currentUserProfile since they are performing action)
+        if (!currentUserProfile) throw new Error("User session not found");
+        
+        const tier = currentUserProfile.subscriptionTier;
+        const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
+        
+        let maxCards = 0;
+        switch (binder.type) {
+            case BinderType.FOR_TRADE:
+            case BinderType.COLLECTION:
+                maxCards = limits.maxCardsPerTradeBinder;
+                break;
+            case BinderType.WISHLIST:
+                maxCards = limits.maxCardsPerWishlistBinder;
+                break;
+            case BinderType.AUCTION:
+                maxCards = limits.maxAuctionCardsPerBinder;
+                break;
+            default:
+                maxCards = 20;
+        }
+
         const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
         const currentCount = countSnap.size;
 
-        if (binder.type === BinderType.AUCTION) {
-            // Re-verify limit on server-side logic (simulated here)
-            // Ideally we pass the check result from UI, but for safety:
-            // We'll trust the caller has checked subscriptionService.checkLimit for now or fallback to hard limit
-            // But let's check general hard cap
-            if (currentCount >= 25) {
-                 throw new Error("Hard storage limit reached (25).");
-            }
-        } else {
-             if (currentCount >= BINDER_CARD_LIMIT) {
-                throw new Error(`Binder Limit Reached. Max ${BINDER_CARD_LIMIT} cards allowed.`);
-             }
+        if (currentCount >= maxCards) {
+            throw new Error(`Limit reached for this binder type. Max ${maxCards} cards.`);
         }
     }
 
@@ -483,7 +515,6 @@ export const cardService = {
       price: cardData.price ?? 0,
       currentBid: cardData.basePrice || 0,
       
-      // Defaults for auction - Use conditional spread to ensure 'undefined' is never passed as a value
       ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && {
           auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE
       })

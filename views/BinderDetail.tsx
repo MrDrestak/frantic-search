@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { cardService, binderService, auth, subscriptionService, BINDER_CARD_LIMIT } from '../services/store';
+import { cardService, binderService, auth, subscriptionService } from '../services/store';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
@@ -16,7 +16,7 @@ interface BinderDetailProps {
 const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [currentLimit, setCurrentLimit] = useState(BINDER_CARD_LIMIT);
+  const [currentLimit, setCurrentLimit] = useState(25); // Default fallback
   
   // Filter State
   const [filterText, setFilterText] = useState('');
@@ -72,12 +72,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
     // Calculate Limit based on Type
     if (currentBinder) {
-        if (currentBinder.type === BinderType.AUCTION) {
-            const check = await subscriptionService.checkLimit('AUCTION_CARD', currentBinder.id);
-            setCurrentLimit(check.limit);
-        } else {
-            setCurrentLimit(BINDER_CARD_LIMIT);
-        }
+        let checkType: any = 'TRADE_CARD';
+        if (currentBinder.type === BinderType.AUCTION) checkType = 'AUCTION_CARD';
+        if (currentBinder.type === BinderType.WISHLIST) checkType = 'WISHLIST_CARD';
+
+        const check = await subscriptionService.checkLimit(checkType, currentBinder.id);
+        setCurrentLimit(check.limit);
     }
   };
 
@@ -135,22 +135,22 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
     if (!selectedCard || !binder) return;
     
     try {
-        // LIMIT CHECK FOR AUCTIONS
+        // LIMIT CHECK 
+        let checkType: any = 'TRADE_CARD';
+        if (binder.type === BinderType.AUCTION) checkType = 'AUCTION_CARD';
+        if (binder.type === BinderType.WISHLIST) checkType = 'WISHLIST_CARD';
+
+        const check = await subscriptionService.checkLimit(checkType, binder.id);
+        
+        if (cards.length >= check.limit) {
+            alert(`Limit Reached. Your current plan allows ${check.limit} cards in this binder.`);
+            setShowUpgradeModal(true);
+            return;
+        }
+
         if (binder.type === BinderType.AUCTION) {
-            const check = await subscriptionService.checkLimit('AUCTION_CARD', binder.id);
-            if (!check.allowed) {
-                setShowUpgradeModal(true);
-                return;
-            }
-            
             if (!auctionEndDate) {
                 alert("Please select an end date for the auction.");
-                return;
-            }
-        } else {
-            // General Limit
-            if (cards.length >= BINDER_CARD_LIMIT) {
-                alert(`Cannot add more cards. This binder has reached the limit of ${BINDER_CARD_LIMIT} cards.`);
                 return;
             }
         }
@@ -266,10 +266,10 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
       // LIMIT CHECK
       const currentCount = cards.length;
-      const availableSlots = BINDER_CARD_LIMIT - currentCount;
+      const availableSlots = currentLimit - currentCount;
 
       if (availableSlots <= 0) {
-          alert(`This binder is full (Max ${BINDER_CARD_LIMIT} cards). Cannot import more cards.`);
+          alert(`This binder is full (Max ${currentLimit} cards). Cannot import more cards.`);
           return;
       }
 
@@ -362,7 +362,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       
       if (limitReached) {
           setTimeout(() => {
-              alert(`Import completed partially. Only the first ${rowsToProcess.length} cards were imported to respect the binder limit of ${BINDER_CARD_LIMIT} cards.`);
+              alert(`Import completed partially. Only the first ${rowsToProcess.length} cards were imported to respect the binder limit of ${currentLimit} cards.`);
           }, 500);
       }
   };

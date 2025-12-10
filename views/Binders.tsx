@@ -51,20 +51,24 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         }
 
         // Limit Check based on Type
-        let checkType: 'TRADE_BINDER' | 'AUCTION_BINDER' = 'TRADE_BINDER';
+        let checkType: 'TRADE_BINDER' | 'AUCTION_BINDER' | 'WISHLIST_BINDER' = 'TRADE_BINDER';
         if (newBinderType === BinderType.AUCTION) {
             checkType = 'AUCTION_BINDER';
+        } else if (newBinderType === BinderType.WISHLIST) {
+            checkType = 'WISHLIST_BINDER';
         }
 
-        if (newBinderType === BinderType.FOR_TRADE || newBinderType === BinderType.AUCTION) {
-            const check = await subscriptionService.checkLimit(checkType);
-            if (!check.allowed) {
-                if (newBinderType === BinderType.AUCTION) {
-                     alert(`You have reached the Auction Binder limit (${check.limit}) for your tier.`);
-                }
-                setShowUpgradeModal(true);
-                return;
+        const check = await subscriptionService.checkLimit(checkType);
+        if (!check.allowed) {
+            if (newBinderType === BinderType.AUCTION) {
+                  alert(`You have reached the Auction Binder limit (${check.limit}) for your tier.`);
+            } else if (newBinderType === BinderType.WISHLIST) {
+                  alert(`You have reached the Wishlist Binder limit (${check.limit}) for your tier.`);
+            } else {
+                  alert(`You have reached the Trade Binder limit (${check.limit}) for your tier.`);
             }
+            setShowUpgradeModal(true);
+            return;
         }
 
         await binderService.createBinder({
