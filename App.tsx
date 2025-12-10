@@ -48,7 +48,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
           <div className="w-16 h-16 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl mb-6 flex items-center justify-center shadow-lg shadow-violet-500/30 animate-pulse">
-              <span className="text-3xl font-bold text-white">L</span>
+              <span className="text-3xl font-bold text-white">FS</span>
           </div>
           <Loader2 className="text-violet-500 animate-spin" size={32} />
       </div>
