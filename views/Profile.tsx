@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 
@@ -10,6 +10,7 @@ interface ProfileProps {
     viewingUserId?: string | null;
     onBack?: () => void;
     onViewProfile?: (userId: string) => void;
+    onAdminClick?: () => void;
 }
 
 const COUNTRY_CODES = [
@@ -23,7 +24,7 @@ const COUNTRY_CODES = [
     { code: '55', label: 'Brazil (+55)', flag: '🇧🇷' },
 ];
 
-const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile }) => {
+const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile, onAdminClick }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -503,6 +504,25 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                 )}
             </div>
         </div>
+
+        {/* Admin Panel Button */}
+        {isOwnProfile && user.isAdmin && onAdminClick && (
+            <button
+                onClick={onAdminClick}
+                className="w-full bg-red-900/20 hover:bg-red-900/30 border border-red-900/50 text-red-400 p-4 rounded-xl flex items-center justify-between group transition-all mb-6"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-500/10 rounded-lg">
+                        <ShieldAlert size={24} />
+                    </div>
+                    <div className="text-left">
+                        <h3 className="font-bold text-white">Admin Panel</h3>
+                        <p className="text-sm text-slate-400">Manage system configuration and users</p>
+                    </div>
+                </div>
+                <ChevronRight size={20} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+            </button>
+        )}
         
         {/* Auctions History Section - ONLY VISIBLE ON OWN PROFILE */}
         {isOwnProfile && (

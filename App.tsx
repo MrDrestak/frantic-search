@@ -10,7 +10,7 @@ import Showcase from './views/Showcase';
 import Auctions from './views/Auctions';
 import AdminPanel from './views/AdminPanel';
 import { auth } from './services/store';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -79,6 +79,7 @@ const App: React.FC = () => {
                     }
                 }} 
                 onViewProfile={(userId) => setViewingProfileId(userId)}
+                onAdminClick={() => handleNavigation('admin')}
             />
         );
     }
@@ -125,7 +126,7 @@ const App: React.FC = () => {
     }
 
     if (currentPage === 'profile') {
-        return <Profile onViewProfile={(userId) => setViewingProfileId(userId)} />;
+        return <Profile onViewProfile={(userId) => setViewingProfileId(userId)} onAdminClick={() => handleNavigation('admin')} />;
     }
 
     if (currentPage === 'admin') {
@@ -141,17 +142,6 @@ const App: React.FC = () => {
         {renderContent()}
       </div>
       
-      {/* Admin Button Float (Only for Admins) */}
-      {currentUser?.isAdmin && currentPage !== 'admin' && (
-          <button 
-             onClick={() => handleNavigation('admin')}
-             className="fixed top-4 right-4 z-50 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-lg"
-             title="Admin Panel"
-          >
-             <ShieldAlert size={20} />
-          </button>
-      )}
-
       <Navbar 
         currentPage={currentPage === 'dashboard' && selectedBinderId ? 'dashboard' : currentPage} 
         setPage={handleNavigation} 
