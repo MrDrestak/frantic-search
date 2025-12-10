@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { auth, cardService } from '../services/store';
-import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search } from 'lucide-react';
+import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType } from '../types';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -49,6 +49,8 @@ const STORES: StoreData[] = [
     }
 ];
 
+const ITEMS_PER_PAGE = 9;
+
 const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile, onAdminClick }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -64,6 +66,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Storefront State
   const [storefrontCards, setStorefrontCards] = useState<Card[]>([]);
   const [storefrontSearch, setStorefrontSearch] = useState('');
+  const [gameFilter, setGameFilter] = useState<string>(''); // Empty = All
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingStorefront, setIsLoadingStorefront] = useState(false);
 
   // Form State
@@ -82,6 +86,11 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   useEffect(() => {
     loadProfile();
   }, [viewingUserId]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [storefrontSearch, gameFilter]);
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -281,10 +290,34 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Helper to find store data
   const currentStoreData = STORES.find(s => s.name === user?.preferredStore);
 
-  // Filter Storefront Cards
-  const filteredStorefront = storefrontCards.filter(c => 
-      c.name.toLowerCase().includes(storefrontSearch.toLowerCase())
+  // 1. Filter Logic
+  const filteredStorefront = storefrontCards
+    .filter(c => {
+        // Name Filter
+        if (!c.name.toLowerCase().includes(storefrontSearch.toLowerCase())) return false;
+        // Game Filter
+        if (gameFilter) {
+            const cardGame = c.game || GameType.MTG; // Default to MTG if missing
+            if (cardGame !== gameFilter) return false;
+        }
+        return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)); // 2. Auto-Sort (Alphabetical)
+
+  // 3. Pagination Logic
+  const totalPages = Math.ceil(filteredStorefront.length / ITEMS_PER_PAGE);
+  const displayedCards = filteredStorefront.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE, 
+      currentPage * ITEMS_PER_PAGE
   );
+
+  const handlePrevPage = () => {
+      if (currentPage > 1) setCurrentPage(prev => prev - 1);
+  };
+
+  const handleNextPage = () => {
+      if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
+  };
 
   if (isLoading) return <div className="p-8 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Profile...</div>;
   
@@ -608,16 +641,31 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                 </div>
                 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
-                     {/* Search Bar */}
-                     <div className="mb-6 relative">
-                        <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
-                        <input 
-                            type="text"
-                            placeholder="Search this trader's inventory..."
-                            value={storefrontSearch}
-                            onChange={(e) => setStorefrontSearch(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        />
+                     {/* Search & Filter Bar */}
+                     <div className="mb-6 flex flex-col md:flex-row gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
+                            <input 
+                                type="text"
+                                placeholder="Search inventory..."
+                                value={storefrontSearch}
+                                onChange={(e) => setStorefrontSearch(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                        </div>
+                        <div className="relative w-full md:w-48">
+                            <Filter className="absolute left-3 top-2.5 text-slate-500" size={18} />
+                            <select 
+                                value={gameFilter}
+                                onChange={(e) => setGameFilter(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"
+                            >
+                                <option value="">All Games</option>
+                                {Object.values(GameType).map(g => (
+                                    <option key={g} value={g}>{g}</option>
+                                ))}
+                            </select>
+                        </div>
                      </div>
 
                      {isLoadingStorefront ? (
@@ -626,20 +674,55 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                              Loading inventory...
                          </div>
                      ) : (
-                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                             {filteredStorefront.map(card => (
-                                 <MTGCard 
-                                    key={card.id} 
-                                    card={card}
-                                    enableShowcase={false} // Read only view
-                                 />
-                             ))}
-                             {filteredStorefront.length === 0 && (
-                                 <div className="col-span-full text-center py-10 text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
-                                     <p>{storefrontCards.length === 0 ? "This trader has no cards listed for trade." : "No cards match your search."}</p>
+                         <>
+                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
+                                 {displayedCards.map(card => (
+                                     <div key={card.id} className="relative">
+                                         <MTGCard 
+                                            card={card}
+                                            enableShowcase={false} // Read only view
+                                         />
+                                         {/* Game Badge if All Games selected */}
+                                         {!gameFilter && card.game && (
+                                            <span className="absolute top-1 right-1 z-10 text-[8px] bg-slate-900/80 text-white px-1.5 py-0.5 rounded border border-slate-600">
+                                                {card.game === GameType.MTG ? 'MTG' : card.game === GameType.POKEMON ? 'PKM' : 'YGO'}
+                                            </span>
+                                         )}
+                                     </div>
+                                 ))}
+                                 
+                                 {filteredStorefront.length === 0 && (
+                                     <div className="col-span-full text-center py-10 text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
+                                         <p>{storefrontCards.length === 0 ? "This trader has no cards listed for trade." : "No cards match your search."}</p>
+                                     </div>
+                                 )}
+                             </div>
+
+                             {/* Pagination Controls */}
+                             {filteredStorefront.length > ITEMS_PER_PAGE && (
+                                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-800">
+                                     <button 
+                                        onClick={handlePrevPage}
+                                        disabled={currentPage === 1}
+                                        className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors"
+                                     >
+                                         <ChevronLeft size={16} /> Prev
+                                     </button>
+                                     
+                                     <span className="text-sm text-slate-500">
+                                         Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
+                                     </span>
+                                     
+                                     <button 
+                                        onClick={handleNextPage}
+                                        disabled={currentPage === totalPages}
+                                        className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors"
+                                     >
+                                         Next <ChevronRight size={16} />
+                                     </button>
                                  </div>
                              )}
-                         </div>
+                         </>
                      )}
                 </div>
             </div>
