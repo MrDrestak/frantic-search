@@ -12,6 +12,7 @@ interface BindersProps {
 
 const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   const [binders, setBinders] = useState<Binder[]>([]);
+  const [lockedStatus, setLockedStatus] = useState<Record<string, boolean>>({});
   const [isCreating, setIsCreating] = useState(false);
   const [newBinderName, setNewBinderName] = useState('');
   const [newBinderType, setNewBinderType] = useState<BinderType>(BinderType.FOR_TRADE);
@@ -28,8 +29,24 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   const loadBinders = async () => {
     if (!currentUser) return;
     const data = await binderService.getUserBinders(currentUser.id);
+    
+    // Check lock status for each
+    const status: Record<string, boolean> = {};
+    for (const b of data) {
+        status[b.id] = await subscriptionService.isBinderLocked(b);
+    }
+    setLockedStatus(status);
     setBinders(data);
   };
+
+  const handleBinderClick = (binder: Binder) => {
+      if (lockedStatus[binder.id]) {
+          // Trigger upgrade modal instead of opening
+          setShowUpgradeModal(true);
+      } else {
+          onSelectBinder(binder.id);
+      }
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +112,8 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
             onClose={() => setShowUpgradeModal(false)}
             currentTier={currentUser.subscriptionTier}
             onUpgrade={() => {
-                // User upgraded. They can now click "Create" again to proceed.
+                // User upgraded. Refresh logic.
+                loadBinders();
             }}
           />
       )}
@@ -112,6 +130,25 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
           <Plus size={18} /> New Binder
         </button>
       </header>
+      
+      {/* Alert for locked binders */}
+      {Object.values(lockedStatus).some(isLocked => isLocked) && (
+          <div className="bg-amber-900/20 border border-amber-500/50 p-4 rounded-xl flex items-center gap-3">
+              <div className="bg-amber-500/20 p-2 rounded-full text-amber-500">
+                  <Lock size={20} />
+              </div>
+              <div className="flex-1">
+                  <h3 className="text-amber-400 font-bold">Subscription Limit Exceeded</h3>
+                  <p className="text-sm text-slate-300">Some binders are locked because they exceed your current plan limits. Upgrade to unlock them.</p>
+              </div>
+              <button 
+                onClick={() => setShowUpgradeModal(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
+              >
+                  Upgrade
+              </button>
+          </div>
+      )}
 
       {/* Create Modal */}
       {isCreating && (
@@ -200,13 +237,31 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
       {/* Binder Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {binders.map(binder => (
-          <BinderCard 
-            key={binder.id} 
-            binder={binder} 
-            onClick={() => onSelectBinder(binder.id)} 
-          />
-        ))}
+        {binders.map(binder => {
+            const isLocked = lockedStatus[binder.id];
+            return (
+                <div key={binder.id} className="relative group">
+                    <BinderCard 
+                        binder={binder} 
+                        onClick={() => handleBinderClick(binder)} 
+                    />
+                    
+                    {isLocked && (
+                        <div 
+                            className="absolute inset-0 bg-slate-950/80 backdrop-blur-[1px] rounded-2xl flex items-center justify-center z-10 cursor-not-allowed border border-slate-700"
+                            onClick={() => setShowUpgradeModal(true)}
+                        >
+                            <div className="flex flex-col items-center text-slate-400">
+                                <div className="bg-slate-800 p-3 rounded-full mb-2">
+                                    <Lock size={24} />
+                                </div>
+                                <span className="font-bold text-sm">Vaulted</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        })}
         
         {binders.length === 0 && (
             <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">

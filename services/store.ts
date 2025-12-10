@@ -372,6 +372,42 @@ export const subscriptionService = {
         }
 
         return { allowed: true, limit: 999, current: 0 };
+    },
+
+    // New Helper: Determine if a specific binder is locked for a user based on their tier limits
+    // Logic: Binders are sorted by creation date. If user has 3, limit is 1, the newest 2 are locked.
+    isBinderLocked: async (binder: Binder): Promise<boolean> => {
+        if (!currentUserProfile) return false;
+        if (binder.userId !== currentUserProfile.id) return false; // Viewing others' binders is always fine unless private (not impl)
+
+        const allBinders = await binderService.getUserBinders(currentUserProfile.id);
+        
+        // Filter by same type category
+        let categoryBinders: Binder[] = [];
+        let limit = 0;
+        const tier = currentUserProfile.subscriptionTier;
+        const config = currentConfig[tier] || DEFAULT_CONFIG[tier];
+
+        if (binder.type === BinderType.AUCTION) {
+            categoryBinders = allBinders.filter(b => b.type === BinderType.AUCTION);
+            limit = config.maxAuctionBinders;
+        } else if (binder.type === BinderType.WISHLIST) {
+            categoryBinders = allBinders.filter(b => b.type === BinderType.WISHLIST);
+            limit = config.maxWishlistBinders;
+        } else {
+            categoryBinders = allBinders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
+            limit = config.maxTradeBinders;
+        }
+
+        // Sort by creation date ascending (Oldest first)
+        categoryBinders.sort((a, b) => a.createdAt - b.createdAt);
+
+        // Find index of current binder
+        const index = categoryBinders.findIndex(b => b.id === binder.id);
+        
+        // If index is greater than or equal to limit, it's locked (0-based index vs 1-based count)
+        // e.g. Limit 1. Index 0 is safe. Index 1 is locked.
+        return index >= limit;
     }
 };
 
@@ -468,23 +504,36 @@ export const cardService = {
 
   getTraderInventory: async (userId: string): Promise<Card[]> => {
     try {
-        // 1. Get all cards for the user
-        const cardSnap = await db.collection("cards").where("userId", "==", userId).get();
-        const allCards = cardSnap.docs.map(doc => mapDoc(doc) as Card);
+        // 1. Get user profile to determine tier limits
+        const userProfile = await auth.getUserPublicProfile(userId);
+        if (!userProfile) return [];
 
-        // 2. Get user binders to identify types
+        const tier = userProfile.subscriptionTier;
+        const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
+
+        // 2. Get user binders
         const binderSnap = await db.collection("binders").where("userId", "==", userId).get();
-        const tradeBinderIds = new Set<string>();
+        const tradeBinders: Binder[] = [];
         
         binderSnap.docs.forEach(doc => {
             const data = doc.data() as Binder;
             if (data.type === BinderType.FOR_TRADE || data.type === BinderType.COLLECTION) {
-                tradeBinderIds.add(doc.id);
+                tradeBinders.push({ id: doc.id, ...data });
             }
         });
 
-        // 3. Filter cards that belong to eligible binders
-        return allCards.filter(card => tradeBinderIds.has(card.binderId));
+        // 3. APPLY VAULT LOGIC: Sort by date (oldest first) and take only the allowed amount
+        tradeBinders.sort((a, b) => a.createdAt - b.createdAt);
+        const activeBinders = tradeBinders.slice(0, limits.maxTradeBinders);
+        const activeBinderIds = new Set(activeBinders.map(b => b.id));
+
+        if (activeBinderIds.size === 0) return [];
+
+        // 4. Get all cards and filter
+        const cardSnap = await db.collection("cards").where("userId", "==", userId).get();
+        const allCards = cardSnap.docs.map(doc => mapDoc(doc) as Card);
+
+        return allCards.filter(card => activeBinderIds.has(card.binderId));
     } catch (e) {
         console.error("Error fetching trader inventory", e);
         return [];
