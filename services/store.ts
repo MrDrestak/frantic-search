@@ -16,28 +16,32 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 3, 
         maxAuctionBinders: 1, 
         maxAuctionCardsPerBinder: 1, 
-        pricePerMonth: 0 
+        pricePerMonth: 0,
+        currency: 'USD'
     },
     [SubscriptionTier.UNCOMMON]: { 
         maxTradeBinders: 3, 
         maxShowcaseItems: 10, 
         maxAuctionBinders: 2, 
         maxAuctionCardsPerBinder: 10, 
-        pricePerMonth: 5 
+        pricePerMonth: 5,
+        currency: 'USD'
     },
     [SubscriptionTier.RARE]: { 
         maxTradeBinders: 10, 
         maxShowcaseItems: 50, 
         maxAuctionBinders: 3, 
         maxAuctionCardsPerBinder: 15, 
-        pricePerMonth: 15 
+        pricePerMonth: 15,
+        currency: 'USD'
     },
     [SubscriptionTier.MYTHIC]: { 
         maxTradeBinders: 100, 
         maxShowcaseItems: 500, 
         maxAuctionBinders: 10, 
         maxAuctionCardsPerBinder: 50, 
-        pricePerMonth: 0 // Reserved for stores (custom)
+        pricePerMonth: 0, // Reserved for stores (custom)
+        currency: 'USD'
     },
 };
 

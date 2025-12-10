@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown } from 'lucide-react';
 import { configService, auth, adminService } from '../services/store';
-import { GlobalConfig, SubscriptionTier } from '../types';
+import { GlobalConfig, SubscriptionTier, TierLimits } from '../types';
 
 interface AdminPanelProps {
     onBack: () => void;
@@ -81,17 +81,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }
     }
 
-    const handleChange = (tier: SubscriptionTier, field: keyof typeof config[SubscriptionTier.COMMON], value: string) => {
+    const handleChange = (tier: SubscriptionTier, field: keyof TierLimits, value: string) => {
         if (!config) return;
-        const numValue = parseInt(value) || 0;
         
         setConfig(prev => {
             if (!prev) return null;
+
+            let finalValue: string | number = value;
+            if (field !== 'currency') {
+                finalValue = parseFloat(value) || 0;
+            }
+
             return {
                 ...prev,
                 [tier]: {
                     ...prev[tier],
-                    [field]: numValue
+                    [field]: finalValue
                 }
             };
         });
@@ -149,7 +154,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Showcase</th>
                                 <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Max Auctions</th>
                                 <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Cards/Auction</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly ($)</th>
+                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly Price</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
@@ -198,7 +203,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                         />
                                     </td>
                                     <td className="p-4 text-slate-500">
-                                        ${config[tier].pricePerMonth}
+                                        <div className="flex gap-2 w-32">
+                                            <input 
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={config[tier].pricePerMonth}
+                                                onChange={(e) => handleChange(tier, 'pricePerMonth', e.target.value)}
+                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white w-full text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                            />
+                                            <select 
+                                                value={config[tier].currency || 'USD'}
+                                                onChange={(e) => handleChange(tier, 'currency', e.target.value)}
+                                                className="bg-slate-950 border border-slate-700 rounded px-1 py-2 text-white text-xs focus:ring-2 focus:ring-violet-500 outline-none"
+                                            >
+                                                <option value="USD">USD</option>
+                                                <option value="PEN">PEN</option>
+                                            </select>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

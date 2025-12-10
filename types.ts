@@ -39,6 +39,7 @@ export interface TierLimits {
   maxAuctionBinders: number;
   maxAuctionCardsPerBinder: number;
   pricePerMonth: number;
+  currency: 'USD' | 'PEN';
 }
 
 export interface GlobalConfig {
