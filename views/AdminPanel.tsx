@@ -88,8 +88,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             if (!prev) return null;
 
             let finalValue: string | number = value;
+            
+            // Only parse as number if it's not the currency field
             if (field !== 'currency') {
-                finalValue = parseFloat(value) || 0;
+                // Allow empty string to be 0 for better typing experience, 
+                // though usually specific handling for controlled inputs is better.
+                // Here we keep it simple for the admin panel.
+                finalValue = value === '' ? 0 : parseFloat(value);
             }
 
             return {
@@ -154,7 +159,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Showcase</th>
                                 <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Max Auctions</th>
                                 <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Cards/Auction</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly Price</th>
+                                <th className="p-4 text-violet-400 font-medium uppercase text-sm tracking-wider">Max Alerts</th>
+                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly ($)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
@@ -202,23 +208,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                             className="bg-slate-950 border border-amber-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-amber-500 outline-none"
                                         />
                                     </td>
+                                    <td className="p-4">
+                                        <input 
+                                            type="number" 
+                                            value={config[tier].maxCardAlerts}
+                                            onChange={(e) => handleChange(tier, 'maxCardAlerts', e.target.value)}
+                                            className="bg-slate-950 border border-violet-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                        />
+                                    </td>
                                     <td className="p-4 text-slate-500">
-                                        <div className="flex gap-2 w-32">
+                                        <div className="flex gap-2 min-w-[150px]">
                                             <input 
                                                 type="number"
                                                 min="0"
                                                 step="0.01"
                                                 value={config[tier].pricePerMonth}
                                                 onChange={(e) => handleChange(tier, 'pricePerMonth', e.target.value)}
-                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white w-full text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
                                             />
                                             <select 
                                                 value={config[tier].currency || 'USD'}
                                                 onChange={(e) => handleChange(tier, 'currency', e.target.value)}
-                                                className="bg-slate-950 border border-slate-700 rounded px-1 py-2 text-white text-xs focus:ring-2 focus:ring-violet-500 outline-none"
+                                                className="bg-slate-950 border border-slate-700 rounded px-2 py-2 text-white text-xs focus:ring-2 focus:ring-violet-500 outline-none flex-1"
                                             >
-                                                <option value="USD">USD</option>
-                                                <option value="PEN">PEN</option>
+                                                <option value="USD">USD $</option>
+                                                <option value="PEN">PEN S/</option>
                                             </select>
                                         </div>
                                     </td>

@@ -38,6 +38,7 @@ export interface TierLimits {
   maxShowcaseItems: number;
   maxAuctionBinders: number;
   maxAuctionCardsPerBinder: number;
+  maxCardAlerts: number;
   pricePerMonth: number;
   currency: 'USD' | 'PEN';
 }

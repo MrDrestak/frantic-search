@@ -16,6 +16,7 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 3, 
         maxAuctionBinders: 1, 
         maxAuctionCardsPerBinder: 1, 
+        maxCardAlerts: 1,
         pricePerMonth: 0,
         currency: 'USD'
     },
@@ -24,6 +25,7 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 10, 
         maxAuctionBinders: 2, 
         maxAuctionCardsPerBinder: 10, 
+        maxCardAlerts: 5,
         pricePerMonth: 5,
         currency: 'USD'
     },
@@ -32,6 +34,7 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 50, 
         maxAuctionBinders: 3, 
         maxAuctionCardsPerBinder: 15, 
+        maxCardAlerts: 20,
         pricePerMonth: 15,
         currency: 'USD'
     },
@@ -40,6 +43,7 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 500, 
         maxAuctionBinders: 10, 
         maxAuctionCardsPerBinder: 50, 
+        maxCardAlerts: 100,
         pricePerMonth: 0, // Reserved for stores (custom)
         currency: 'USD'
     },
