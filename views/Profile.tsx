@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 
@@ -11,6 +11,17 @@ interface ProfileProps {
     onBack?: () => void;
     onViewProfile?: (userId: string) => void;
 }
+
+const COUNTRY_CODES = [
+    { code: '51', label: 'Peru (+51)', flag: '🇵🇪' },
+    { code: '1', label: 'USA (+1)', flag: '🇺🇸' },
+    { code: '52', label: 'Mexico (+52)', flag: '🇲🇽' },
+    { code: '56', label: 'Chile (+56)', flag: '🇨🇱' },
+    { code: '57', label: 'Colombia (+57)', flag: '🇨🇴' },
+    { code: '54', label: 'Argentina (+54)', flag: '🇦🇷' },
+    { code: '34', label: 'Spain (+34)', flag: '🇪🇸' },
+    { code: '55', label: 'Brazil (+55)', flag: '🇧🇷' },
+];
 
 const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -26,8 +37,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
 
   // Form State
   const [nickname, setNickname] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
   const [store, setStore] = useState('');
+  
+  // WhatsApp Logic
+  const [countryCode, setCountryCode] = useState('51');
+  const [localPhone, setLocalPhone] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState<'IDLE' | 'SENT' | 'VERIFIED'>('IDLE');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [inputCode, setInputCode] = useState('');
 
   const isOwnProfile = !viewingUserId || viewingUserId === auth.getCurrentUser()?.id;
 
@@ -43,8 +60,36 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
         if (currentUser) {
             setUser(currentUser);
             setNickname(currentUser.displayName || '');
-            setWhatsapp(currentUser.whatsapp || '');
             setStore(currentUser.preferredStore || '');
+            
+            // Parse existing WhatsApp
+            const storedWhatsapp = currentUser.whatsapp || '';
+            if (storedWhatsapp) {
+                // Try to match known codes, longest first to avoid partial matches (e.g. 1 vs 12)
+                const sortedCodes = [...COUNTRY_CODES].sort((a,b) => b.code.length - a.code.length);
+                const match = sortedCodes.find(c => storedWhatsapp.startsWith(c.code));
+                
+                if (match) {
+                    setCountryCode(match.code);
+                    setLocalPhone(storedWhatsapp.slice(match.code.length));
+                } else {
+                    // Fallback: If no match found, assume legacy data (likely Peru without code or just raw number)
+                    // If length is 9, likely Peru local.
+                    if (storedWhatsapp.length === 9) {
+                        setCountryCode('51');
+                        setLocalPhone(storedWhatsapp);
+                    } else {
+                        // Unknown format, put everything in local
+                        setLocalPhone(storedWhatsapp);
+                    }
+                }
+                setVerificationStatus('VERIFIED');
+            } else {
+                setVerificationStatus('IDLE');
+                setLocalPhone('');
+                setCountryCode('51');
+            }
+
             loadMyAuctions(currentUser.id);
         }
     } else if (viewingUserId) {
@@ -58,7 +103,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
 
   const loadMyAuctions = async (uid: string) => {
       try {
-          // In a real app we'd index this. Here we query all cards for the user and filter.
           const snap = await db.collection("cards")
             .where("userId", "==", uid)
             .where("binderType", "==", BinderType.AUCTION)
@@ -66,7 +110,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
           
           const auctionCards = snap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
           
-          // Fetch bidder/winner names
           const idsToFetch = new Set<string>();
           auctionCards.forEach(c => {
               if (c.topBidderId) idsToFetch.add(c.topBidderId);
@@ -77,7 +120,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
               const names: Record<string, string> = {};
               await Promise.all(Array.from(idsToFetch).map(async (id) => {
                   try {
-                      // Small optimization: check if the bidder is the profile user itself (unlikely for bidder, but possible for winner logic if self-win was allowed? No self-bid allowed though)
                       const doc = await db.collection("users").doc(id).get();
                       if (doc.exists) {
                           names[id] = (doc.data() as any)?.displayName || 'Unknown';
@@ -91,27 +133,68 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
       } catch (e) { console.error("Failed to load auctions", e); }
   };
 
+  const handleStartVerification = () => {
+      if (!localPhone || localPhone.length < 5) {
+          alert("Please enter a valid phone number first.");
+          return;
+      }
+      
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedCode(code);
+      setVerificationStatus('SENT');
+      setInputCode('');
+      
+      const fullNumber = `${countryCode}${localPhone}`;
+      const text = `Verification Code: ${code}`;
+      // Open WhatsApp
+      window.open(`https://wa.me/${fullNumber}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleVerifyCode = () => {
+      if (inputCode.trim() === generatedCode) {
+          setVerificationStatus('VERIFIED');
+      } else {
+          alert("Incorrect code. Please check the message you sent/received on WhatsApp and try again.");
+      }
+  };
+
+  const handlePhoneChange = (val: string) => {
+      setLocalPhone(val);
+      // If user changes number, require re-verification
+      if (verificationStatus === 'VERIFIED') {
+          setVerificationStatus('IDLE');
+      }
+  };
+
+  const handleCountryChange = (val: string) => {
+      setCountryCode(val);
+      if (verificationStatus === 'VERIFIED') {
+          setVerificationStatus('IDLE');
+      }
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    if (whatsapp) {
-        const isValidFormat = /^\d{9}$/.test(whatsapp);
-        if (!isValidFormat) {
-            alert("WhatsApp number must be exactly 9 digits.");
+    let finalWhatsapp = '';
+    if (localPhone) {
+        if (verificationStatus !== 'VERIFIED') {
+            alert("You must verify your WhatsApp number before saving.");
             return;
         }
+        finalWhatsapp = `${countryCode}${localPhone}`;
     }
     
     setIsSaving(true);
     try {
         await auth.updateProfile({
             displayName: nickname,
-            whatsapp: whatsapp,
+            whatsapp: finalWhatsapp,
             preferredStore: store
         });
         setIsEditing(false);
-        loadProfile(); // Refresh
+        loadProfile(); 
     } catch (error) {
         console.error("Failed to update profile", error);
         alert("Failed to update profile.");
@@ -122,11 +205,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
 
   const handleCancel = () => {
     setIsEditing(false);
-    if (user) {
-        setNickname(user.displayName);
-        setWhatsapp(user.whatsapp || '');
-        setStore(user.preferredStore || '');
-    }
+    loadProfile(); // Reset form state
   };
 
   const renderTierBadge = (tier: SubscriptionTier) => {
@@ -233,10 +312,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                              <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
                                  <label className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 block">WhatsApp</label>
                                  <div className="flex items-center gap-3 text-slate-200">
-                                     <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${user.whatsapp ? 'bg-green-500/10 text-green-500' : 'bg-slate-800 text-slate-500'}`}>
                                          <Phone size={16} />
                                      </div>
-                                     <span className="font-mono text-lg">
+                                     <span className={`font-mono text-lg ${!user.whatsapp && 'text-slate-500'}`}>
                                         {user.whatsapp ? (
                                             isOwnProfile ? user.whatsapp : (
                                                 <a href={`https://wa.me/${user.whatsapp}`} target="_blank" rel="noreferrer" className="hover:underline hover:text-green-400">
@@ -246,6 +325,11 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                                         ) : "Not set"}
                                      </span>
                                  </div>
+                                 {!user.whatsapp && isOwnProfile && (
+                                     <p className="text-xs text-amber-500 mt-2 flex items-center gap-1">
+                                         <AlertCircle size={12} /> Required for Auctions
+                                     </p>
+                                 )}
                              </div>
 
                              <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
@@ -279,20 +363,90 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                                 </div>
                             </div>
 
-                            {/* WhatsApp */}
+                            {/* WhatsApp Verification Section */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">WhatsApp Number</label>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-3 text-slate-500" size={18} />
-                                    <input 
-                                        type="number"
-                                        value={whatsapp}
-                                        onChange={(e) => setWhatsapp(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                                        placeholder="e.g. 999888777 (9 digits)"
-                                    />
+                                <label className="block text-sm font-medium text-slate-300 mb-2">WhatsApp Verification</label>
+                                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 space-y-4">
+                                    
+                                    {/* Phone Entry */}
+                                    <div className="flex flex-col md:flex-row gap-3">
+                                        <div className="w-full md:w-1/3">
+                                            <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">Country</label>
+                                            <select 
+                                                value={countryCode}
+                                                onChange={(e) => handleCountryChange(e.target.value)}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                                            >
+                                                {COUNTRY_CODES.map(c => (
+                                                    <option key={c.code} value={c.code}>{c.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex-1 relative">
+                                            <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">Phone Number</label>
+                                            <Phone className="absolute left-3 top-9 text-slate-500" size={16} />
+                                            <input 
+                                                type="tel"
+                                                value={localPhone}
+                                                onChange={(e) => handlePhoneChange(e.target.value)}
+                                                className={`w-full bg-slate-900 border rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:outline-none ${verificationStatus === 'VERIFIED' ? 'border-green-500/50 focus:ring-green-500' : 'border-slate-700 focus:ring-violet-500'}`}
+                                                placeholder="999888777"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Action Area */}
+                                    <div className="flex items-center justify-between border-t border-slate-800 pt-4 mt-2">
+                                        {verificationStatus === 'IDLE' && (
+                                            <div className="w-full">
+                                                <button 
+                                                    type="button"
+                                                    onClick={handleStartVerification}
+                                                    disabled={!localPhone}
+                                                    className="w-full bg-slate-800 hover:bg-violet-600/20 hover:text-violet-400 text-slate-300 border border-slate-700 hover:border-violet-500/50 py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Send size={16} /> Get Verification Code
+                                                </button>
+                                                <p className="text-xs text-slate-500 mt-2 text-center">
+                                                    We will open WhatsApp with a pre-filled message.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {verificationStatus === 'SENT' && (
+                                            <div className="w-full space-y-3 animate-in fade-in slide-in-from-top-2">
+                                                <div className="bg-violet-500/10 border border-violet-500/30 p-3 rounded text-sm text-violet-200">
+                                                    <p className="font-bold mb-1">Check WhatsApp!</p>
+                                                    Step 1: Send the message in the opened chat.<br/>
+                                                    Step 2: Copy the code from that message.<br/>
+                                                    Step 3: Paste it below.
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Enter 6-digit code"
+                                                        value={inputCode}
+                                                        onChange={(e) => setInputCode(e.target.value)}
+                                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-center font-mono tracking-widest focus:ring-2 focus:ring-violet-500 outline-none"
+                                                    />
+                                                    <button 
+                                                        type="button"
+                                                        onClick={handleVerifyCode}
+                                                        className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold"
+                                                    >
+                                                        Verify
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {verificationStatus === 'VERIFIED' && (
+                                            <div className="w-full bg-green-500/10 border border-green-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-green-400 font-bold animate-in zoom-in">
+                                                <CheckCircle size={20} /> Verified Number
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-1">Numbers only. Must be exactly 9 digits.</p>
                             </div>
 
                             {/* Preferred Store */}
@@ -324,8 +478,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
                             </button>
                             <button 
                                 type="submit" 
-                                disabled={isSaving}
-                                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg font-bold transition-colors shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2"
+                                disabled={isSaving || (localPhone && verificationStatus !== 'VERIFIED')}
+                                className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition-colors shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2"
                             >
                                 {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                                 Save Changes
