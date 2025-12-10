@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 
@@ -24,6 +24,30 @@ const COUNTRY_CODES = [
     { code: '55', label: 'Brazil (+55)', flag: '🇧🇷' },
 ];
 
+interface StoreData {
+    name: string;
+    location: string;
+    mapUrl: string;
+}
+
+const STORES: StoreData[] = [
+    { 
+        name: 'La Mazmorra', 
+        location: 'Santiago de Surco, Lima', 
+        mapUrl: 'https://maps.app.goo.gl/YNTq2rYXo7ce8sSH7' 
+    },
+    { 
+        name: 'Reinos Olvidados', 
+        location: 'San Borja, Lima', 
+        mapUrl: 'https://maps.app.goo.gl/FjGCR5FshDcbaRXNA' 
+    },
+    {
+        name: 'TCG House | C.C. Arenales',
+        location: 'Lince, Lima',
+        mapUrl: 'https://maps.app.goo.gl/LkoGT51aMEmEs7mp9'
+    }
+];
+
 const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile, onAdminClick }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -38,7 +62,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   // Form State
   const [nickname, setNickname] = useState('');
-  const [store, setStore] = useState('');
+  const [storeName, setStoreName] = useState('');
   
   // WhatsApp Logic
   const [countryCode, setCountryCode] = useState('51');
@@ -61,7 +85,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         if (currentUser) {
             setUser(currentUser);
             setNickname(currentUser.displayName || '');
-            setStore(currentUser.preferredStore || '');
+            setStoreName(currentUser.preferredStore || '');
             
             // Parse existing WhatsApp
             const storedWhatsapp = currentUser.whatsapp || '';
@@ -192,7 +216,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         await auth.updateProfile({
             displayName: nickname,
             whatsapp: finalWhatsapp,
-            preferredStore: store
+            preferredStore: storeName
         });
         setIsEditing(false);
         loadProfile(); 
@@ -231,6 +255,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
           </div>
       );
   };
+  
+  // Helper to find store data
+  const currentStoreData = STORES.find(s => s.name === user?.preferredStore);
 
   if (isLoading) return <div className="p-8 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Profile...</div>;
   
@@ -324,6 +351,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                             {/* WhatsApp Card */}
                              <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
                                  <label className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 block">WhatsApp</label>
                                  <div className="flex items-center gap-3 text-slate-200">
@@ -347,14 +375,37 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                  )}
                              </div>
 
-                             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                 <label className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 block">Preferred Store</label>
-                                 <div className="flex items-center gap-3 text-slate-200">
-                                     <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                                         <MapPin size={16} />
+                             {/* Store Card (Enhanced) */}
+                             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                 <div>
+                                     <label className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 block">Preferred Store</label>
+                                     <div className="flex items-start gap-3 text-slate-200">
+                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${user.preferredStore ? 'bg-blue-500/10 text-blue-500' : 'bg-slate-800 text-slate-500'}`}>
+                                             <MapPin size={16} />
+                                         </div>
+                                         <div>
+                                            <span className="font-bold text-lg block leading-tight">{user.preferredStore || "None selected"}</span>
+                                            {/* Enhanced Location Text */}
+                                            {currentStoreData && (
+                                                <span className="text-sm text-slate-400 flex items-center gap-1 mt-1">
+                                                    <Navigation size={12} /> {currentStoreData.location}
+                                                </span>
+                                            )}
+                                         </div>
                                      </div>
-                                     <span className="font-medium text-lg">{user.preferredStore || "None selected"}</span>
                                  </div>
+                                 
+                                 {/* Map Link Button */}
+                                 {currentStoreData && (
+                                     <a 
+                                        href={currentStoreData.mapUrl} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="mt-3 text-xs bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 border border-blue-900/50 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                     >
+                                         <ExternalLink size={14} /> Open in Google Maps
+                                     </a>
+                                 )}
                              </div>
                         </div>
                     </div>
@@ -470,13 +521,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                 <div className="relative">
                                     <MapPin className="absolute left-3 top-3 text-slate-500" size={18} />
                                     <select 
-                                        value={store}
-                                        onChange={(e) => setStore(e.target.value)}
+                                        value={storeName}
+                                        onChange={(e) => setStoreName(e.target.value)}
                                         className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none appearance-none"
                                     >
                                         <option value="">-- Select a Store --</option>
-                                        <option value="La Mazmorra">La Mazmorra</option>
-                                        <option value="Reinos Lejanos">Reinos Lejanos</option>
+                                        {STORES.map((s) => (
+                                            <option key={s.name} value={s.name}>{s.name} ({s.location})</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
