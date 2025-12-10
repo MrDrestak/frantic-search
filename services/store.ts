@@ -34,6 +34,9 @@ export const auth = {
           customData = userDoc.data() || {};
       }
 
+      // Hardcode admin check for specific email
+      const isAdmin = customData.isAdmin || user.email === 'walterpacora88@gmail.com';
+
       const profile: UserProfile = {
         id: user.uid,
         email: user.email || '',
@@ -41,7 +44,7 @@ export const auth = {
         photoURL: user.photoURL || undefined,
         isOnline: true,
         subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON, // Default to Common
-        isAdmin: customData.isAdmin || false,
+        isAdmin: isAdmin,
         ...customData
       };
 
@@ -50,7 +53,8 @@ export const auth = {
           email: profile.email,
           photoURL: profile.photoURL,
           lastLogin: Date.now(),
-          subscriptionTier: profile.subscriptionTier
+          subscriptionTier: profile.subscriptionTier,
+          isAdmin: profile.isAdmin
       }, { merge: true });
 
       currentUserProfile = profile;
@@ -157,6 +161,9 @@ export const auth = {
             if (userDoc.exists) customData = userDoc.data() || {};
         } catch(e) { console.warn("Offline or error fetching profile", e); }
 
+        // Hardcode admin check for specific email
+        const isAdmin = customData.isAdmin || firebaseUser.email === 'walterpacora88@gmail.com';
+
         const profile: UserProfile = {
             id: firebaseUser.uid,
             email: firebaseUser.email || '',
@@ -164,7 +171,7 @@ export const auth = {
             photoURL: firebaseUser.photoURL || undefined,
             isOnline: true,
             subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
-            isAdmin: customData.isAdmin || false,
+            isAdmin: isAdmin,
             ...customData
         };
         currentUserProfile = profile;
