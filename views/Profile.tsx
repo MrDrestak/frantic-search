@@ -51,7 +51,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
         // Load OTHER profile
         const publicProfile = await auth.getUserPublicProfile(viewingUserId);
         setUser(publicProfile);
-        loadMyAuctions(viewingUserId);
+        // Do not load auctions for other users
     }
     setIsLoading(false);
   };
@@ -336,79 +336,81 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile 
             </div>
         </div>
         
-        {/* Auctions History Section */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                    <Gavel size={20} className="text-amber-500" /> 
-                    {isOwnProfile ? 'My Created Auctions' : `${user.displayName}'s Auctions`}
-                </h3>
-                <button 
-                    onClick={() => setShowAuctions(!showAuctions)}
-                    className="text-sm text-violet-400 hover:text-white underline"
-                >
-                    {showAuctions ? 'Hide' : 'Show All'}
-                </button>
-            </div>
-            
-            {showAuctions && (
-                <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-                    {myAuctions.length === 0 ? (
-                        <p className="text-slate-500 italic">No auctions created yet.</p>
-                    ) : (
-                        myAuctions.map(card => {
-                            const now = Date.now();
-                            const isExpired = card.auctionEndDate && card.auctionEndDate < now;
-                            const isSold = card.auctionStatus === 'SOLD';
-                            const finalPrice = isSold ? card.buyItNowPrice : card.currentBid;
-                            
-                            // Determine "Winner" or "Top Bidder"
-                            // If sold, winnerId is direct buyer.
-                            // If expired, topBidderId is the de-facto winner (if any).
-                            // If active, topBidderId is leading.
-                            const effectiveWinnerId = card.winnerId || (isExpired && card.topBidderId ? card.topBidderId : card.topBidderId);
-                            const isFinished = isSold || isExpired;
+        {/* Auctions History Section - ONLY VISIBLE ON OWN PROFILE */}
+        {isOwnProfile && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Gavel size={20} className="text-amber-500" /> 
+                        My Created Auctions
+                    </h3>
+                    <button 
+                        onClick={() => setShowAuctions(!showAuctions)}
+                        className="text-sm text-violet-400 hover:text-white underline"
+                    >
+                        {showAuctions ? 'Hide' : 'Show All'}
+                    </button>
+                </div>
+                
+                {showAuctions && (
+                    <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                        {myAuctions.length === 0 ? (
+                            <p className="text-slate-500 italic">No auctions created yet.</p>
+                        ) : (
+                            myAuctions.map(card => {
+                                const now = Date.now();
+                                const isExpired = card.auctionEndDate && card.auctionEndDate < now;
+                                const isSold = card.auctionStatus === 'SOLD';
+                                const finalPrice = isSold ? card.buyItNowPrice : card.currentBid;
+                                
+                                // Determine "Winner" or "Top Bidder"
+                                // If sold, winnerId is direct buyer.
+                                // If expired, topBidderId is the de-facto winner (if any).
+                                // If active, topBidderId is leading.
+                                const effectiveWinnerId = card.winnerId || (isExpired && card.topBidderId ? card.topBidderId : card.topBidderId);
+                                const isFinished = isSold || isExpired;
 
-                            return (
-                                <div key={card.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
-                                    <div className="flex items-center gap-3">
-                                        <img src={card.imageUrl} alt={card.name} className="w-10 h-14 object-cover rounded bg-black" />
-                                        <div>
-                                            <div className="font-bold text-white">{card.name}</div>
-                                            <div className="text-xs text-slate-400">
-                                                {isSold ? 'Sold (Direct Buy)' : isExpired ? 'Ended' : 'Active'}
+                                return (
+                                    <div key={card.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
+                                        <div className="flex items-center gap-3">
+                                            <img src={card.imageUrl} alt={card.name} className="w-10 h-14 object-cover rounded bg-black" />
+                                            <div>
+                                                <div className="font-bold text-white">{card.name}</div>
+                                                <div className="text-xs text-slate-400">
+                                                    {isSold ? 'Sold (Direct Buy)' : isExpired ? 'Ended' : 'Active'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-sm font-bold text-white">
+                                                {card.currency === 'PEN' ? 'S/' : '$'} {finalPrice?.toFixed(2)}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                {effectiveWinnerId ? (
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[10px] text-slate-600 uppercase font-bold">
+                                                            {isFinished ? 'Winner' : 'Top Bidder'}
+                                                        </span>
+                                                        <button 
+                                                            onClick={() => onViewProfile && onViewProfile(effectiveWinnerId)}
+                                                            className="text-violet-400 hover:text-white underline font-medium truncate max-w-[120px]"
+                                                        >
+                                                            {bidderNames[effectiveWinnerId] || 'User'}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span>{isFinished ? 'Unsold' : 'No Bids'}</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-sm font-bold text-white">
-                                            {card.currency === 'PEN' ? 'S/' : '$'} {finalPrice?.toFixed(2)}
-                                        </div>
-                                        <div className="text-xs text-slate-500 mt-1">
-                                            {effectiveWinnerId ? (
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] text-slate-600 uppercase font-bold">
-                                                        {isFinished ? 'Winner' : 'Top Bidder'}
-                                                    </span>
-                                                    <button 
-                                                        onClick={() => onViewProfile && onViewProfile(effectiveWinnerId)}
-                                                        className="text-violet-400 hover:text-white underline font-medium truncate max-w-[120px]"
-                                                    >
-                                                        {bidderNames[effectiveWinnerId] || 'User'}
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span>{isFinished ? 'Unsold' : 'No Bids'}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            )}
-        </div>
+                                );
+                            })
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
 
       </div>
     </div>
