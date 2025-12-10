@@ -78,6 +78,7 @@ const App: React.FC = () => {
                          handleNavigation('market');
                     }
                 }} 
+                onViewProfile={(userId) => setViewingProfileId(userId)}
             />
         );
     }
@@ -124,7 +125,7 @@ const App: React.FC = () => {
     }
 
     if (currentPage === 'profile') {
-        return <Profile />;
+        return <Profile onViewProfile={(userId) => setViewingProfileId(userId)} />;
     }
 
     if (currentPage === 'admin') {

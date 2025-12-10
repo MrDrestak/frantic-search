@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
-import { UserProfile, SubscriptionTier, Card, BinderType } from '../types';
+import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus } from '../types';
 import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
@@ -9,9 +9,10 @@ import { db } from '../services/firebase';
 interface ProfileProps {
     viewingUserId?: string | null;
     onBack?: () => void;
+    onViewProfile?: (userId: string) => void;
 }
 
-const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
+const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -20,6 +21,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
   
   // Auction History State
   const [myAuctions, setMyAuctions] = useState<Card[]>([]);
+  const [bidderNames, setBidderNames] = useState<Record<string, string>>({});
   const [showAuctions, setShowAuctions] = useState(false);
 
   // Form State
@@ -63,6 +65,28 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
             .get();
           
           const auctionCards = snap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
+          
+          // Fetch bidder/winner names
+          const idsToFetch = new Set<string>();
+          auctionCards.forEach(c => {
+              if (c.topBidderId) idsToFetch.add(c.topBidderId);
+              if (c.winnerId) idsToFetch.add(c.winnerId);
+          });
+
+          if (idsToFetch.size > 0) {
+              const names: Record<string, string> = {};
+              await Promise.all(Array.from(idsToFetch).map(async (id) => {
+                  try {
+                      // Small optimization: check if the bidder is the profile user itself (unlikely for bidder, but possible for winner logic if self-win was allowed? No self-bid allowed though)
+                      const doc = await db.collection("users").doc(id).get();
+                      if (doc.exists) {
+                          names[id] = (doc.data() as any)?.displayName || 'Unknown';
+                      }
+                  } catch (e) { console.warn("Failed to fetch bidder name", e); }
+              }));
+              setBidderNames(names);
+          }
+          
           setMyAuctions(auctionCards);
       } catch (e) { console.error("Failed to load auctions", e); }
   };
@@ -338,6 +362,13 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
                             const isSold = card.auctionStatus === 'SOLD';
                             const finalPrice = isSold ? card.buyItNowPrice : card.currentBid;
                             
+                            // Determine "Winner" or "Top Bidder"
+                            // If sold, winnerId is direct buyer.
+                            // If expired, topBidderId is the de-facto winner (if any).
+                            // If active, topBidderId is leading.
+                            const effectiveWinnerId = card.winnerId || (isExpired && card.topBidderId ? card.topBidderId : card.topBidderId);
+                            const isFinished = isSold || isExpired;
+
                             return (
                                 <div key={card.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
                                     <div className="flex items-center gap-3">
@@ -353,10 +384,22 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
                                         <div className="text-sm font-bold text-white">
                                             {card.currency === 'PEN' ? 'S/' : '$'} {finalPrice?.toFixed(2)}
                                         </div>
-                                        <div className="text-xs text-slate-500">
-                                            {card.topBidderId ? (
-                                                card.winnerId ? 'Winner: Direct Buyer' : 'Top Bidder Active'
-                                            ) : 'No Bids'}
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            {effectiveWinnerId ? (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] text-slate-600 uppercase font-bold">
+                                                        {isFinished ? 'Winner' : 'Top Bidder'}
+                                                    </span>
+                                                    <button 
+                                                        onClick={() => onViewProfile && onViewProfile(effectiveWinnerId)}
+                                                        className="text-violet-400 hover:text-white underline font-medium truncate max-w-[120px]"
+                                                    >
+                                                        {bidderNames[effectiveWinnerId] || 'User'}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span>{isFinished ? 'Unsold' : 'No Bids'}</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
