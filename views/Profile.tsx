@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { auth } from '../services/store';
-import { UserProfile, SubscriptionTier } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star } from 'lucide-react';
+import { UserProfile, SubscriptionTier, Card, BinderType } from '../types';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
+import { db } from '../services/firebase';
 
 interface ProfileProps {
     viewingUserId?: string | null;
@@ -16,6 +17,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  
+  // Auction History State
+  const [myAuctions, setMyAuctions] = useState<Card[]>([]);
+  const [showAuctions, setShowAuctions] = useState(false);
 
   // Form State
   const [nickname, setNickname] = useState('');
@@ -38,13 +43,28 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
             setNickname(currentUser.displayName || '');
             setWhatsapp(currentUser.whatsapp || '');
             setStore(currentUser.preferredStore || '');
+            loadMyAuctions(currentUser.id);
         }
     } else if (viewingUserId) {
         // Load OTHER profile
         const publicProfile = await auth.getUserPublicProfile(viewingUserId);
         setUser(publicProfile);
+        loadMyAuctions(viewingUserId);
     }
     setIsLoading(false);
+  };
+
+  const loadMyAuctions = async (uid: string) => {
+      try {
+          // In a real app we'd index this. Here we query all cards for the user and filter.
+          const snap = await db.collection("cards")
+            .where("userId", "==", uid)
+            .where("binderType", "==", BinderType.AUCTION)
+            .get();
+          
+          const auctionCards = snap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
+          setMyAuctions(auctionCards);
+      } catch (e) { console.error("Failed to load auctions", e); }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -121,7 +141,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
           />
       )}
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <header className="mb-8 flex items-center gap-4">
             {!isOwnProfile && onBack && (
                 <button onClick={onBack} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
@@ -134,7 +154,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
             </div>
         </header>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6">
             {/* Banner / Header */}
             <div className={`h-32 relative ${user.subscriptionTier === SubscriptionTier.RARE ? 'bg-gradient-to-r from-amber-700/50 to-orange-900/50' : 'bg-gradient-to-r from-violet-900/50 to-indigo-900/50'}`}>
                 <div className="absolute -bottom-10 left-6">
@@ -291,6 +311,62 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack }) => {
                 )}
             </div>
         </div>
+        
+        {/* Auctions History Section */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Gavel size={20} className="text-amber-500" /> 
+                    {isOwnProfile ? 'My Created Auctions' : `${user.displayName}'s Auctions`}
+                </h3>
+                <button 
+                    onClick={() => setShowAuctions(!showAuctions)}
+                    className="text-sm text-violet-400 hover:text-white underline"
+                >
+                    {showAuctions ? 'Hide' : 'Show All'}
+                </button>
+            </div>
+            
+            {showAuctions && (
+                <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                    {myAuctions.length === 0 ? (
+                        <p className="text-slate-500 italic">No auctions created yet.</p>
+                    ) : (
+                        myAuctions.map(card => {
+                            const now = Date.now();
+                            const isExpired = card.auctionEndDate && card.auctionEndDate < now;
+                            const isSold = card.auctionStatus === 'SOLD';
+                            const finalPrice = isSold ? card.buyItNowPrice : card.currentBid;
+                            
+                            return (
+                                <div key={card.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                        <img src={card.imageUrl} alt={card.name} className="w-10 h-14 object-cover rounded bg-black" />
+                                        <div>
+                                            <div className="font-bold text-white">{card.name}</div>
+                                            <div className="text-xs text-slate-400">
+                                                {isSold ? 'Sold (Direct Buy)' : isExpired ? 'Ended' : 'Active'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-sm font-bold text-white">
+                                            {card.currency === 'PEN' ? 'S/' : '$'} {finalPrice?.toFixed(2)}
+                                        </div>
+                                        <div className="text-xs text-slate-500">
+                                            {card.topBidderId ? (
+                                                card.winnerId ? 'Winner: Direct Buyer' : 'Top Bidder Active'
+                                            ) : 'No Bids'}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            )}
+        </div>
+
       </div>
     </div>
   );

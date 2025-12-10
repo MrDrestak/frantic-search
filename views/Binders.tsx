@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { binderService, auth, subscriptionService } from '../services/store';
 import { Binder, BinderType, GameType } from '../types';
 import BinderCard from '../components/BinderCard';
-import { Plus, X, Lock } from 'lucide-react';
+import { Plus, X, Lock, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BindersProps {
@@ -35,10 +35,18 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     if (!currentUser || !newBinderName.trim()) return;
 
     try {
-        // Limit Check for Trade Binders
-        if (newBinderType === BinderType.FOR_TRADE) {
-            const check = await subscriptionService.checkLimit('TRADE_BINDER');
+        // Limit Check based on Type
+        let checkType: 'TRADE_BINDER' | 'AUCTION_BINDER' = 'TRADE_BINDER';
+        if (newBinderType === BinderType.AUCTION) {
+            checkType = 'AUCTION_BINDER';
+        }
+
+        if (newBinderType === BinderType.FOR_TRADE || newBinderType === BinderType.AUCTION) {
+            const check = await subscriptionService.checkLimit(checkType);
             if (!check.allowed) {
+                if (newBinderType === BinderType.AUCTION) {
+                     alert(`You have reached the Auction Binder limit (${check.limit}) for your tier.`);
+                }
                 setShowUpgradeModal(true);
                 return;
             }
@@ -76,7 +84,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">Your Binders</h1>
-          <p className="text-slate-400">Manage your collection and trade lists</p>
+          <p className="text-slate-400">Manage your collection, trade lists, and auctions</p>
         </div>
         <button 
           onClick={() => setIsCreating(true)}
@@ -106,13 +114,13 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                   value={newBinderName}
                   onChange={(e) => setNewBinderName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                  placeholder="e.g. Rare Trades"
+                  placeholder="e.g. Rare Trades or Auction House 1"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Purpose</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <button
                     type="button"
                     onClick={() => setNewBinderType(BinderType.FOR_TRADE)}
@@ -134,6 +142,17 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                     }`}
                   >
                     Wishlist
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewBinderType(BinderType.AUCTION)}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center gap-1 ${
+                      newBinderType === BinderType.AUCTION 
+                      ? 'bg-amber-600/20 border-amber-500 text-amber-300' 
+                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    <Gavel size={16} /> Auction
                   </button>
                 </div>
               </div>

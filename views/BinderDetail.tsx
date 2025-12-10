@@ -2,10 +2,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { cardService, binderService, auth, subscriptionService, BINDER_CARD_LIMIT } from '../services/store';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
-import { Card, Binder, ScryfallCard, CardCondition, BinderType } from '../types';
+import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -39,6 +39,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [selectedCard, setSelectedCard] = useState<ScryfallCard | null>(null);
   const [condition, setCondition] = useState<CardCondition>(CardCondition.NM);
   const [isFoil, setIsFoil] = useState(false);
+
+  // Auction Config State
+  const [auctionEndDate, setAuctionEndDate] = useState('');
+  const [basePrice, setBasePrice] = useState('0.00');
+  const [buyItNowPrice, setBuyItNowPrice] = useState('0.00');
+  const [auctionCurrency, setAuctionCurrency] = useState<'USD'|'PEN'>('USD');
 
   // Delete Confirmation State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -100,6 +106,9 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       } else {
           setIsFoil(false);
       }
+      // Defaults for auction
+      setBasePrice(card.prices.usd || '1.00');
+      setBuyItNowPrice(card.prices.usd ? (parseFloat(card.prices.usd) * 2).toFixed(2) : '5.00');
   };
 
   const handleBackStep = () => {
@@ -114,31 +123,60 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const handleAddCard = async () => {
     if (!selectedCard || !binder) return;
     
-    // UI Check for Limit
-    if (cards.length >= BINDER_CARD_LIMIT) {
-        alert(`Cannot add more cards. This binder has reached the limit of ${BINDER_CARD_LIMIT} cards.`);
-        return;
-    }
-
     try {
-        // Calculate Price
+        // LIMIT CHECK FOR AUCTIONS
+        if (binder.type === BinderType.AUCTION) {
+            const check = await subscriptionService.checkLimit('AUCTION_CARD', binder.id);
+            if (!check.allowed) {
+                alert(`Cannot add more cards. Your tier limit for Auction Cards is ${check.limit}.`);
+                return;
+            }
+            
+            if (!auctionEndDate) {
+                alert("Please select an end date for the auction.");
+                return;
+            }
+        } else {
+            // General Limit
+            if (cards.length >= BINDER_CARD_LIMIT) {
+                alert(`Cannot add more cards. This binder has reached the limit of ${BINDER_CARD_LIMIT} cards.`);
+                return;
+            }
+        }
+
+        // Calculate Price (Standard)
         const priceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
         const price = priceStr ? parseFloat(priceStr) : 0;
 
+        // Auction Data
+        let auctionData = {};
+        if (binder.type === BinderType.AUCTION) {
+            auctionData = {
+                auctionEndDate: new Date(auctionEndDate).getTime(),
+                basePrice: parseFloat(basePrice),
+                buyItNowPrice: parseFloat(buyItNowPrice),
+                currentBid: parseFloat(basePrice),
+                currency: auctionCurrency,
+                auctionStatus: AuctionStatus.ACTIVE,
+                binderType: BinderType.AUCTION
+            };
+        }
+
         await cardService.addCard({
-        binderId: binder.id,
-        userId: binder.userId,
-        scryfallId: selectedCard.id,
-        name: selectedCard.name,
-        setName: selectedCard.set_name,
-        collectorNumber: selectedCard.collector_number,
-        imageUrl: getCardImage(selectedCard),
-        condition: condition,
-        isFoil: isFoil,
-        rarity: selectedCard.rarity,
-        price: price,
-        purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
-        game: binder.game // Pass the binder's game type
+            binderId: binder.id,
+            userId: binder.userId,
+            scryfallId: selectedCard.id,
+            name: selectedCard.name,
+            setName: selectedCard.set_name,
+            collectorNumber: selectedCard.collector_number,
+            imageUrl: getCardImage(selectedCard),
+            condition: condition,
+            isFoil: isFoil,
+            rarity: selectedCard.rarity,
+            price: price,
+            purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
+            game: binder.game, // Pass the binder's game type
+            ...auctionData
         });
 
         // Reset UI
@@ -208,7 +246,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   }
 
   const handleBatchImport = async (mappedRows: any[]) => {
+      // Import is disabled for Auctions for simplicity (requires complex config)
       if (!binder) return;
+      if (binder.type === BinderType.AUCTION) {
+          alert("CSV Import is not available for Auction Binders yet.");
+          return;
+      }
 
       // LIMIT CHECK
       const currentCount = cards.length;
@@ -464,7 +507,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             {binder.name}
-            <span className={`text-xs px-2 py-0.5 rounded border ${binder.type === BinderType.WISHLIST ? 'border-pink-500 text-pink-400' : 'border-indigo-500 text-indigo-400'}`}>
+            {binder.type === BinderType.AUCTION && <Gavel size={20} className="text-amber-500" />}
+            <span className={`text-xs px-2 py-0.5 rounded border ${
+                binder.type === BinderType.WISHLIST ? 'border-pink-500 text-pink-400' : 
+                binder.type === BinderType.AUCTION ? 'border-amber-500 text-amber-400' :
+                'border-indigo-500 text-indigo-400'
+            }`}>
                 {binder.type}
             </span>
           </h1>
@@ -480,12 +528,14 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
              >
                 <Trash2 size={20} />
              </button>
-             <button 
-                onClick={() => setShowCSV(true)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"
-             >
-                <Upload size={18} /> <span className="hidden md:inline">Upload CSV</span>
-             </button>
+             {binder.type !== BinderType.AUCTION && (
+                 <button 
+                    onClick={() => setShowCSV(true)}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"
+                 >
+                    <Upload size={18} /> <span className="hidden md:inline">Upload CSV</span>
+                 </button>
+             )}
              <button 
                 onClick={() => setShowSearch(true)}
                 className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-violet-900/20"
@@ -531,7 +581,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                         <h2 className="text-xl md:text-2xl font-bold text-white">
                             {searchStep === 'QUERY' && "Find Cards"}
                             {searchStep === 'VERSIONS' && "Select Version"}
-                            {searchStep === 'CONFIG' && "Card Details"}
+                            {searchStep === 'CONFIG' && (binder.type === BinderType.AUCTION ? "Auction Details" : "Card Details")}
                         </h2>
                     </div>
                     <button onClick={() => { setShowSearch(false); setSearchStep('QUERY'); setSearchQuery(''); setSelectedCard(null); }} className="text-slate-400 hover:text-white">
@@ -673,9 +723,65 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                                     </div>
                                 </div>
 
+                                {/* AUCTION SPECIFIC FIELDS */}
+                                {binder.type === BinderType.AUCTION && (
+                                    <div className="space-y-4 bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl">
+                                        <h4 className="text-amber-400 font-bold flex items-center gap-2"><Gavel size={18} /> Auction Configuration</h4>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Finish Date</label>
+                                                <div className="relative">
+                                                    <Calendar className="absolute left-3 top-2.5 text-slate-500" size={16} />
+                                                    <input 
+                                                        type="date" 
+                                                        value={auctionEndDate}
+                                                        onChange={(e) => setAuctionEndDate(e.target.value)}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Currency</label>
+                                                <select 
+                                                    value={auctionCurrency}
+                                                    onChange={(e) => setAuctionCurrency(e.target.value as any)}
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                                >
+                                                    <option value="USD">USD ($)</option>
+                                                    <option value="PEN">SOL (S/)</option>
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Base Price</label>
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01"
+                                                    value={basePrice}
+                                                    onChange={(e) => setBasePrice(e.target.value)}
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Direct Buy Price</label>
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01"
+                                                    value={buyItNowPrice}
+                                                    onChange={(e) => setBuyItNowPrice(e.target.value)}
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="flex gap-3 pt-4">
                                     <button onClick={handleAddCard} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white py-3 md:py-4 rounded-xl font-bold flex justify-center items-center gap-2 shadow-xl shadow-violet-900/20 text-lg transition-all hover:scale-[1.02]">
-                                        <Check size={24} /> Add to Binder
+                                        <Check size={24} /> {binder.type === BinderType.AUCTION ? "Create Auction" : "Add to Binder"}
                                     </button>
                                 </div>
                             </div>
@@ -697,7 +803,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                     // Only enable showcase toggling if this is a "For Trade" binder
                     enableShowcase={binder.type === BinderType.FOR_TRADE}
                     onToggleShowcase={() => handleToggleShowcase(card)}
-                    onSetPrice={() => handleOpenPriceModal(card)}
+                    onSetPrice={binder.type === BinderType.FOR_TRADE ? () => handleOpenPriceModal(card) : undefined}
                 />
             ))}
             {cards.length === 0 && (

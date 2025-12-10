@@ -61,7 +61,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }
     }
 
-    const handleChange = (tier: SubscriptionTier, field: 'maxTradeBinders' | 'maxShowcaseItems', value: string) => {
+    const handleChange = (tier: SubscriptionTier, field: keyof typeof config[SubscriptionTier.COMMON], value: string) => {
         if (!config) return;
         const numValue = parseInt(value) || 0;
         
@@ -125,8 +125,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                             <tr className="bg-slate-950 border-b border-slate-800">
                                 <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Tier</th>
                                 <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Trade Binders</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Showcase Items</th>
-                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly Price ($)</th>
+                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Max Showcase</th>
+                                <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Max Auctions</th>
+                                <th className="p-4 text-amber-500 font-medium uppercase text-sm tracking-wider">Cards/Auction</th>
+                                <th className="p-4 text-slate-400 font-medium uppercase text-sm tracking-wider">Monthly ($)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
@@ -146,7 +148,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                             type="number" 
                                             value={config[tier].maxTradeBinders}
                                             onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)}
-                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-24 text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
                                         />
                                     </td>
                                     <td className="p-4">
@@ -154,7 +156,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                             type="number" 
                                             value={config[tier].maxShowcaseItems}
                                             onChange={(e) => handleChange(tier, 'maxShowcaseItems', e.target.value)}
-                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-24 text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                            className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-violet-500 outline-none"
+                                        />
+                                    </td>
+                                    <td className="p-4">
+                                        <input 
+                                            type="number" 
+                                            value={config[tier].maxAuctionBinders}
+                                            onChange={(e) => handleChange(tier, 'maxAuctionBinders', e.target.value)}
+                                            className="bg-slate-950 border border-amber-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-amber-500 outline-none"
+                                        />
+                                    </td>
+                                    <td className="p-4">
+                                        <input 
+                                            type="number" 
+                                            value={config[tier].maxAuctionCardsPerBinder}
+                                            onChange={(e) => handleChange(tier, 'maxAuctionCardsPerBinder', e.target.value)}
+                                            className="bg-slate-950 border border-amber-700 rounded px-3 py-2 text-white w-20 text-center focus:ring-2 focus:ring-amber-500 outline-none"
                                         />
                                     </td>
                                     <td className="p-4 text-slate-500">

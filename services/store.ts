@@ -1,7 +1,7 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits } from '../types';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -11,9 +11,27 @@ export const BINDER_CARD_LIMIT = 25;
 
 // DEFAULTS
 const DEFAULT_CONFIG: GlobalConfig = {
-    [SubscriptionTier.COMMON]: { maxTradeBinders: 1, maxShowcaseItems: 3, pricePerMonth: 0 },
-    [SubscriptionTier.UNCOMMON]: { maxTradeBinders: 3, maxShowcaseItems: 10, pricePerMonth: 5 },
-    [SubscriptionTier.RARE]: { maxTradeBinders: 10, maxShowcaseItems: 50, pricePerMonth: 15 },
+    [SubscriptionTier.COMMON]: { 
+        maxTradeBinders: 1, 
+        maxShowcaseItems: 3, 
+        maxAuctionBinders: 1, 
+        maxAuctionCardsPerBinder: 1, 
+        pricePerMonth: 0 
+    },
+    [SubscriptionTier.UNCOMMON]: { 
+        maxTradeBinders: 3, 
+        maxShowcaseItems: 10, 
+        maxAuctionBinders: 2, 
+        maxAuctionCardsPerBinder: 10, 
+        pricePerMonth: 5 
+    },
+    [SubscriptionTier.RARE]: { 
+        maxTradeBinders: 10, 
+        maxShowcaseItems: 50, 
+        maxAuctionBinders: 3, 
+        maxAuctionCardsPerBinder: 15, 
+        pricePerMonth: 15 
+    },
 };
 
 // AUTH SERVICE
@@ -211,7 +229,13 @@ export const configService = {
         try {
             const doc = await db.collection("settings").doc("global").get();
             if (doc.exists) {
-                currentConfig = doc.data() as GlobalConfig;
+                // Merge with defaults to ensure new keys (auction) exist even if DB is old
+                const data = doc.data() as GlobalConfig;
+                currentConfig = {
+                    [SubscriptionTier.COMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.COMMON], ...data[SubscriptionTier.COMMON] },
+                    [SubscriptionTier.UNCOMMON]: { ...DEFAULT_CONFIG[SubscriptionTier.UNCOMMON], ...data[SubscriptionTier.UNCOMMON] },
+                    [SubscriptionTier.RARE]: { ...DEFAULT_CONFIG[SubscriptionTier.RARE], ...data[SubscriptionTier.RARE] },
+                };
             } else {
                 // Initialize default config if missing
                 await db.collection("settings").doc("global").set(DEFAULT_CONFIG);
@@ -249,11 +273,11 @@ export const subscriptionService = {
     },
     
     // Check if user has reached their limit
-    checkLimit: async (type: 'TRADE_BINDER' | 'SHOWCASE_ITEM'): Promise<{ allowed: boolean; limit: number; current: number }> => {
+    checkLimit: async (type: 'TRADE_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
         if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
         
         const tier = currentUserProfile.subscriptionTier;
-        const limits = currentConfig[tier];
+        const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
         
         if (type === 'TRADE_BINDER') {
             const binders = await binderService.getUserBinders(currentUserProfile.id);
@@ -262,6 +286,25 @@ export const subscriptionService = {
                 allowed: tradeBinders.length < limits.maxTradeBinders,
                 limit: limits.maxTradeBinders,
                 current: tradeBinders.length
+            };
+        }
+
+        if (type === 'AUCTION_BINDER') {
+            const binders = await binderService.getUserBinders(currentUserProfile.id);
+            const auctionBinders = binders.filter(b => b.type === BinderType.AUCTION);
+            return {
+                allowed: auctionBinders.length < limits.maxAuctionBinders,
+                limit: limits.maxAuctionBinders,
+                current: auctionBinders.length
+            };
+        }
+
+        if (type === 'AUCTION_CARD' && binderId) {
+            const cards = await cardService.getCardsInBinder(binderId);
+            return {
+                allowed: cards.length < limits.maxAuctionCardsPerBinder,
+                limit: limits.maxAuctionCardsPerBinder,
+                current: cards.length
             };
         }
         
@@ -370,9 +413,34 @@ export const cardService = {
 
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
     // 1. Check Binder Limit
-    const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
-    if (countSnap.size >= BINDER_CARD_LIMIT) {
-        throw new Error(`Binder Limit Reached. Max ${BINDER_CARD_LIMIT} cards allowed.`);
+    // First, check general card limit (25)
+    // NOTE: For Auction Binders, the limit is strictly handled by Subscription Tier logic passed in. 
+    // But we still respect the hard 25 cap if not overridden, though auction limits are usually lower.
+    
+    // 2. Check Role-Based Limits if it's an Auction Binder
+    const binderRef = db.collection("binders").doc(cardData.binderId);
+    const binderSnap = await binderRef.get();
+    
+    if (binderSnap.exists) {
+        const binder = binderSnap.data() as Binder;
+        
+        // Safety count check
+        const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
+        const currentCount = countSnap.size;
+
+        if (binder.type === BinderType.AUCTION) {
+            // Re-verify limit on server-side logic (simulated here)
+            // Ideally we pass the check result from UI, but for safety:
+            // We'll trust the caller has checked subscriptionService.checkLimit for now or fallback to hard limit
+            // But let's check general hard cap
+            if (currentCount >= 25) {
+                 throw new Error("Hard storage limit reached (25).");
+            }
+        } else {
+             if (currentCount >= BINDER_CARD_LIMIT) {
+                throw new Error(`Binder Limit Reached. Max ${BINDER_CARD_LIMIT} cards allowed.`);
+             }
+        }
     }
 
     const newCard = {
@@ -383,7 +451,11 @@ export const cardService = {
       purchaseUrl: cardData.purchaseUrl ?? null,
       customPrice: cardData.customPrice ?? null,
       currency: cardData.currency ?? null,
-      price: cardData.price ?? 0, 
+      price: cardData.price ?? 0,
+      
+      // Defaults for auction
+      auctionStatus: cardData.auctionStatus || (cardData.binderType === BinderType.AUCTION ? AuctionStatus.ACTIVE : undefined),
+      currentBid: cardData.basePrice || 0
     };
     
     const docRef = await db.collection("cards").add(newCard);
@@ -462,6 +534,55 @@ export const showcaseService = {
         }
     }
 }
+
+// AUCTION SERVICE
+export const auctionService = {
+    getAllAuctions: async (): Promise<Card[]> => {
+        try {
+            const snapshot = await db.collection("cards")
+                .where("binderType", "==", BinderType.AUCTION)
+                .where("auctionStatus", "==", AuctionStatus.ACTIVE)
+                .get();
+                
+            return snapshot.docs.map(doc => mapDoc(doc) as Card);
+        } catch (e) {
+            console.error("Error fetching auctions", e);
+            return [];
+        }
+    },
+
+    placeBid: async (card: Card, userId: string): Promise<void> => {
+        if (!card.id) return;
+        
+        // Prevent self-bidding
+        if (card.userId === userId) {
+            throw new Error("You cannot bid on your own auction.");
+        }
+
+        const newBid = (card.currentBid || card.basePrice || 0) + 1;
+        
+        await db.collection("cards").doc(card.id).update({
+            currentBid: newBid,
+            topBidderId: userId
+        });
+    },
+
+    directBuy: async (card: Card, userId: string): Promise<void> => {
+        if (!card.id) return;
+
+        // Prevent self-buying
+        if (card.userId === userId) {
+            throw new Error("You cannot buy your own auction.");
+        }
+
+        await db.collection("cards").doc(card.id).update({
+            auctionStatus: AuctionStatus.SOLD,
+            winnerId: userId,
+            currentBid: card.buyItNowPrice // Set final price to BIN price
+        });
+    }
+};
+
 
 // MATCHING SERVICE
 export const matchingService = {

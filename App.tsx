@@ -7,6 +7,7 @@ import BinderDetail from './views/BinderDetail';
 import MarketMatch from './views/MarketMatch';
 import Profile from './views/Profile';
 import Showcase from './views/Showcase';
+import Auctions from './views/Auctions';
 import AdminPanel from './views/AdminPanel';
 import { auth } from './services/store';
 import { Loader2, ShieldAlert } from 'lucide-react';
@@ -71,6 +72,8 @@ const App: React.FC = () => {
                     // If we were in showcase, go back to showcase, else market
                     if (currentPage === 'showcase') {
                          handleNavigation('showcase');
+                    } else if (currentPage === 'auctions') {
+                         handleNavigation('auctions');
                     } else {
                          handleNavigation('market');
                     }
@@ -101,6 +104,10 @@ const App: React.FC = () => {
               setViewingProfileId(userId);
           }}
       />;
+    }
+
+    if (currentPage === 'auctions') {
+        return <Auctions onViewProfile={(userId) => setViewingProfileId(userId)} />;
     }
 
     if (currentPage === 'showcase') {

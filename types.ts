@@ -8,7 +8,8 @@ export enum GameType {
 export enum BinderType {
   FOR_TRADE = 'For Trade/Sell',
   WISHLIST = 'Wishlist',
-  COLLECTION = 'Personal Collection'
+  COLLECTION = 'Personal Collection',
+  AUCTION = 'Auction'
 }
 
 export enum CardCondition {
@@ -25,9 +26,17 @@ export enum SubscriptionTier {
   RARE = 'Rare'
 }
 
+export enum AuctionStatus {
+  ACTIVE = 'ACTIVE',
+  SOLD = 'SOLD', // Via Direct Buy
+  ENDED = 'ENDED' // Time ran out
+}
+
 export interface TierLimits {
   maxTradeBinders: number;
   maxShowcaseItems: number;
+  maxAuctionBinders: number;
+  maxAuctionCardsPerBinder: number;
   pricePerMonth: number;
 }
 
@@ -80,6 +89,15 @@ export interface Card {
   binderType?: BinderType;
   isShowcase?: boolean;
   game?: string;
+  
+  // Auction Specifics
+  auctionEndDate?: number; // Timestamp
+  basePrice?: number;
+  buyItNowPrice?: number;
+  currentBid?: number;
+  topBidderId?: string;
+  auctionStatus?: AuctionStatus;
+  winnerId?: string; // Final winner
 }
 
 export interface ShowcaseItem extends Card {
