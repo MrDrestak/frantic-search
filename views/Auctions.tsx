@@ -49,6 +49,12 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
 
     const handleBid = async (card: Card) => {
         if (!currentUser) return;
+        
+        if (!currentUser.whatsapp) {
+             alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before bidding.");
+             return;
+        }
+
         try {
             await auctionService.placeBid(card, currentUser.id);
             // Optimistic Update
@@ -65,6 +71,12 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
 
     const handleBuyNow = async (card: Card) => {
         if (!currentUser) return;
+
+        if (!currentUser.whatsapp) {
+             alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before buying.");
+             return;
+        }
+
         try {
             await auctionService.directBuy(card, currentUser.id);
             alert("Congratulations! You bought the card.");

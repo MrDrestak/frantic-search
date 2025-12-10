@@ -35,6 +35,14 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     if (!currentUser || !newBinderName.trim()) return;
 
     try {
+        // WhatsApp Validation for Auctions
+        if (newBinderType === BinderType.AUCTION) {
+            if (!currentUser.whatsapp) {
+                alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before creating an Auction Binder.");
+                return;
+            }
+        }
+
         // Limit Check based on Type
         let checkType: 'TRADE_BINDER' | 'AUCTION_BINDER' = 'TRADE_BINDER';
         if (newBinderType === BinderType.AUCTION) {
