@@ -43,7 +43,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                 
                 <h3 className="text-xl font-bold text-white mb-1">{tier}</h3>
                 <div className="text-2xl font-bold text-white mb-4">
-                    ${details.pricePerMonth} <span className="text-sm font-normal text-slate-400">/mo</span>
+                    {details.currency === 'PEN' ? 'S/' : '$'} {details.pricePerMonth} <span className="text-sm font-normal text-slate-400">/mo</span>
                 </div>
 
                 <div className="space-y-3 mb-6 flex-1">
@@ -64,6 +64,12 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                     <div className="flex items-center gap-2 text-sm text-slate-300">
                         <Gavel size={16} className="text-amber-500" />
                         <span>Max <b>{details.maxAuctionCardsPerBinder}</b> Cards per Auction</span>
+                    </div>
+                    
+                    {/* Alert Limits */}
+                    <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check size={16} className="text-green-500" />
+                        <span>Max <b>{details.maxCardAlerts}</b> Card Alerts</span>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm text-slate-300">
