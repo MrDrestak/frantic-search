@@ -74,6 +74,7 @@ export interface UserProfile {
   photoURL?: string;
   whatsapp?: string;
   preferredStore?: string;
+  preferredGame?: string; // New Field: Persists user game preference
   isOnline?: boolean;
   subscriptionTier: SubscriptionTier;
   isAdmin?: boolean;
@@ -180,4 +181,25 @@ export interface ScryfallCard {
     cardhoarder?: string;
     card_kingdom?: string;
   };
+}
+
+// NEW INTERFACES FOR HOME PAGE
+export interface NewsItem {
+    id: string;
+    title: string;
+    imageUrl: string;
+    linkUrl: string;
+    game: GameType;
+    date: number;
+    sourceName: string;
+}
+
+export interface StoreProfile {
+    id: string;
+    name: string;
+    logoUrl: string; // URL to logo image
+    websiteUrl: string;
+    mapsUrl: string;
+    location: string;
+    games: GameType[];
 }

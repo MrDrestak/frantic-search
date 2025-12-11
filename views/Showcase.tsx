@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { showcaseService } from '../services/store';
+import { showcaseService, auth } from '../services/store';
 import { ShowcaseItem, GameType } from '../types';
 import { Star, Search, Filter, User, ExternalLink } from 'lucide-react';
 
@@ -17,6 +17,11 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
   const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
+    // Check for user preference
+    const user = auth.getCurrentUser();
+    if (user && user.preferredGame) {
+        setGameFilter(user.preferredGame);
+    }
     loadShowcase();
   }, []);
 

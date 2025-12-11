@@ -9,6 +9,7 @@ import Profile from './views/Profile';
 import Showcase from './views/Showcase';
 import Auctions from './views/Auctions';
 import AdminPanel from './views/AdminPanel';
+import Home from './views/Home';
 import { auth } from './services/store';
 import { Loader2 } from 'lucide-react';
 
@@ -16,9 +17,9 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Initialize page from localStorage or default to dashboard
+  // Initialize page from localStorage or default to home
   const [currentPage, setCurrentPage] = useState(() => {
-    return localStorage.getItem('lotus_last_page') || 'dashboard';
+    return localStorage.getItem('lotus_last_page') || 'home';
   });
   
   const [selectedBinderId, setSelectedBinderId] = useState<string | null>(null);
@@ -80,19 +81,21 @@ const App: React.FC = () => {
                     // Clear the URL param without refreshing
                     window.history.replaceState({}, '', window.location.pathname);
 
-                    // If we were in showcase, go back to showcase, else market
-                    if (currentPage === 'showcase') {
-                         handleNavigation('showcase');
-                    } else if (currentPage === 'auctions') {
-                         handleNavigation('auctions');
+                    // Return to appropriate context
+                    if (currentPage === 'showcase' || currentPage === 'auctions' || currentPage === 'market' || currentPage === 'home') {
+                        handleNavigation(currentPage);
                     } else {
-                         handleNavigation('market');
+                        handleNavigation('market');
                     }
                 }} 
                 onViewProfile={(userId) => setViewingProfileId(userId)}
                 onAdminClick={() => handleNavigation('admin')}
             />
         );
+    }
+
+    if (currentPage === 'home') {
+        return <Home onNavigate={handleNavigation} onViewProfile={(userId) => setViewingProfileId(userId)} />;
     }
 
     if (currentPage === 'dashboard') {
@@ -111,7 +114,6 @@ const App: React.FC = () => {
       return <MarketMatch 
           onOpenChat={(userId) => {
              console.log("Open chat with", userId);
-             handleNavigation('messages'); // Placeholder navigation
           }} 
           onViewProfile={(userId) => {
               setViewingProfileId(userId);
@@ -125,15 +127,6 @@ const App: React.FC = () => {
 
     if (currentPage === 'showcase') {
         return <Showcase onViewProfile={(userId) => setViewingProfileId(userId)} />;
-    }
-
-    if (currentPage === 'messages') {
-        return (
-            <div className="p-8 text-center text-slate-500">
-                <h2 className="text-2xl text-white mb-2">Inbox</h2>
-                <p>Messaging UI would go here.</p>
-            </div>
-        )
     }
 
     if (currentPage === 'profile') {

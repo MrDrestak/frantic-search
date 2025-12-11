@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Layers, ShoppingBag, MessageSquare, User, Star, Gavel } from 'lucide-react';
+import { Layers, ShoppingBag, MessageSquare, User, Star, Gavel, Home } from 'lucide-react';
 
 interface NavbarProps {
   currentPage: string;
@@ -10,6 +10,7 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
   const navItems = [
+    { id: 'home', icon: Home, label: 'Home' },
     { id: 'dashboard', icon: Layers, label: 'Binders' },
     { id: 'market', icon: ShoppingBag, label: 'Market' },
     { id: 'auctions', icon: Gavel, label: 'Auctions' },
@@ -21,7 +22,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
     <nav className="fixed bottom-0 md:top-0 md:bottom-auto w-full bg-slate-900 border-t md:border-b md:border-t-0 border-slate-800 z-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPage('dashboard')}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPage('home')}>
             <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-lg">FS</span>
             </div>
@@ -42,7 +43,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
                 }`}
               >
                 <item.icon size={20} />
-                <span className="text-xs md:text-sm font-medium">{item.label}</span>
+                <span className="text-xs md:text-sm font-medium hidden md:inline">{item.label}</span>
+                {/* Mobile: Just Icon for most items to fit space */}
+                <span className="text-[10px] md:hidden">{item.label}</span>
               </button>
             ))}
           </div>

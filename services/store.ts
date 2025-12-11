@@ -1,7 +1,7 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile } from '../types';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -101,6 +101,7 @@ export const auth = {
         subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON, // Default to Common
         isAdmin: isAdmin,
         successfulTrades: customData.successfulTrades || 0,
+        preferredGame: customData.preferredGame || '', // Default to empty (All)
         ...customData
       };
 
@@ -112,7 +113,8 @@ export const auth = {
           // Don't overwrite tier if it exists (allows admin to set Mythic)
           subscriptionTier: customData.subscriptionTier || profile.subscriptionTier,
           isAdmin: profile.isAdmin,
-          successfulTrades: profile.successfulTrades
+          successfulTrades: profile.successfulTrades,
+          preferredGame: profile.preferredGame || null
       }, { merge: true });
 
       currentUserProfile = profile;
@@ -140,7 +142,8 @@ export const auth = {
           isOnline: true,
           subscriptionTier: SubscriptionTier.COMMON,
           isAdmin: false,
-          successfulTrades: 0
+          successfulTrades: 0,
+          preferredGame: ''
       };
       
       currentUserProfile = guestProfile;
@@ -195,6 +198,7 @@ export const auth = {
               email: current.email,
               whatsapp: updates.whatsapp || null,
               preferredStore: updates.preferredStore || null,
+              preferredGame: updates.preferredGame || null, // Persist game preference
               updatedAt: Date.now()
           };
           
@@ -233,6 +237,7 @@ export const auth = {
             subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
             isAdmin: isAdmin,
             successfulTrades: customData.successfulTrades || 0,
+            preferredGame: customData.preferredGame || '',
             ...customData
         };
         currentUserProfile = profile;
@@ -250,7 +255,8 @@ export const auth = {
                 isOnline: true,
                 subscriptionTier: SubscriptionTier.COMMON,
                 isAdmin: false,
-                successfulTrades: 0
+                successfulTrades: 0,
+                preferredGame: ''
              };
              currentUserProfile = guestProfile;
              await configService.loadConfig();
@@ -564,6 +570,8 @@ export const adminService = {
             await deleteCollection('binders');
             await deleteCollection('cards');
             await deleteCollection('trade_interactions');
+            await deleteCollection('news');
+            await deleteCollection('stores');
             console.log("DB Wipe Complete.");
             return true;
         } catch (e) {
@@ -792,6 +800,20 @@ export const showcaseService = {
             console.error("Error fetching showcase items", e);
             return [];
         }
+    },
+    
+    // Updated: Get top 10 newest
+    getNewestShowcase: async (): Promise<ShowcaseItem[]> => {
+        // Since we can't easily do a global sort without composite indexes on everything, 
+        // we'll reuse getShowcaseItems (which fetches 50) and take top 10.
+        // In production, you'd use a specific index: .orderBy('addedAt', 'desc').limit(10)
+        try {
+            const items = await showcaseService.getShowcaseItems();
+            return items.slice(0, 10);
+        } catch(e) {
+            console.error("Error fetching newest showcase", e);
+            return [];
+        }
     }
 }
 
@@ -893,7 +915,8 @@ export const matchingService = {
                     email: '',
                     isOnline: false,
                     subscriptionTier: SubscriptionTier.COMMON,
-                    successfulTrades: 0
+                    successfulTrades: 0,
+                    preferredGame: ''
                 };
 
                 try {
@@ -917,6 +940,43 @@ export const matchingService = {
     
     return matches;
   }
+};
+
+// NEW SERVICES
+export const newsService = {
+    getNews: async (): Promise<NewsItem[]> => {
+        try {
+            const snap = await db.collection("news").orderBy('date', 'desc').limit(20).get();
+            return snap.docs.map(d => mapDoc(d) as NewsItem);
+        } catch (e) {
+            console.error("Error fetching news", e);
+            return [];
+        }
+    },
+    addNews: async (news: Omit<NewsItem, 'id'>) => {
+        await db.collection("news").add(news);
+    },
+    deleteNews: async (id: string) => {
+        await db.collection("news").doc(id).delete();
+    }
+};
+
+export const storeDirectoryService = {
+    getStores: async (): Promise<StoreProfile[]> => {
+        try {
+            const snap = await db.collection("stores").get();
+            return snap.docs.map(d => mapDoc(d) as StoreProfile);
+        } catch (e) {
+            console.error("Error fetching stores", e);
+            return [];
+        }
+    },
+    addStore: async (store: Omit<StoreProfile, 'id'>) => {
+        await db.collection("stores").add(store);
+    },
+    deleteStore: async (id: string) => {
+        await db.collection("stores").doc(id).delete();
+    }
 };
 
 export const messagingService = {

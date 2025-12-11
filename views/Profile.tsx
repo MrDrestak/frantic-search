@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2 } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -77,7 +77,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Form State
   const [nickname, setNickname] = useState('');
   const [storeName, setStoreName] = useState('');
-  
+  const [preferredGame, setPreferredGame] = useState(''); // New Form State
+
   // WhatsApp Logic
   const [countryCode, setCountryCode] = useState('51');
   const [localPhone, setLocalPhone] = useState('');
@@ -108,6 +109,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             targetId = currentUser.id;
             setNickname(currentUser.displayName || '');
             setStoreName(currentUser.preferredStore || '');
+            setPreferredGame(currentUser.preferredGame || '');
             
             // Parse existing WhatsApp
             const storedWhatsapp = currentUser.whatsapp || '';
@@ -249,7 +251,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         await auth.updateProfile({
             displayName: nickname,
             whatsapp: finalWhatsapp,
-            preferredStore: storeName
+            preferredStore: storeName,
+            preferredGame: preferredGame
         });
         setIsEditing(false);
         loadProfile(); 
@@ -426,9 +429,21 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                     {user.displayName}
                                 </h2>
                                 {isOwnProfile && (
-                                    <p className="text-slate-400 flex items-center gap-2 text-sm mt-1">
-                                        <Mail size={14} /> {user.email}
-                                    </p>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                        <p className="text-slate-400 flex items-center gap-2 text-sm">
+                                            <Mail size={14} /> {user.email}
+                                        </p>
+                                        {user.preferredGame && (
+                                             <p className="text-indigo-400 flex items-center gap-2 text-sm font-medium">
+                                                 <Gamepad2 size={14} /> Plays: {user.preferredGame}
+                                             </p>
+                                        )}
+                                    </div>
+                                )}
+                                {!isOwnProfile && user.preferredGame && (
+                                     <p className="text-indigo-400 flex items-center gap-2 text-sm font-medium mt-1">
+                                         <Gamepad2 size={14} /> Plays: {user.preferredGame}
+                                     </p>
                                 )}
                             </div>
                             <div className="flex flex-col gap-2">
@@ -580,6 +595,27 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                         required
                                     />
                                 </div>
+                            </div>
+
+                            {/* Preferred Game */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Preferred Game (Auto-Filters)</label>
+                                <div className="relative">
+                                    <Gamepad2 className="absolute left-3 top-3 text-slate-500" size={18} />
+                                    <select 
+                                        value={preferredGame}
+                                        onChange={(e) => setPreferredGame(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none appearance-none"
+                                    >
+                                        <option value="">Every Game (Show All)</option>
+                                        {Object.values(GameType).map((g) => (
+                                            <option key={g} value={g}>{g}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Selecting a game here will automatically filter News and Showcase sections to show this game first.
+                                </p>
                             </div>
 
                             {/* WhatsApp Verification Section */}
