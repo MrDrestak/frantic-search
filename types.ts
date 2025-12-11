@@ -131,6 +131,7 @@ export interface MatchResult {
   card: Card;
   matchCard: Card;
   seller: UserProfile;
+  matchType?: 'EXACT' | 'LOOSE';
 }
 
 export interface ChatMessage {

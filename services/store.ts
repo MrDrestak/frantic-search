@@ -323,17 +323,20 @@ export const tradeService = {
 
         try {
             // Check for duplicate recent interactions (throttle)
+            // UPDATED: Simplified query to avoid index errors. Removed orderBy.
             const recentSnap = await db.collection('trade_interactions')
                 .where('buyerId', '==', currentUserProfile.id)
                 .where('sellerId', '==', sellerId)
                 .where('status', '==', 'PENDING')
-                .orderBy('timestamp', 'desc')
-                .limit(1)
                 .get();
 
             // If an interaction exists from less than 24h ago, don't spam
             if (!recentSnap.empty) {
-                const last = recentSnap.docs[0].data();
+                // Find latest in memory
+                const interactions = recentSnap.docs.map(d => d.data());
+                interactions.sort((a, b) => b.timestamp - a.timestamp);
+                const last = interactions[0];
+                
                 if (Date.now() - last.timestamp < 24 * 60 * 60 * 1000) {
                     return; 
                 }
@@ -873,8 +876,17 @@ export const matchingService = {
             const candidateUserId = String(candidate.userId);
             if (candidateUserId === currentUserId) continue; 
 
-            const wantCard = myWants.find(w => w.name === candidate.name);
+            // SMART MATCHING LOGIC
+            // 1. Try to find a wishlist item that matches both Name and ScryfallID (Exact Version)
+            const exactWant = myWants.find(w => w.name === candidate.name && w.scryfallId === candidate.scryfallId);
+            // 2. Fallback: Find any wishlist item with the same name
+            const looseWant = myWants.find(w => w.name === candidate.name);
+
+            const wantCard = exactWant || looseWant;
+
             if (wantCard) {
+                const matchType = exactWant ? 'EXACT' : 'LOOSE';
+                
                 let sellerProfile: UserProfile = {
                     id: candidateUserId,
                     displayName: 'Remote User', 
@@ -896,7 +908,8 @@ export const matchingService = {
                 matches.push({
                     card: wantCard,
                     matchCard: candidate,
-                    seller: sellerProfile
+                    seller: sellerProfile,
+                    matchType: matchType
                 });
             }
         }
