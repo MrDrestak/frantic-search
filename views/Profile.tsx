@@ -407,8 +407,12 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     </div>
                 </div>
                 {/* Subscription Badge Positioned Top Right */}
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
                     {renderTierBadge(user.subscriptionTier)}
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-950/60 backdrop-blur-md border border-slate-700 text-slate-200 shadow-sm">
+                         <ThumbsUp size={12} className="text-green-400" />
+                         Trader Value: {user.successfulTrades || 0}
+                    </div>
                 </div>
             </div>
 
@@ -420,11 +424,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                             <div>
                                 <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                                     {user.displayName}
-                                    {user.successfulTrades! > 0 && (
-                                        <span className="text-xs bg-green-900/40 text-green-400 border border-green-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                            <ThumbsUp size={10} /> {user.successfulTrades} Trades
-                                        </span>
-                                    )}
                                 </h2>
                                 {isOwnProfile && (
                                     <p className="text-slate-400 flex items-center gap-2 text-sm mt-1">
