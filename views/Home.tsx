@@ -87,6 +87,16 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         }
     };
 
+    const handleStoreClick = (store: StoreProfile) => {
+        if (store.linkedUserId) {
+            // Priority: Internal Profile
+            onViewProfile(store.linkedUserId);
+        } else if (store.websiteUrl) {
+            // Fallback: External Website
+            window.open(store.websiteUrl, '_blank');
+        }
+    };
+
     if (loading) return <div className="p-10 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Home...</div>;
 
     return (
@@ -234,37 +244,56 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                     {stores.map(store => (
                         <div key={store.id} className="flex flex-col items-center text-center group">
-                            {/* Logo */}
-                            <a 
-                                href={store.websiteUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="w-24 h-24 md:w-32 md:h-32 bg-slate-900 rounded-full border border-slate-800 flex items-center justify-center p-4 mb-3 transition-transform duration-300 group-hover:scale-105 group-hover:border-green-500/50 group-hover:shadow-lg group-hover:shadow-green-900/20 overflow-hidden"
+                            {/* Logo: Square, No Effects, Zoom on Hover, White Background, Handle Click */}
+                            <button 
+                                onClick={() => handleStoreClick(store)}
+                                className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-xl flex items-center justify-center p-2 mb-3 transition-transform duration-300 group-hover:scale-105 overflow-hidden cursor-pointer shadow-lg"
+                                title={store.linkedUserId ? "View Store Profile" : "Visit Website"}
                             >
                                 <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
-                            </a>
+                            </button>
 
-                            <h3 className="text-white font-bold mb-1">{store.name}</h3>
-                            
-                            <a 
-                                href={store.mapsUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1 mb-2"
+                            <button 
+                                onClick={() => handleStoreClick(store)}
+                                className="text-white font-bold mb-1 hover:text-indigo-400 transition-colors"
                             >
-                                <MapPin size={10} /> {store.location}
-                            </a>
+                                {store.name}
+                            </button>
+                            
+                            <div className="flex items-center gap-2 mb-2">
+                                <a 
+                                    href={store.mapsUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1"
+                                    title="View Location"
+                                >
+                                    <MapPin size={10} /> {store.location}
+                                </a>
+                                
+                                {/* Always allow going to website via icon */}
+                                {store.websiteUrl && (
+                                     <a 
+                                        href={store.websiteUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs text-slate-400 hover:text-blue-400"
+                                        title="Official Website"
+                                     >
+                                         <ExternalLink size={10} />
+                                     </a>
+                                )}
+                            </div>
 
-                            <div className="flex gap-1 justify-center flex-wrap">
+                            {/* Game Badges */}
+                            <div className="flex gap-1 justify-center flex-wrap mt-1">
                                 {store.games.map(g => (
                                     <span 
                                         key={g} 
-                                        title={g}
-                                        className={`w-2 h-2 rounded-full ${
-                                            g === GameType.MTG ? 'bg-indigo-500' : 
-                                            g === GameType.POKEMON ? 'bg-yellow-500' : 'bg-rose-500'
-                                        }`}
-                                    />
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getGameBadgeColor(g)}`}
+                                    >
+                                        {g === GameType.MTG ? 'MTG' : g === GameType.POKEMON ? 'PKM' : 'YGO'}
+                                    </span>
                                 ))}
                             </div>
                         </div>

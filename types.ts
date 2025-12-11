@@ -202,4 +202,5 @@ export interface StoreProfile {
     mapsUrl: string;
     location: string;
     games: GameType[];
+    linkedUserId?: string; // OPTIONAL: ID of the UserProfile within the app
 }
