@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { matchingService, auth } from '../services/store';
+import { matchingService, auth, tradeService } from '../services/store';
 import { MatchResult } from '../types';
 import { MessageCircle, User, MapPin } from 'lucide-react';
 import { getCardImage } from '../services/scryfallService';
@@ -26,6 +26,20 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
         setMatches(results);
     }
     setLoading(false);
+  };
+
+  const handleContact = async (match: MatchResult) => {
+      // 1. Log Interaction
+      await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
+      
+      // 2. Open WhatsApp if available
+      if (match.seller.whatsapp) {
+          const text = `Hi! I saw you have ${match.matchCard.name} for trade on Lotus Exchange. Is it still available?`;
+          window.open(`https://wa.me/${match.seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank');
+      } else {
+          // Fallback to viewing profile if no WhatsApp
+          onViewProfile(match.seller.id);
+      }
   };
 
   return (
@@ -104,10 +118,10 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                             )}
 
                             <button 
-                                onClick={() => onViewProfile(match.seller.id)}
+                                onClick={() => handleContact(match)}
                                 className="w-full bg-violet-600 hover:bg-violet-700 text-white text-sm py-2 rounded flex items-center justify-center gap-2 transition-colors"
                             >
-                                <User size={16} /> Contact Seller
+                                <MessageCircle size={16} /> Contact Seller
                             </button>
                        </div>
                    </div>

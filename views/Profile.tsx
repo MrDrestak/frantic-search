@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth, cardService } from '../services/store';
-import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft } from 'lucide-react';
+import { auth, cardService, tradeService } from '../services/store';
+import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction } from '../types';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -69,6 +69,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const [gameFilter, setGameFilter] = useState<string>(''); // Empty = All
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingStorefront, setIsLoadingStorefront] = useState(false);
+  
+  // Interaction State
+  const [showContact, setShowContact] = useState(false);
+  const [pendingFeedbacks, setPendingFeedbacks] = useState<TradeInteraction[]>([]);
 
   // Form State
   const [nickname, setNickname] = useState('');
@@ -131,6 +135,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             }
 
             loadMyAuctions(currentUser.id);
+            loadPendingFeedback();
         }
     } else if (viewingUserId) {
         // Load OTHER profile
@@ -148,6 +153,11 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
     setIsLoading(false);
   };
+
+  const loadPendingFeedback = async () => {
+      const pending = await tradeService.getPendingFeedback();
+      setPendingFeedbacks(pending);
+  }
 
   const loadMyAuctions = async (uid: string) => {
       try {
@@ -262,6 +272,22 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       navigator.clipboard.writeText(url).then(() => {
           alert("Profile link copied to clipboard! Share it on Facebook or Discord.");
       });
+  };
+
+  const handleRevealContact = async () => {
+      if (!user) return;
+      setShowContact(true);
+      await tradeService.logInteraction(user.id, user.displayName, 'Storefront Visit');
+      window.open(`https://wa.me/${user.whatsapp}`, '_blank');
+  };
+
+  const handleFeedback = async (id: string, success: boolean) => {
+      if (!success) {
+          await tradeService.dismissFeedback(id);
+      } else {
+          await tradeService.confirmTrade(id, true);
+      }
+      loadPendingFeedback(); // Refresh
   };
 
   const renderTierBadge = (tier: SubscriptionTier) => {
@@ -392,7 +418,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     <div className="animate-in fade-in duration-300">
                         <div className="flex justify-between items-start mb-6">
                             <div>
-                                <h2 className="text-2xl font-bold text-white">{user.displayName}</h2>
+                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                                    {user.displayName}
+                                    {user.successfulTrades! > 0 && (
+                                        <span className="text-xs bg-green-900/40 text-green-400 border border-green-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                            <ThumbsUp size={10} /> {user.successfulTrades} Trades
+                                        </span>
+                                    )}
+                                </h2>
                                 {isOwnProfile && (
                                     <p className="text-slate-400 flex items-center gap-2 text-sm mt-1">
                                         <Mail size={14} /> {user.email}
@@ -431,15 +464,28 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${user.whatsapp ? 'bg-green-500/10 text-green-500' : 'bg-slate-800 text-slate-500'}`}>
                                          <Phone size={16} />
                                      </div>
-                                     <span className={`font-mono text-lg ${!user.whatsapp && 'text-slate-500'}`}>
-                                        {user.whatsapp ? (
-                                            isOwnProfile ? user.whatsapp : (
-                                                <a href={`https://wa.me/${user.whatsapp}`} target="_blank" rel="noreferrer" className="hover:underline hover:text-green-400">
-                                                    {user.whatsapp}
-                                                </a>
-                                            )
-                                        ) : "Not set"}
-                                     </span>
+                                     <div className="flex-1">
+                                         {user.whatsapp ? (
+                                             isOwnProfile ? (
+                                                 <span className="font-mono text-lg">{user.whatsapp}</span>
+                                             ) : (
+                                                 !showContact ? (
+                                                     <button 
+                                                        onClick={handleRevealContact}
+                                                        className="bg-green-600 hover:bg-green-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all"
+                                                     >
+                                                         <Eye size={14} /> Reveal Contact
+                                                     </button>
+                                                 ) : (
+                                                    <a href={`https://wa.me/${user.whatsapp}`} target="_blank" rel="noreferrer" className="hover:underline hover:text-green-400 font-mono text-lg flex items-center gap-1">
+                                                        {user.whatsapp} <ExternalLink size={14}/>
+                                                    </a>
+                                                 )
+                                             )
+                                         ) : (
+                                             <span className="text-slate-500 italic">Not set</span>
+                                         )}
+                                     </div>
                                  </div>
                                  {!user.whatsapp && isOwnProfile && (
                                      <p className="text-xs text-amber-500 mt-2 flex items-center gap-1">
@@ -481,6 +527,41 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                  )}
                              </div>
                         </div>
+
+                        {/* Pending Feedback Section (Only on Own Profile) */}
+                        {isOwnProfile && pendingFeedbacks.length > 0 && (
+                            <div className="mt-6 pt-6 border-t border-slate-800 animate-in slide-in-from-top-4">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <CheckCircle className="text-violet-400" /> Pending Trade Confirmations
+                                </h3>
+                                <div className="space-y-3">
+                                    {pendingFeedbacks.map(item => (
+                                        <div key={item.id} className="bg-slate-950/50 border border-slate-700 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                                            <div>
+                                                <p className="text-slate-200 text-sm">
+                                                    Did you successfully trade <b>{item.cardName}</b> with <span className="text-white font-bold">{item.sellerName}</span>?
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-1">Contacted {Math.floor((Date.now() - item.timestamp) / (1000 * 60 * 60))} hours ago</p>
+                                            </div>
+                                            <div className="flex gap-2 w-full md:w-auto">
+                                                <button 
+                                                    onClick={() => handleFeedback(item.id, false)}
+                                                    className="flex-1 md:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <X size={16} /> No / Ignore
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleFeedback(item.id, true)}
+                                                    className="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
+                                                >
+                                                    <ThumbsUp size={16} /> Yes!
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     // EDIT MODE

@@ -1,7 +1,7 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction } from '../types';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -62,9 +62,15 @@ const DEFAULT_CONFIG: GlobalConfig = {
     },
 };
 
+const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+    minTradeConfirmHours: 24,
+    maxTradeConfirmHours: 72
+};
+
 // AUTH SERVICE
 let currentUserProfile: UserProfile | null = null;
 let currentConfig: GlobalConfig = DEFAULT_CONFIG;
+let currentSystemConfig: SystemConfig = DEFAULT_SYSTEM_CONFIG;
 
 export const auth = {
   login: async (): Promise<UserProfile> => {
@@ -94,6 +100,7 @@ export const auth = {
         isOnline: true,
         subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON, // Default to Common
         isAdmin: isAdmin,
+        successfulTrades: customData.successfulTrades || 0,
         ...customData
       };
 
@@ -104,7 +111,8 @@ export const auth = {
           lastLogin: Date.now(),
           // Don't overwrite tier if it exists (allows admin to set Mythic)
           subscriptionTier: customData.subscriptionTier || profile.subscriptionTier,
-          isAdmin: profile.isAdmin
+          isAdmin: profile.isAdmin,
+          successfulTrades: profile.successfulTrades
       }, { merge: true });
 
       currentUserProfile = profile;
@@ -131,7 +139,8 @@ export const auth = {
           photoURL: undefined,
           isOnline: true,
           subscriptionTier: SubscriptionTier.COMMON,
-          isAdmin: false
+          isAdmin: false,
+          successfulTrades: 0
       };
       
       currentUserProfile = guestProfile;
@@ -150,7 +159,8 @@ export const auth = {
               return { 
                   id: doc.id, 
                   ...data,
-                  subscriptionTier: data.subscriptionTier || SubscriptionTier.COMMON
+                  subscriptionTier: data.subscriptionTier || SubscriptionTier.COMMON,
+                  successfulTrades: data.successfulTrades || 0
               } as UserProfile;
           }
           return null;
@@ -222,6 +232,7 @@ export const auth = {
             isOnline: true,
             subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
             isAdmin: isAdmin,
+            successfulTrades: customData.successfulTrades || 0,
             ...customData
         };
         currentUserProfile = profile;
@@ -238,7 +249,8 @@ export const auth = {
                 photoURL: undefined,
                 isOnline: true,
                 subscriptionTier: SubscriptionTier.COMMON,
-                isAdmin: false
+                isAdmin: false,
+                successfulTrades: 0
              };
              currentUserProfile = guestProfile;
              await configService.loadConfig();
@@ -256,17 +268,14 @@ export const auth = {
 export const configService = {
     loadConfig: async () => {
         try {
+            // Load Tier Config
             const doc = await db.collection("settings").doc("global").get();
             if (doc.exists) {
-                // Merge with defaults to ensure new keys exist even if DB is old
                 const data = doc.data() as GlobalConfig;
-                
-                // Helper to merge nested objects
                 const mergeTier = (tier: SubscriptionTier) => ({
                     ...DEFAULT_CONFIG[tier],
                     ...(data[tier] || {})
                 });
-
                 currentConfig = {
                     [SubscriptionTier.COMMON]: mergeTier(SubscriptionTier.COMMON),
                     [SubscriptionTier.UNCOMMON]: mergeTier(SubscriptionTier.UNCOMMON),
@@ -274,22 +283,133 @@ export const configService = {
                     [SubscriptionTier.MYTHIC]: mergeTier(SubscriptionTier.MYTHIC),
                 };
             } else {
-                // Initialize default config if missing
                 await db.collection("settings").doc("global").set(DEFAULT_CONFIG);
                 currentConfig = DEFAULT_CONFIG;
             }
+
+            // Load System Config
+            const sysDoc = await db.collection("settings").doc("system").get();
+            if (sysDoc.exists) {
+                currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysDoc.data() as SystemConfig) };
+            } else {
+                await db.collection("settings").doc("system").set(DEFAULT_SYSTEM_CONFIG);
+                currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
+            }
+
         } catch (e) {
             console.warn("Using default config (offline)", e);
             currentConfig = DEFAULT_CONFIG;
+            currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
         }
         return currentConfig;
     },
     getConfig: () => currentConfig,
+    getSystemConfig: () => currentSystemConfig,
     updateConfig: async (newConfig: GlobalConfig) => {
         await db.collection("settings").doc("global").set(newConfig);
         currentConfig = newConfig;
+    },
+    updateSystemConfig: async (newSysConfig: SystemConfig) => {
+        await db.collection("settings").doc("system").set(newSysConfig);
+        currentSystemConfig = newSysConfig;
     }
 };
+
+// TRADE & REPUTATION SERVICE
+export const tradeService = {
+    logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
+        if (!currentUserProfile) return;
+        if (currentUserProfile.id === sellerId) return; // Self contact doesn't count
+
+        try {
+            // Check for duplicate recent interactions (throttle)
+            const recentSnap = await db.collection('trade_interactions')
+                .where('buyerId', '==', currentUserProfile.id)
+                .where('sellerId', '==', sellerId)
+                .where('status', '==', 'PENDING')
+                .orderBy('timestamp', 'desc')
+                .limit(1)
+                .get();
+
+            // If an interaction exists from less than 24h ago, don't spam
+            if (!recentSnap.empty) {
+                const last = recentSnap.docs[0].data();
+                if (Date.now() - last.timestamp < 24 * 60 * 60 * 1000) {
+                    return; 
+                }
+            }
+
+            const interaction: TradeInteraction = {
+                id: '', // filled by firestore
+                buyerId: currentUserProfile.id,
+                sellerId,
+                sellerName,
+                cardName,
+                timestamp: Date.now(),
+                status: 'PENDING'
+            };
+
+            await db.collection('trade_interactions').add(interaction);
+        } catch (e) {
+            console.error("Failed to log trade interaction", e);
+        }
+    },
+
+    getPendingFeedback: async (): Promise<TradeInteraction[]> => {
+        if (!currentUserProfile) return [];
+        
+        try {
+            const snap = await db.collection('trade_interactions')
+                .where('buyerId', '==', currentUserProfile.id)
+                .where('status', '==', 'PENDING')
+                .get();
+
+            const now = Date.now();
+            const minTime = currentSystemConfig.minTradeConfirmHours * 60 * 60 * 1000;
+            const maxTime = currentSystemConfig.maxTradeConfirmHours * 60 * 60 * 1000;
+
+            const pending = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TradeInteraction));
+            
+            // Filter locally for time window
+            return pending.filter(i => {
+                const diff = now - i.timestamp;
+                return diff >= minTime && diff <= maxTime;
+            });
+        } catch (e) {
+            console.error("Failed to get pending feedback", e);
+            return [];
+        }
+    },
+
+    confirmTrade: async (interactionId: string, isSuccessful: boolean) => {
+        if (!currentUserProfile) return;
+
+        const interactionRef = db.collection('trade_interactions').doc(interactionId);
+        
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(interactionRef);
+            if (!doc.exists) throw new Error("Interaction not found");
+            const data = doc.data() as TradeInteraction;
+
+            if (isSuccessful) {
+                // Update Interaction
+                t.update(interactionRef, { status: 'CONFIRMED' });
+                
+                // Increment Seller Rep
+                const sellerRef = db.collection('users').doc(data.sellerId);
+                t.update(sellerRef, {
+                    successfulTrades: firebase.firestore.FieldValue.increment(1)
+                });
+            } else {
+                t.update(interactionRef, { status: 'CANCELLED' });
+            }
+        });
+    },
+
+    dismissFeedback: async (interactionId: string) => {
+         await db.collection('trade_interactions').doc(interactionId).update({ status: 'IGNORED' });
+    }
+}
 
 // SUBSCRIPTION SERVICE
 export const subscriptionService = {
@@ -440,6 +560,7 @@ export const adminService = {
             await deleteCollection('users');
             await deleteCollection('binders');
             await deleteCollection('cards');
+            await deleteCollection('trade_interactions');
             console.log("DB Wipe Complete.");
             return true;
         } catch (e) {
@@ -759,7 +880,8 @@ export const matchingService = {
                     displayName: 'Remote User', 
                     email: '',
                     isOnline: false,
-                    subscriptionTier: SubscriptionTier.COMMON
+                    subscriptionTier: SubscriptionTier.COMMON,
+                    successfulTrades: 0
                 };
 
                 try {

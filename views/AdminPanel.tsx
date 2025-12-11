@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock } from 'lucide-react';
 import { configService, auth, adminService } from '../services/store';
-import { GlobalConfig, SubscriptionTier, TierLimits } from '../types';
+import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig } from '../types';
 
 interface AdminPanelProps {
     onBack: () => void;
@@ -10,6 +10,7 @@ interface AdminPanelProps {
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     const [config, setConfig] = useState<GlobalConfig | null>(null);
+    const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isWiping, setIsWiping] = useState(false);
@@ -32,15 +33,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             return;
         }
         const data = await configService.loadConfig();
+        const sysData = configService.getSystemConfig();
         setConfig(data);
+        setSysConfig(sysData);
         setIsLoading(false);
     };
 
     const handleSave = async () => {
-        if (!config) return;
+        if (!config || !sysConfig) return;
         setIsSaving(true);
         try {
             await configService.updateConfig(config);
+            await configService.updateSystemConfig(sysConfig);
             alert("Settings saved successfully.");
         } catch (e) {
             console.error("Save failed", e);
@@ -117,7 +121,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         );
     }
 
-    if (isLoading || !config) {
+    if (isLoading || !config || !sysConfig) {
         return <div className="p-10 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Admin Panel...</div>;
     }
 
@@ -144,6 +148,35 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     </button>
                 </div>
             </header>
+
+            {/* System Configuration */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+                <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <Clock size={20} className="text-blue-500" /> Trade Verification Logic
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="text-sm font-medium text-slate-300 block mb-1">Minimum Wait (Hours)</label>
+                        <p className="text-xs text-slate-500 mb-2">How long to wait after initial contact before asking buyer for feedback.</p>
+                        <input 
+                            type="number"
+                            value={sysConfig.minTradeConfirmHours}
+                            onChange={(e) => setSysConfig({...sysConfig, minTradeConfirmHours: parseInt(e.target.value)})}
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-slate-300 block mb-1">Maximum Window (Hours)</label>
+                        <p className="text-xs text-slate-500 mb-2">How long the feedback request remains active before expiring.</p>
+                        <input 
+                            type="number"
+                            value={sysConfig.maxTradeConfirmHours}
+                            onChange={(e) => setSysConfig({...sysConfig, maxTradeConfirmHours: parseInt(e.target.value)})}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-blue-500"
+                        />
+                    </div>
+                </div>
+            </div>
 
             {/* Main Configuration Grid */}
             <div className="space-y-8">

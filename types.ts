@@ -62,6 +62,11 @@ export interface GlobalConfig {
   [SubscriptionTier.MYTHIC]: TierLimits;
 }
 
+export interface SystemConfig {
+    minTradeConfirmHours: number;
+    maxTradeConfirmHours: number;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -72,6 +77,7 @@ export interface UserProfile {
   isOnline?: boolean;
   subscriptionTier: SubscriptionTier;
   isAdmin?: boolean;
+  successfulTrades?: number;
 }
 
 export interface Binder {
@@ -134,6 +140,16 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   read: boolean;
+}
+
+export interface TradeInteraction {
+    id: string;
+    buyerId: string;
+    sellerId: string;
+    sellerName: string; // Cached for display
+    cardName?: string; // Context
+    timestamp: number;
+    status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'IGNORED';
 }
 
 export interface ScryfallCard {
