@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -86,6 +86,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const [verificationStatus, setVerificationStatus] = useState<'IDLE' | 'SENT' | 'VERIFIED'>('IDLE');
   const [generatedCode, setGeneratedCode] = useState('');
   const [inputCode, setInputCode] = useState('');
+
+  // UX State
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const isOwnProfile = !viewingUserId || viewingUserId === auth.getCurrentUser()?.id;
 
@@ -285,6 +288,13 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       window.open(`https://wa.me/${user.whatsapp}`, '_blank');
   };
 
+  const handleCopyEmail = () => {
+      if (!user?.email) return;
+      navigator.clipboard.writeText(user.email);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2000);
+  }
+
   const handleFeedback = async (id: string, success: boolean) => {
       if (!success) {
           await tradeService.dismissFeedback(id);
@@ -434,16 +444,26 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                 {!isEditing ? (
                     // VIEW MODE
                     <div className="animate-in fade-in duration-300">
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <div className="mb-6">
+                            <div className="flex flex-col gap-1 w-full">
+                                {/* Responsive Name: break-words ensures long nicknames don't overflow */}
+                                <h2 className="text-2xl md:text-3xl font-bold text-white break-words leading-tight">
                                     {user.displayName}
                                 </h2>
+                                
+                                {/* Email with Click-to-Copy */}
                                 {isOwnProfile && (
                                     <div className="flex flex-col gap-1 mt-1">
-                                        <p className="text-slate-400 flex items-center gap-2 text-sm">
-                                            <Mail size={14} /> {user.email}
-                                        </p>
+                                        <button 
+                                            onClick={handleCopyEmail}
+                                            className="text-slate-400 flex items-center gap-2 text-sm hover:text-white transition-colors w-fit group"
+                                            title="Click to copy email"
+                                        >
+                                            <Mail size={14} /> 
+                                            <span className="truncate max-w-[200px] md:max-w-none">{user.email}</span>
+                                            {emailCopied ? <Check size={12} className="text-green-500" /> : <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                        </button>
+                                        
                                         {user.preferredGame && (
                                              <p className="text-indigo-400 flex items-center gap-2 text-sm font-medium">
                                                  <Gamepad2 size={14} /> Plays: {user.preferredGame}
@@ -457,28 +477,28 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                      </p>
                                 )}
                             </div>
-                            <div className="flex flex-col gap-2">
-                                {isOwnProfile && (
-                                    <div className="flex flex-col md:flex-row gap-2">
+
+                            {/* Buttons Moved Below Email */}
+                            {isOwnProfile && (
+                                <div className="mt-5 flex gap-3 w-full">
+                                    <button 
+                                        onClick={() => setIsEditing(true)}
+                                        className="flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors border border-slate-700"
+                                    >
+                                        <Edit2 size={16} /> <span className="whitespace-nowrap">Edit Profile</span>
+                                    </button>
+                                    
+                                    {/* Don't show upgrade button for Mythic users */}
+                                    {user.subscriptionTier !== SubscriptionTier.MYTHIC && (
                                         <button 
-                                            onClick={() => setIsEditing(true)}
-                                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors border border-slate-700"
+                                            onClick={() => setShowSubscriptionModal(true)}
+                                            className="flex-1 md:flex-none bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20"
                                         >
-                                            <Edit2 size={16} /> Edit Profile
+                                            <Crown size={16} /> <span className="whitespace-nowrap">Update Plan</span>
                                         </button>
-                                        
-                                        {/* Don't show upgrade button for Mythic users */}
-                                        {user.subscriptionTier !== SubscriptionTier.MYTHIC && (
-                                            <button 
-                                                onClick={() => setShowSubscriptionModal(true)}
-                                                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20"
-                                            >
-                                                <Crown size={16} /> Upgrade Plan
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
