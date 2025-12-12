@@ -356,9 +356,15 @@ const StoreManagerTab = () => {
             }
         }
 
-        await storeDirectoryService.addStore({
-            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames, linkedUserId
-        });
+        // Construct payload safely. If linkedUserId is undefined, do not include it or ensure type safety
+        const payload: any = {
+            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames
+        };
+        if (linkedUserId) {
+            payload.linkedUserId = linkedUserId;
+        }
+
+        await storeDirectoryService.addStore(payload);
         setIsFormOpen(false);
         // Reset
         setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
@@ -391,7 +397,7 @@ const StoreManagerTab = () => {
                              <div className="relative">
                                 <Link size={16} className="absolute left-3 top-3 text-slate-500" />
                                 <input 
-                                    placeholder="Linked Profile (Paste Share Link)" 
+                                    placeholder="Linked Profile (Paste Share Link) - Optional" 
                                     value={linkedProfileInput} 
                                     onChange={e=>setLinkedProfileInput(e.target.value)} 
                                     className="bg-slate-950 border border-slate-700 rounded p-2 pl-9 text-white w-full"
