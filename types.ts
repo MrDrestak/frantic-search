@@ -75,6 +75,7 @@ export interface UserProfile {
   whatsapp?: string;
   preferredStore?: string;
   preferredGame?: string; // New Field: Persists user game preference
+  storeAnnouncement?: string; // New Field: Storefront Announcement/Status
   isOnline?: boolean;
   subscriptionTier: SubscriptionTier;
   isAdmin?: boolean;
@@ -202,4 +203,5 @@ export interface StoreProfile {
     mapsUrl: string;
     location: string;
     games: GameType[];
+    linkedUserId?: string; // OPTIONAL: ID of the UserProfile within the app to link directly
 }

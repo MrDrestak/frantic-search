@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType } from '../types';
 
@@ -159,7 +159,7 @@ const SystemConfigTab = () => {
                              </div>
                          </div>
                          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                             {/* Simplified inputs for brevity - assuming logic mirrors previous file */}
+                             {/* Simplified inputs for brevity */}
                              <div className="space-y-2">
                                  <h4 className="text-xs uppercase text-indigo-400 font-bold">Trade</h4>
                                  <input type="number" placeholder="Binders" value={config[tier].maxTradeBinders} onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
@@ -326,6 +326,7 @@ const StoreManagerTab = () => {
     const [logoUrl, setLogoUrl] = useState('');
     const [websiteUrl, setWebsiteUrl] = useState('');
     const [mapsUrl, setMapsUrl] = useState('');
+    const [linkedProfileInput, setLinkedProfileInput] = useState(''); // New input for URL or ID
     const [selectedGames, setSelectedGames] = useState<GameType[]>([]);
 
     useEffect(() => { load(); }, []);
@@ -342,12 +343,25 @@ const StoreManagerTab = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        let linkedUserId: string | undefined = undefined;
+        if (linkedProfileInput.trim()) {
+            // Smart Parser: Check if it's a URL with query param 'trader'
+            const urlMatch = linkedProfileInput.match(/[?&]trader=([^&]+)/);
+            if (urlMatch) {
+                linkedUserId = urlMatch[1];
+            } else {
+                // Otherwise assume it's the raw ID
+                linkedUserId = linkedProfileInput.trim();
+            }
+        }
+
         await storeDirectoryService.addStore({
-            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames
+            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames, linkedUserId
         });
         setIsFormOpen(false);
         // Reset
-        setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setSelectedGames([]);
+        setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
         load();
     };
 
@@ -374,6 +388,16 @@ const StoreManagerTab = () => {
                              <input placeholder="Logo Image URL" value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <input placeholder="Website URL" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <input placeholder="Google Maps URL" value={mapsUrl} onChange={e=>setMapsUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <div className="relative">
+                                <Link size={16} className="absolute left-3 top-3 text-slate-500" />
+                                <input 
+                                    placeholder="Linked Profile (Paste Share Link)" 
+                                    value={linkedProfileInput} 
+                                    onChange={e=>setLinkedProfileInput(e.target.value)} 
+                                    className="bg-slate-950 border border-slate-700 rounded p-2 pl-9 text-white w-full"
+                                    title="Paste a full share profile URL or a User ID to link this store to an app account"
+                                />
+                             </div>
                          </div>
                          <div>
                              <label className="text-sm text-slate-400 mb-2 block">Games Sold:</label>
@@ -401,6 +425,11 @@ const StoreManagerTab = () => {
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {stores.map(store => (
                         <div key={store.id} className="relative bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center text-center">
+                             {store.linkedUserId && (
+                                 <div className="absolute top-2 left-2 bg-blue-500 text-white p-1 rounded-full shadow-lg" title="Linked to App Profile">
+                                     <UserCheck size={12} />
+                                 </div>
+                             )}
                              <img src={store.logoUrl} className="w-16 h-16 object-contain rounded-full bg-slate-950 border border-slate-800 mb-2" alt=""/>
                              <h4 className="text-white font-bold">{store.name}</h4>
                              <p className="text-xs text-slate-400">{store.location}</p>

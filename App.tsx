@@ -27,12 +27,17 @@ const App: React.FC = () => {
 
   // Check for persistent session and URL params on mount
   useEffect(() => {
-    // URL Params Check for shared profiles
+    // URL Params Check for shared profiles or binders
     const params = new URLSearchParams(window.location.search);
     const traderId = params.get('trader');
+    const binderId = params.get('binder');
+
     if (traderId) {
         setViewingProfileId(traderId);
-        setCurrentPage('profile'); // Force profile view regardless of last page
+        setCurrentPage('profile'); 
+    } else if (binderId) {
+        setSelectedBinderId(binderId);
+        setCurrentPage('dashboard');
     }
 
     const unsubscribe = auth.subscribe((user) => {
@@ -51,6 +56,11 @@ const App: React.FC = () => {
       localStorage.setItem('lotus_last_page', page);
       setSelectedBinderId(null);
       setViewingProfileId(null);
+      
+      // Clear query params if any
+      if (window.location.search) {
+          window.history.replaceState({}, '', window.location.pathname);
+      }
   };
 
   if (isLoading) {
@@ -103,7 +113,13 @@ const App: React.FC = () => {
         return (
           <BinderDetail 
             binderId={selectedBinderId} 
-            onBack={() => setSelectedBinderId(null)} 
+            onBack={() => {
+                setSelectedBinderId(null);
+                // Clear query params if any
+                if (window.location.search) {
+                    window.history.replaceState({}, '', window.location.pathname);
+                }
+            }} 
           />
         );
       }

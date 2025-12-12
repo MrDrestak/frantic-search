@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService } from '../services/store';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -77,7 +77,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Form State
   const [nickname, setNickname] = useState('');
   const [storeName, setStoreName] = useState('');
-  const [preferredGame, setPreferredGame] = useState(''); // New Form State
+  const [preferredGame, setPreferredGame] = useState(''); 
+  const [storeAnnouncement, setStoreAnnouncement] = useState('');
 
   // WhatsApp Logic
   const [countryCode, setCountryCode] = useState('51');
@@ -110,11 +111,12 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             setNickname(currentUser.displayName || '');
             setStoreName(currentUser.preferredStore || '');
             setPreferredGame(currentUser.preferredGame || '');
+            setStoreAnnouncement(currentUser.storeAnnouncement || '');
             
             // Parse existing WhatsApp
             const storedWhatsapp = currentUser.whatsapp || '';
             if (storedWhatsapp) {
-                // Try to match known codes, longest first to avoid partial matches (e.g. 1 vs 12)
+                // Try to match known codes, longest first to avoid partial matches
                 const sortedCodes = [...COUNTRY_CODES].sort((a,b) => b.code.length - a.code.length);
                 const match = sortedCodes.find(c => storedWhatsapp.startsWith(c.code));
                 
@@ -206,7 +208,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       
       const fullNumber = `${countryCode}${localPhone}`;
       const text = `Verification Code: ${code}`;
-      // Open WhatsApp
       window.open(`https://wa.me/${fullNumber}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -220,7 +221,6 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   const handlePhoneChange = (val: string) => {
       setLocalPhone(val);
-      // If user changes number, require re-verification
       if (verificationStatus === 'VERIFIED') {
           setVerificationStatus('IDLE');
       }
@@ -252,7 +252,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             displayName: nickname,
             whatsapp: finalWhatsapp,
             preferredStore: storeName,
-            preferredGame: preferredGame
+            preferredGame: preferredGame,
+            storeAnnouncement: storeAnnouncement
         });
         setIsEditing(false);
         loadProfile(); 
@@ -266,14 +267,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   const handleCancel = () => {
     setIsEditing(false);
-    loadProfile(); // Reset form state
+    loadProfile();
   };
 
   const handleShareProfile = () => {
       if (!user) return;
       const url = `${window.location.origin}/?trader=${user.id}`;
       navigator.clipboard.writeText(url).then(() => {
-          alert("Profile link copied to clipboard! Share it on Facebook or Discord.");
+          alert("Profile link copied to clipboard!");
       });
   };
 
@@ -290,7 +291,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       } else {
           await tradeService.confirmTrade(id, true);
       }
-      loadPendingFeedback(); // Refresh
+      loadPendingFeedback();
   };
 
   const renderTierBadge = (tier: SubscriptionTier) => {
@@ -316,22 +317,19 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       );
   };
   
-  // Helper to find store data
   const currentStoreData = STORES.find(s => s.name === user?.preferredStore);
 
   // 1. Filter Logic
   const filteredStorefront = storefrontCards
     .filter(c => {
-        // Name Filter
         if (!c.name.toLowerCase().includes(storefrontSearch.toLowerCase())) return false;
-        // Game Filter
         if (gameFilter) {
-            const cardGame = c.game || GameType.MTG; // Default to MTG if missing
+            const cardGame = c.game || GameType.MTG;
             if (cardGame !== gameFilter) return false;
         }
         return true;
     })
-    .sort((a, b) => a.name.localeCompare(b.name)); // 2. Auto-Sort (Alphabetical)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // 3. Pagination Logic
   const totalPages = Math.ceil(filteredStorefront.length / ITEMS_PER_PAGE);
@@ -359,7 +357,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             onClose={() => setShowSubscriptionModal(false)}
             currentTier={user.subscriptionTier}
             onUpgrade={() => {
-                loadProfile(); // Refresh to show new tier
+                loadProfile(); 
             }}
           />
       )}
@@ -389,6 +387,19 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                 </button>
             )}
         </header>
+
+        {/* Store Announcement Banner (Visible in View Mode) */}
+        {!isEditing && user.storeAnnouncement && (
+            <div className="bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-500/30 p-4 rounded-xl mb-6 flex items-start gap-4 shadow-lg">
+                <div className="p-2 bg-amber-500/20 rounded-lg text-amber-500 shrink-0">
+                    <Megaphone size={24} />
+                </div>
+                <div>
+                    <h3 className="text-amber-200 font-bold mb-1">Announcement</h3>
+                    <p className="text-amber-100/90 text-sm whitespace-pre-wrap">{user.storeAnnouncement}</p>
+                </div>
+            </div>
+        )}
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6">
             {/* Banner / Header */}
@@ -448,10 +459,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                             </div>
                             <div className="flex flex-col gap-2">
                                 {isOwnProfile && (
-                                    <>
+                                    <div className="flex flex-col md:flex-row gap-2">
                                         <button 
                                             onClick={() => setIsEditing(true)}
-                                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors border border-slate-700 justify-center"
+                                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors border border-slate-700"
                                         >
                                             <Edit2 size={16} /> Edit Profile
                                         </button>
@@ -460,12 +471,12 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                         {user.subscriptionTier !== SubscriptionTier.MYTHIC && (
                                             <button 
                                                 onClick={() => setShowSubscriptionModal(true)}
-                                                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20 justify-center"
+                                                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20"
                                             >
                                                 <Crown size={16} /> Upgrade Plan
                                             </button>
                                         )}
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -595,6 +606,24 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                         required
                                     />
                                 </div>
+                            </div>
+
+                            {/* Store Announcement Field (New) */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Store Status / Announcement</label>
+                                <div className="relative">
+                                    <Megaphone className="absolute left-3 top-3 text-slate-500" size={18} />
+                                    <textarea 
+                                        value={storeAnnouncement}
+                                        onChange={(e) => setStoreAnnouncement(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none h-24 resize-none"
+                                        placeholder="e.g. Buying collections this weekend! Closed on Mondays."
+                                        maxLength={150}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1 text-right">
+                                    {storeAnnouncement.length}/150
+                                </p>
                             </div>
 
                             {/* Preferred Game */}

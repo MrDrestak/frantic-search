@@ -31,21 +31,22 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
             </span>
           </div>
 
-          <div className="flex space-x-1 md:space-x-8 w-full md:w-auto justify-evenly md:justify-end">
+          <div className="flex space-x-2 md:space-x-8 w-full md:w-auto justify-evenly md:justify-end">
             {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setPage(item.id)}
-                className={`flex flex-col md:flex-row items-center gap-1 md:gap-2 px-3 py-2 rounded-md transition-colors ${
+                title={item.label}
+                className={`${
+                  item.id === 'home' ? 'hidden md:flex' : 'flex'
+                } items-center justify-center md:flex-row gap-2 px-3 py-2 rounded-md transition-colors ${
                   currentPage === item.id
                     ? 'text-violet-400 bg-slate-800/50'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
                 }`}
               >
                 <item.icon size={20} />
-                <span className="text-xs md:text-sm font-medium hidden md:inline">{item.label}</span>
-                {/* Mobile: Just Icon for most items to fit space */}
-                <span className="text-[10px] md:hidden">{item.label}</span>
+                <span className="text-sm font-medium hidden md:inline">{item.label}</span>
               </button>
             ))}
           </div>

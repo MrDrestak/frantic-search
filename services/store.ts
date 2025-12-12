@@ -199,6 +199,7 @@ export const auth = {
               whatsapp: updates.whatsapp || null,
               preferredStore: updates.preferredStore || null,
               preferredGame: updates.preferredGame || null, // Persist game preference
+              storeAnnouncement: updates.storeAnnouncement || null, // New Announcement field
               updatedAt: Date.now()
           };
           
@@ -591,6 +592,20 @@ export const binderService = {
         console.error("Error fetching binders", e);
         return [];
     }
+  },
+
+  // NEW METHOD: Fetch specific binder by ID
+  getBinder: async (binderId: string): Promise<Binder | null> => {
+      try {
+          const doc = await db.collection("binders").doc(binderId).get();
+          if (doc.exists) {
+              return mapDoc(doc) as Binder;
+          }
+          return null;
+      } catch (e) {
+          console.error("Error fetching specific binder", e);
+          return null;
+      }
   },
 
   createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {

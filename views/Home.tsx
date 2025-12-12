@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { showcaseService, newsService, storeDirectoryService, auth } from '../services/store';
 import { ShowcaseItem, NewsItem, StoreProfile, GameType } from '../types';
-import { Star, ExternalLink, MapPin, Gamepad2, Layers, Loader2, Filter } from 'lucide-react';
+import { Star, ExternalLink, MapPin, Gamepad2, Layers, Loader2, Filter, Check, Globe } from 'lucide-react';
 
 interface HomeProps {
     onNavigate: (page: string) => void;
@@ -37,15 +37,22 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
     useEffect(() => {
         const loadAll = async () => {
             setLoading(true);
-            const [sc, nw, st] = await Promise.all([
-                showcaseService.getNewestShowcase(),
-                newsService.getNews(),
-                storeDirectoryService.getStores()
-            ]);
-            setAllShowcaseItems(sc);
-            setNewsItems(nw);
-            setStores(st);
-            setLoading(false);
+            try {
+                // Execute promises individually to handle partial failures
+                const showcasePromise = showcaseService.getNewestShowcase().catch(e => { console.warn(e); return []; });
+                const newsPromise = newsService.getNews().catch(e => { console.warn(e); return []; });
+                const storesPromise = storeDirectoryService.getStores().catch(e => { console.warn(e); return []; });
+
+                const [sc, nw, st] = await Promise.all([showcasePromise, newsPromise, storesPromise]);
+                
+                setAllShowcaseItems(sc);
+                setNewsItems(nw);
+                setStores(st);
+            } catch (e) {
+                console.error("Critical error loading home data", e);
+            } finally {
+                setLoading(false);
+            }
         };
         loadAll();
     }, []);
@@ -84,6 +91,16 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
             case GameType.POKEMON: return 'bg-yellow-900/50 text-yellow-300 border-yellow-700';
             case GameType.YUGIOH: return 'bg-rose-900/50 text-rose-300 border-rose-700';
             default: return 'bg-slate-800 text-slate-400';
+        }
+    };
+
+    const handleStoreClick = (store: StoreProfile) => {
+        if (store.linkedUserId) {
+            // Priority: Internal Profile
+            onViewProfile(store.linkedUserId);
+        } else if (store.websiteUrl) {
+            // Fallback: External Website
+            window.open(store.websiteUrl, '_blank');
         }
     };
 
@@ -233,27 +250,54 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                     {stores.map(store => (
-                        <div key={store.id} className="flex flex-col items-center text-center group">
-                            {/* Logo: Square, No Effects, Zoom on Hover, White Background */}
-                            <a 
-                                href={store.websiteUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-xl flex items-center justify-center p-2 mb-3 transition-transform duration-300 group-hover:scale-105 overflow-hidden"
+                        <div key={store.id} className="flex flex-col items-center text-center group relative">
+                            {/* Verified Badge */}
+                            {store.linkedUserId && (
+                                <div className="absolute top-2 right-2 z-10 bg-blue-500 text-white rounded-full p-1 shadow-lg border border-slate-900" title="Verified Partner">
+                                    <Check size={12} strokeWidth={3} />
+                                </div>
+                            )}
+
+                            {/* Logo */}
+                            <button 
+                                onClick={() => handleStoreClick(store)}
+                                className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-xl flex items-center justify-center p-2 mb-3 transition-transform duration-300 group-hover:scale-105 overflow-hidden cursor-pointer shadow-lg border-0"
+                                title={store.linkedUserId ? "View Store Profile" : "Visit Website"}
                             >
                                 <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
-                            </a>
+                            </button>
 
-                            <h3 className="text-white font-bold mb-1">{store.name}</h3>
-                            
-                            <a 
-                                href={store.mapsUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1 mb-2"
+                            <button 
+                                onClick={() => handleStoreClick(store)}
+                                className="text-white font-bold mb-1 hover:text-indigo-400 transition-colors"
                             >
-                                <MapPin size={10} /> {store.location}
-                            </a>
+                                {store.name}
+                            </button>
+                            
+                            <div className="flex items-center gap-3 mb-2">
+                                <a 
+                                    href={store.mapsUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1"
+                                    title="View Location"
+                                >
+                                    <MapPin size={10} /> {store.location}
+                                </a>
+                                
+                                {/* Globe Icon - Always External Website */}
+                                {store.websiteUrl && (
+                                     <a 
+                                        href={store.websiteUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1"
+                                        title="Official Website"
+                                     >
+                                         <Globe size={10} />
+                                     </a>
+                                )}
+                            </div>
 
                             {/* Game Badges */}
                             <div className="flex gap-1 justify-center flex-wrap mt-1">

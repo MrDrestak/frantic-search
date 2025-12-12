@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -17,6 +17,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [currentLimit, setCurrentLimit] = useState(25); // Default fallback
+  const [isOwner, setIsOwner] = useState(false);
   
   // Filter State
   const [filterText, setFilterText] = useState('');
@@ -63,15 +64,20 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   }, [binderId]);
 
   const loadData = async () => {
-    const userBinders = await binderService.getUserBinders(auth.getCurrentUser()?.id || '');
-    const currentBinder = userBinders.find(b => b.id === binderId);
+    // UPDATED: Fetch specific binder instead of user binders to support public sharing
+    const currentBinder = await binderService.getBinder(binderId);
     setBinder(currentBinder || null);
+    
+    // Check ownership
+    const currentUser = auth.getCurrentUser();
+    const owner = currentUser && currentBinder && currentUser.id === currentBinder.userId;
+    setIsOwner(!!owner);
 
     const binderCards = await cardService.getCardsInBinder(binderId);
     setCards(binderCards);
 
-    // Calculate Limit based on Type
-    if (currentBinder) {
+    // Calculate Limit based on Type (Only relevant for owner really)
+    if (currentBinder && owner) {
         let checkType: any = 'TRADE_CARD';
         if (currentBinder.type === BinderType.AUCTION) checkType = 'AUCTION_CARD';
         if (currentBinder.type === BinderType.WISHLIST) checkType = 'WISHLIST_CARD';
@@ -256,6 +262,14 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       }
   }
 
+  const handleShareBinder = () => {
+      if (!binder) return;
+      const url = `${window.location.origin}/?binder=${binder.id}`;
+      navigator.clipboard.writeText(url).then(() => {
+          alert("Binder public link copied to clipboard!");
+      });
+  }
+
   const handleBatchImport = async (mappedRows: any[]) => {
       // Import is disabled for Auctions for simplicity (requires complex config)
       if (!binder) return;
@@ -373,10 +387,10 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const currentUser = auth.getCurrentUser();
 
-  if (!binder) return <div className="p-8 text-white">Loading binder...</div>;
+  if (!binder) return <div className="p-8 text-white flex items-center justify-center h-full"><Loader2 className="animate-spin mr-2"/> Loading binder...</div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6 pb-24 h-screen flex flex-col relative">
+    <div className="p-4 md:p-8 space-y-6 pb-24 h-[calc(100vh-4rem)] flex flex-col relative">
       {/* Upgrade Modal */}
       {showUpgradeModal && currentUser && (
           <SubscriptionModal 
@@ -511,48 +525,68 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       )}
 
       {/* Header */}
-      <header className="flex items-center gap-4 flex-none">
+      <header className="flex items-center gap-4 flex-none flex-wrap">
         <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
           <ArrowLeft size={24} />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2 truncate">
             {binder.name}
             {binder.type === BinderType.AUCTION && <Gavel size={20} className="text-amber-500" />}
-            <span className={`text-xs px-2 py-0.5 rounded border ${
+            <span className={`text-xs px-2 py-0.5 rounded border ml-2 ${
                 binder.type === BinderType.WISHLIST ? 'border-pink-500 text-pink-400' : 
                 binder.type === BinderType.AUCTION ? 'border-amber-500 text-amber-400' :
                 'border-indigo-500 text-indigo-400'
             }`}>
                 {binder.type}
             </span>
+            {!isOwner && (
+                <span className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 flex items-center gap-1">
+                    <Eye size={10} /> View Only
+                </span>
+            )}
           </h1>
-          <p className="text-slate-400">
-            {cards.length} / {currentLimit} Cards collected
+          <p className="text-slate-400 text-sm">
+            {cards.length} {isOwner ? `/ ${currentLimit} ` : ''} Cards
           </p>
         </div>
-        <div className="ml-auto flex gap-2">
+        
+        <div className="flex gap-2 shrink-0">
+             {/* Share Button (Always Visible) */}
              <button 
-                onClick={() => setShowDeleteModal(true)}
-                className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-red-400"
-                title="Delete Binder"
+                onClick={handleShareBinder}
+                className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-blue-400"
+                title="Share Public Link"
              >
-                <Trash2 size={20} />
+                <Share2 size={20} />
              </button>
-             {binder.type !== BinderType.AUCTION && (
-                 <button 
-                    onClick={() => setShowCSV(true)}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"
-                 >
-                    <Upload size={18} /> <span className="hidden md:inline">Upload CSV</span>
-                 </button>
+
+             {/* Owner Controls */}
+             {isOwner && (
+                 <>
+                     <button 
+                        onClick={() => setShowDeleteModal(true)}
+                        className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-red-400"
+                        title="Delete Binder"
+                     >
+                        <Trash2 size={20} />
+                     </button>
+                     {binder.type !== BinderType.AUCTION && (
+                         <button 
+                            onClick={() => setShowCSV(true)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"
+                         >
+                            <Upload size={18} /> <span className="hidden md:inline">Upload CSV</span>
+                         </button>
+                     )}
+                     <button 
+                        onClick={() => setShowSearch(true)}
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-violet-900/20"
+                     >
+                        <Plus size={18} /> <span className="hidden md:inline">Add Card</span>
+                     </button>
+                 </>
              )}
-             <button 
-                onClick={() => setShowSearch(true)}
-                className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-violet-900/20"
-             >
-                <Plus size={18} /> <span className="hidden md:inline">Add Card</span>
-             </button>
         </div>
       </header>
       
@@ -579,8 +613,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       </div>
 
       {/* Add Card Wizard Overlay */}
-      {showSearch && (
-         <div className="fixed inset-0 bg-slate-950/95 z-50 flex flex-col p-4 md:p-8">
+      {showSearch && isOwner && (
+         <div className="fixed inset-0 bg-slate-950/95 z-[60] flex flex-col p-4 md:p-8">
             <div className="max-w-4xl mx-auto w-full h-full flex flex-col">
                 <div className="flex justify-between items-center mb-6 flex-none">
                     <div className="flex items-center gap-2">
@@ -810,18 +844,18 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                 <MTGCard 
                     key={card.id} 
                     card={card} 
-                    onRemove={() => handleRemoveCard(card.id)} 
-                    // Only enable showcase toggling if this is a "For Trade" binder
-                    enableShowcase={binder.type === BinderType.FOR_TRADE}
-                    onToggleShowcase={() => handleToggleShowcase(card)}
-                    onSetPrice={binder.type === BinderType.FOR_TRADE ? () => handleOpenPriceModal(card) : undefined}
+                    onRemove={isOwner ? () => handleRemoveCard(card.id) : undefined} 
+                    // Only enable showcase toggling if this is a "For Trade" binder and user is owner
+                    enableShowcase={isOwner && binder.type === BinderType.FOR_TRADE}
+                    onToggleShowcase={isOwner ? () => handleToggleShowcase(card) : undefined}
+                    onSetPrice={isOwner && binder.type === BinderType.FOR_TRADE ? () => handleOpenPriceModal(card) : undefined}
                 />
             ))}
             {cards.length === 0 && (
                 <div className="col-span-full text-center py-20 text-slate-500">
                     <Layers className="w-16 h-16 mx-auto mb-4 opacity-20" />
                     <p>This binder is empty.</p>
-                    <button onClick={() => setShowSearch(true)} className="text-violet-400 underline mt-2">Start adding cards</button>
+                    {isOwner && <button onClick={() => setShowSearch(true)} className="text-violet-400 underline mt-2">Start adding cards</button>}
                 </div>
             )}
             
