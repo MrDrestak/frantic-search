@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType } from '../types';
 
@@ -326,7 +326,6 @@ const StoreManagerTab = () => {
     const [logoUrl, setLogoUrl] = useState('');
     const [websiteUrl, setWebsiteUrl] = useState('');
     const [mapsUrl, setMapsUrl] = useState('');
-    const [linkedUserId, setLinkedUserId] = useState(''); // New field
     const [selectedGames, setSelectedGames] = useState<GameType[]>([]);
 
     useEffect(() => { load(); }, []);
@@ -341,38 +340,14 @@ const StoreManagerTab = () => {
         else setSelectedGames(prev => [...prev, g]);
     }
 
-    const handleLinkedUserChange = (val: string) => {
-        // Try to extract from URL if pasted (e.g. ?trader=XYZ)
-        if (val.includes('trader=')) {
-            try {
-                const urlObj = new URL(val);
-                const id = urlObj.searchParams.get('trader');
-                if (id) {
-                    setLinkedUserId(id);
-                    return;
-                }
-            } catch(e) {
-                // Fallback for partial URL or non-standard format
-                const parts = val.split('trader=');
-                if (parts.length > 1) {
-                    setLinkedUserId(parts[1].split('&')[0]);
-                    return;
-                }
-            }
-        }
-        // Otherwise just set raw
-        setLinkedUserId(val);
-    }
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         await storeDirectoryService.addStore({
-            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames,
-            linkedUserId: linkedUserId || undefined
+            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames
         });
         setIsFormOpen(false);
         // Reset
-        setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedUserId(''); setSelectedGames([]);
+        setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setSelectedGames([]);
         load();
     };
 
@@ -399,17 +374,6 @@ const StoreManagerTab = () => {
                              <input placeholder="Logo Image URL" value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <input placeholder="Website URL" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <input placeholder="Google Maps URL" value={mapsUrl} onChange={e=>setMapsUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             
-                             {/* New Linked User Field */}
-                             <div className="relative">
-                                 <input 
-                                     placeholder="User Profile URL or ID (Optional)" 
-                                     value={linkedUserId} 
-                                     onChange={e=>handleLinkedUserChange(e.target.value)} 
-                                     className="w-full bg-slate-950 border border-slate-700 rounded p-2 pl-9 text-white"
-                                 />
-                                 <LinkIcon className="absolute left-2.5 top-2.5 text-slate-500" size={16} />
-                             </div>
                          </div>
                          <div>
                              <label className="text-sm text-slate-400 mb-2 block">Games Sold:</label>
@@ -440,13 +404,6 @@ const StoreManagerTab = () => {
                              <img src={store.logoUrl} className="w-16 h-16 object-contain rounded-full bg-slate-950 border border-slate-800 mb-2" alt=""/>
                              <h4 className="text-white font-bold">{store.name}</h4>
                              <p className="text-xs text-slate-400">{store.location}</p>
-                             
-                             {store.linkedUserId && (
-                                 <div className="mt-1 bg-indigo-500/10 text-indigo-400 text-[10px] px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1">
-                                     <LinkIcon size={10} /> Linked Profile
-                                 </div>
-                             )}
-
                              <div className="flex gap-1 mt-2 mb-2">
                                  {store.games.map(g => (
                                      <div key={g} className="w-2 h-2 rounded-full bg-slate-500" title={g}/>

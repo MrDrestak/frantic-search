@@ -142,8 +142,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-violet-500 selection:text-white">
-      {/* Adjusted padding top for mobile (pt-16) to account for fixed top bar */}
-      <div className="max-w-7xl mx-auto pt-16 min-h-screen">
+      <div className="max-w-7xl mx-auto md:pt-16 min-h-screen">
         {renderContent()}
       </div>
       
