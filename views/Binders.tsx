@@ -54,8 +54,8 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
       // Use origin to ensure we point to the root domain (e.g., https://frantic-search.vercel.app/)
       const url = `${window.location.origin}/?binder=${binder.id}`;
       
-      // Construct Profile Card Text
-      const profileHeader = `👤 *${currentUser.displayName}*\n🏆 Trades: ${currentUser.successfulTrades} | 🎮 ${currentUser.preferredGame || 'Any'}\n📍 Store: ${currentUser.preferredStore || 'No Preference'}`;
+      // Construct Profile Card Text (No Emojis, Specific Labels)
+      const profileHeader = `Display Name: *${currentUser.displayName}*\nPrefered Game: ${currentUser.preferredGame || 'Any'}\nPrefered Store: ${currentUser.preferredStore || 'No Preference'}\nTrader Count: ${currentUser.successfulTrades}`;
       
       let specificPhrase = "";
       

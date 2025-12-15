@@ -279,9 +279,9 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       let profileHeader = "";
       
       if (isOwner && currentUser) {
-           profileHeader = `👤 *${currentUser.displayName}*\n🏆 Trades: ${currentUser.successfulTrades} | 🎮 ${currentUser.preferredGame || 'Any'}\n📍 Store: ${currentUser.preferredStore || 'No Preference'}`;
+           profileHeader = `Display Name: *${currentUser.displayName}*\nPrefered Game: ${currentUser.preferredGame || 'Any'}\nPrefered Store: ${currentUser.preferredStore || 'No Preference'}\nTrader Count: ${currentUser.successfulTrades}`;
       } else {
-           profileHeader = `📂 *Shared Binder: ${binder.name}*`;
+           profileHeader = `Shared Binder: *${binder.name}*`;
       }
 
       let specificPhrase = "";
