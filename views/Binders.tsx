@@ -48,6 +48,31 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
       }
   }
 
+  const handleShareBinder = (binder: Binder) => {
+      if (!currentUser) return;
+
+      // Use origin to ensure we point to the root domain (e.g., https://frantic-search.vercel.app/)
+      const url = `${window.location.origin}/?binder=${binder.id}`;
+      
+      // Construct Profile Card Text
+      const profileHeader = `👤 *${currentUser.displayName}*\n🏆 Trades: ${currentUser.successfulTrades} | 🎮 ${currentUser.preferredGame || 'Any'}\n📍 Store: ${currentUser.preferredStore || 'No Preference'}`;
+      
+      let specificPhrase = "";
+      
+      if (binder.type === BinderType.WISHLIST) {
+          specificPhrase = "Estoy buscando estas cartas, en estas ediciones:";
+      } else {
+          // Default for Trade, Auction, Collection
+          specificPhrase = "Tengo este binder que puede interesar:";
+      }
+
+      const fullMessage = `${profileHeader}\n\n${specificPhrase}\n${url}`;
+
+      // Open WhatsApp
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fullMessage)}`;
+      window.open(whatsappUrl, '_blank');
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !newBinderName.trim()) return;
@@ -244,6 +269,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                     <BinderCard 
                         binder={binder} 
                         onClick={() => handleBinderClick(binder)} 
+                        onShare={() => handleShareBinder(binder)}
                     />
                     
                     {isLocked && (

@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -269,6 +269,32 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
           alert("Binder public link copied to clipboard!");
       });
   }
+
+  const handleWhatsAppShare = () => {
+      if (!binder) return;
+      const currentUser = auth.getCurrentUser();
+      
+      const url = `${window.location.origin}/?binder=${binder.id}`;
+      
+      let profileHeader = "";
+      
+      if (isOwner && currentUser) {
+           profileHeader = `👤 *${currentUser.displayName}*\n🏆 Trades: ${currentUser.successfulTrades} | 🎮 ${currentUser.preferredGame || 'Any'}\n📍 Store: ${currentUser.preferredStore || 'No Preference'}`;
+      } else {
+           profileHeader = `📂 *Shared Binder: ${binder.name}*`;
+      }
+
+      let specificPhrase = "";
+      if (binder.type === BinderType.WISHLIST) {
+          specificPhrase = "Estoy buscando estas cartas, en estas ediciones:";
+      } else {
+          specificPhrase = "Tengo este binder que puede interesar:";
+      }
+
+      const fullMessage = `${profileHeader}\n\n${specificPhrase}\n${url}`;
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fullMessage)}`;
+      window.open(whatsappUrl, '_blank');
+  };
 
   const handleBatchImport = async (mappedRows: any[]) => {
       // Import is disabled for Auctions for simplicity (requires complex config)
@@ -552,11 +578,20 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         </div>
         
         <div className="flex gap-2 shrink-0">
-             {/* Share Button (Always Visible) */}
+             {/* WhatsApp Share Button */}
+             <button 
+                onClick={handleWhatsAppShare}
+                className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded-lg transition-colors border border-transparent hover:border-green-400"
+                title="Share to WhatsApp"
+             >
+                <MessageCircle size={20} />
+             </button>
+
+             {/* Copy Link Button */}
              <button 
                 onClick={handleShareBinder}
                 className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-blue-400"
-                title="Share Public Link"
+                title="Copy Link"
              >
                 <Share2 size={20} />
              </button>
