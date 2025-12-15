@@ -72,11 +72,12 @@ export const oneSignalService = {
         }
 
         try {
-            // Using thingproxy to bypass CORS while preserving Authorization headers
-            const proxyUrl = "https://thingproxy.freeboard.io/fetch/";
+            // Switched to corsproxy.io which is generally more stable than thingproxy.
+            // Using encodeURIComponent ensures the target URL is passed correctly.
             const targetUrl = "https://onesignal.com/api/v1/notifications";
+            const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
             
-            const response = await fetch(proxyUrl + targetUrl, {
+            const response = await fetch(proxyUrl, {
                 method: "POST",
                 headers: headers,
                 body: JSON.stringify(body)
