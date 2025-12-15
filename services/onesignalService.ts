@@ -71,11 +71,21 @@ export const oneSignalService = {
         }
 
         try {
-            const response = await fetch("https://onesignal.com/api/v1/notifications", {
+            // FIX: Use corsproxy.io to bypass browser CORS restrictions.
+            // Note: In a production environment, this request should be made from a secure backend server.
+            const proxyUrl = "https://corsproxy.io/?";
+            const targetUrl = "https://onesignal.com/api/v1/notifications";
+            
+            const response = await fetch(proxyUrl + targetUrl, {
                 method: "POST",
                 headers: headers,
                 body: JSON.stringify(body)
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`OneSignal API Error: ${response.status} ${errorText}`);
+            }
 
             const data = await response.json();
             return data;
