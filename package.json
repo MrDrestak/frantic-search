@@ -1,3 +1,4 @@
+
 {
   "name": "lotus-exchange",
   "private": true,
@@ -12,7 +13,8 @@
     "firebase": "^10.8.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-onesignal": "^10.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.55",

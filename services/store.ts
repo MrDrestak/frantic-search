@@ -2,6 +2,7 @@
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert } from '../types';
+import { oneSignalService } from './onesignalService';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -991,6 +992,7 @@ export const auctionService = {
         }
 
         const newBid = (card.currentBid || card.basePrice || 0) + 1;
+        const prevBidderId = card.topBidderId;
         
         const updates: any = {
             currentBid: newBid,
@@ -1013,16 +1015,25 @@ export const auctionService = {
         
         await db.collection("cards").doc(card.id).update(updates);
 
-        // NOTIFY OUTBID USER
-        if (card.topBidderId && card.topBidderId !== userId) {
+        // NOTIFY OUTBID USER (IN-APP)
+        if (prevBidderId && prevBidderId !== userId) {
             notificationService.send(
-                card.topBidderId,
+                prevBidderId,
                 'OUTBID',
                 'You have been outbid!',
                 `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`,
                 '/auctions', // Ideally deep link to card, but page is fine for now
                 card.imageUrl
             );
+
+            // SEND PUSH NOTIFICATION (OneSignal)
+            // Note: Sending this via REST API from frontend is okay for this prototype but ideally should be backend function
+            oneSignalService.sendNotification(
+                "You have been outbid!",
+                `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Tap to reclaim your glory!`,
+                [prevBidderId],
+                `${window.location.origin}/?binder=${card.binderId}` // Deep link attempt
+            ).catch(err => console.error("Push Notification Failed", err));
         }
     },
 
@@ -1049,6 +1060,13 @@ export const auctionService = {
             `/?trader=${userId}`,
             card.imageUrl
         );
+        
+        // Push Notification to Seller
+        oneSignalService.sendNotification(
+            "Auction Sold!",
+            `Your ${card.name} was bought instantly! Check your dashboard.`,
+            [card.userId]
+        ).catch(err => console.error("Push Notification Failed", err));
     }
 };
 

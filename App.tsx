@@ -11,6 +11,7 @@ import Auctions from './views/Auctions';
 import AdminPanel from './views/AdminPanel';
 import Home from './views/Home';
 import { auth } from './services/store';
+import { oneSignalService } from './services/onesignalService';
 import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -24,6 +25,11 @@ const App: React.FC = () => {
   
   const [selectedBinderId, setSelectedBinderId] = useState<string | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+
+  // Initialize OneSignal
+  useEffect(() => {
+    oneSignalService.init();
+  }, []);
 
   // Check for persistent session and URL params on mount
   useEffect(() => {
@@ -43,8 +49,11 @@ const App: React.FC = () => {
     const unsubscribe = auth.subscribe((user) => {
       if (user) {
         setIsAuthenticated(true);
+        // Login to OneSignal with Firebase UID
+        oneSignalService.login(user.id);
       } else {
         setIsAuthenticated(false);
+        // oneSignalService.logout(); // Optional: keeps guest subscriptions if commented out
       }
       setIsLoading(false);
     });

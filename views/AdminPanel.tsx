@@ -1,15 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
-import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType } from '../types';
+import { oneSignalService } from '../services/onesignalService';
+import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus } from '../types';
+import { db } from '../services/firebase';
 
 interface AdminPanelProps {
     onBack: () => void;
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
-    const [activeTab, setActiveTab] = useState<'SYSTEM' | 'USERS' | 'NEWS' | 'STORES'>('SYSTEM');
+    const [activeTab, setActiveTab] = useState<'SYSTEM' | 'USERS' | 'NEWS' | 'STORES' | 'NOTIFICATIONS'>('SYSTEM');
     const [user] = useState(auth.getCurrentUser());
     
     // Ensure admin access
@@ -46,7 +48,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     { id: 'SYSTEM', label: 'System Config' },
                     { id: 'USERS', label: 'User Management' },
                     { id: 'NEWS', label: 'News Manager' },
-                    { id: 'STORES', label: 'Store Directory' }
+                    { id: 'STORES', label: 'Store Directory' },
+                    { id: 'NOTIFICATIONS', label: 'Push Notifications' }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -68,12 +71,157 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 {activeTab === 'USERS' && <UserManagementTab />}
                 {activeTab === 'NEWS' && <NewsManagerTab />}
                 {activeTab === 'STORES' && <StoreManagerTab />}
+                {activeTab === 'NOTIFICATIONS' && <NotificationsTab />}
             </div>
         </div>
     );
 };
 
 // --- SUB COMPONENTS ---
+
+const NotificationsTab = () => {
+    const [title, setTitle] = useState('');
+    const [message, setMessage] = useState('');
+    const [targetType, setTargetType] = useState<'ALL' | 'WISHLIST' | 'BIDDERS'>('ALL');
+    const [isSending, setIsSending] = useState(false);
+
+    const handleSend = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!title.trim() || !message.trim()) return;
+
+        if (!confirm(`Are you sure you want to send this push notification to ${targetType} users?`)) return;
+
+        setIsSending(true);
+        try {
+            let userIds: string[] | undefined = undefined;
+
+            if (targetType === 'WISHLIST') {
+                // Fetch all users who have at least one wishlist binder
+                const snap = await db.collection('binders').where('type', '==', BinderType.WISHLIST).get();
+                const ids = new Set<string>();
+                snap.docs.forEach(doc => ids.add(doc.data().userId));
+                userIds = Array.from(ids);
+                if (userIds.length === 0) {
+                    alert("No users found with Wishlists.");
+                    setIsSending(false);
+                    return;
+                }
+            } else if (targetType === 'BIDDERS') {
+                // Fetch all unique users who are top bidders on any active auction
+                const snap = await db.collection('cards')
+                    .where('binderType', '==', BinderType.AUCTION)
+                    .where('auctionStatus', '==', AuctionStatus.ACTIVE)
+                    .get();
+                
+                const ids = new Set<string>();
+                snap.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.topBidderId) ids.add(data.topBidderId);
+                });
+                userIds = Array.from(ids);
+                if (userIds.length === 0) {
+                    alert("No active bidders found.");
+                    setIsSending(false);
+                    return;
+                }
+            }
+
+            await oneSignalService.sendNotification(title, message, userIds);
+            alert(`Notification sent successfully${userIds ? ` to ${userIds.length} users` : ''}!`);
+            setTitle('');
+            setMessage('');
+        } catch (error: any) {
+            console.error(error);
+            alert("Failed to send notification: " + error.message);
+        }
+        setIsSending(false);
+    };
+
+    return (
+        <div className="max-w-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Bell size={20} className="text-violet-500" /> Send Push Notification
+            </h3>
+            
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <form onSubmit={handleSend} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Notification Title</label>
+                        <input 
+                            type="text" 
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                            placeholder="e.g. New Binders Available!"
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Message Content</label>
+                        <textarea 
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-violet-500 outline-none h-24 resize-none"
+                            placeholder="e.g. Check out the latest trades added by top users..."
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Target Audience</label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setTargetType('ALL')}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                                    targetType === 'ALL'
+                                    ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                                }`}
+                            >
+                                All Users
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTargetType('WISHLIST')}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                                    targetType === 'WISHLIST'
+                                    ? 'bg-pink-600/20 border-pink-500 text-pink-300'
+                                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                                }`}
+                            >
+                                Active Wishlist
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTargetType('BIDDERS')}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                                    targetType === 'BIDDERS'
+                                    ? 'bg-amber-600/20 border-amber-500 text-amber-300'
+                                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                                }`}
+                            >
+                                Active Bidders
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pt-4">
+                        <button 
+                            type="submit" 
+                            disabled={isSending}
+                            className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                        >
+                            {isSending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+                            Send Notification
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
 
 const SystemConfigTab = () => {
     const [config, setConfig] = useState<GlobalConfig | null>(null);
