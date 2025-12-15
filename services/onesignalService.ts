@@ -1,44 +1,46 @@
 
-import OneSignal from 'react-onesignal';
+// Native OneSignal Integration
+declare global {
+    interface Window {
+        OneSignal: any;
+    }
+}
 
 const APP_ID = "181d9c5a-7cfd-4fc7-961e-b58799cd476e";
-const REST_API_KEY = "77jtdhkfgegxeg5hyrq4tknyn"; // Note: In a production environment, this should be behind a secure backend proxy.
+const REST_API_KEY = "77jtdhkfgegxeg5hyrq4tknyn";
 
 export const oneSignalService = {
     init: async () => {
-        try {
-            await OneSignal.init({
+        // Initialize the command queue if the SDK hasn't loaded yet
+        window.OneSignal = window.OneSignal || [];
+        
+        window.OneSignal.push(() => {
+            window.OneSignal.init({
                 appId: APP_ID,
                 allowLocalhostAsSecureOrigin: true,
                 notifyButton: {
                     enable: true,
                 },
             });
-            console.log("OneSignal Initialized");
-        } catch (error) {
-            console.error("OneSignal Init Error:", error);
-        }
+            console.log("OneSignal Initialized (Native)");
+        });
     },
 
     login: async (userId: string) => {
-        try {
-            // Associates the device with the Firebase UID
-            await OneSignal.login(userId);
-        } catch (error) {
-            console.error("OneSignal Login Error:", error);
-        }
+        window.OneSignal = window.OneSignal || [];
+        window.OneSignal.push(() => {
+            window.OneSignal.login(userId);
+        });
     },
 
     logout: async () => {
-        try {
-            await OneSignal.logout();
-        } catch (error) {
-            console.error("OneSignal Logout Error:", error);
-        }
+        window.OneSignal = window.OneSignal || [];
+        window.OneSignal.push(() => {
+            window.OneSignal.logout();
+        });
     },
 
     // Send a notification via REST API (Admin or System Triggered)
-    // We use 'include_aliases' with 'external_id' to target specific Firebase UIDs
     sendNotification: async (
         title: string, 
         message: string, 
