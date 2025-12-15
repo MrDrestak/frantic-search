@@ -7,7 +7,8 @@ declare global {
 }
 
 const APP_ID = "181d9c5a-7cfd-4fc7-961e-b58799cd476e";
-const REST_API_KEY = "77jtdhkfgegxeg5hyrq4tknyn";
+// Updated Key provided by user
+const REST_API_KEY = "os_v2_app_daozywt47vh4pfq6wwdzttkhny7nuawlmkkehqvtshtldyxplfcnqrpn4erbbxqr2mxvyglagogh6zn6zcgfixviffxrns7a3t7otvi";
 
 export const oneSignalService = {
     init: async () => {
@@ -71,9 +72,8 @@ export const oneSignalService = {
         }
 
         try {
-            // FIX: Use corsproxy.io to bypass browser CORS restrictions.
-            // Note: In a production environment, this request should be made from a secure backend server.
-            const proxyUrl = "https://corsproxy.io/?";
+            // Using thingproxy to bypass CORS while preserving Authorization headers
+            const proxyUrl = "https://thingproxy.freeboard.io/fetch/";
             const targetUrl = "https://onesignal.com/api/v1/notifications";
             
             const response = await fetch(proxyUrl + targetUrl, {
@@ -84,6 +84,10 @@ export const oneSignalService = {
 
             if (!response.ok) {
                 const errorText = await response.text();
+                // 403 usually means Key is invalid or Proxy stripped the header
+                if (response.status === 403) {
+                    console.error("Access Denied: Please check if your REST_API_KEY is correct.");
+                }
                 throw new Error(`OneSignal API Error: ${response.status} ${errorText}`);
             }
 
