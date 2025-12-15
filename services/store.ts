@@ -1,7 +1,7 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile } from '../types';
+import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert } from '../types';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -322,6 +322,105 @@ export const configService = {
     }
 };
 
+// NOTIFICATION SERVICE
+export const notificationService = {
+    // Send a notification to a specific user
+    send: async (userId: string, type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM', title: string, message: string, linkUrl?: string, imageUrl?: string) => {
+        try {
+            const notification: Omit<AppNotification, 'id'> = {
+                userId,
+                type,
+                title,
+                message,
+                linkUrl,
+                imageUrl,
+                read: false,
+                createdAt: Date.now()
+            };
+            await db.collection("notifications").add(notification);
+        } catch (e) {
+            console.error("Failed to send notification", e);
+        }
+    },
+
+    // Mark as read
+    markAsRead: async (notificationId: string) => {
+        await db.collection("notifications").doc(notificationId).update({ read: true });
+    },
+
+    markAllAsRead: async (userId: string) => {
+        const snap = await db.collection("notifications")
+            .where("userId", "==", userId)
+            .where("read", "==", false)
+            .get();
+        
+        const batch = db.batch();
+        snap.docs.forEach(doc => {
+            batch.update(doc.ref, { read: true });
+        });
+        await batch.commit();
+    },
+
+    // Cleanup old notifications (Call periodically or on load)
+    cleanup: async (userId: string) => {
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const snap = await db.collection("notifications")
+            .where("userId", "==", userId)
+            .where("createdAt", "<", thirtyDaysAgo)
+            .get();
+        
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        if (!snap.empty) await batch.commit();
+    }
+};
+
+// ALERT SERVICE (Search Bell)
+export const alertService = {
+    // Check if user is watching a card
+    isWatching: async (userId: string, cardName: string): Promise<boolean> => {
+        // Use composite ID for quick check
+        const id = `${userId}_${cardName.replace(/\//g, '_')}`;
+        const doc = await db.collection("active_alerts").doc(id).get();
+        return doc.exists;
+    },
+
+    toggleAlert: async (userId: string, cardName: string): Promise<boolean> => {
+        const id = `${userId}_${cardName.replace(/\//g, '_')}`;
+        const ref = db.collection("active_alerts").doc(id);
+        const doc = await ref.get();
+
+        if (doc.exists) {
+            // Remove
+            await ref.delete();
+            return false; // Now NOT watching
+        } else {
+            // Check Limits
+            const limits = await subscriptionService.checkLimit('CARD_ALERT');
+            if (!limits.allowed) {
+                throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
+            }
+
+            // Add
+            await ref.set({
+                userId,
+                cardName,
+                createdAt: Date.now()
+            });
+            return true; // Now watching
+        }
+    },
+
+    // Helper: Find all users watching a specific card name
+    findWatchers: async (cardName: string): Promise<string[]> => {
+        const snap = await db.collection("active_alerts")
+            .where("cardName", "==", cardName)
+            .get();
+        
+        return snap.docs.map(d => (d.data() as CardAlert).userId);
+    }
+};
+
 // TRADE & REPUTATION SERVICE
 export const tradeService = {
     logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
@@ -437,7 +536,7 @@ export const subscriptionService = {
     },
     
     // Check if user has reached their limit
-    checkLimit: async (type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
+    checkLimit: async (type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD' | 'CARD_ALERT', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
         if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
         
         const tier = currentUserProfile.subscriptionTier;
@@ -497,6 +596,18 @@ export const subscriptionService = {
             return {
                 allowed: snapshot.size < limits.maxShowcaseItems,
                 limit: limits.maxShowcaseItems,
+                current: snapshot.size
+            };
+        }
+
+        if (type === 'CARD_ALERT') {
+            const snapshot = await db.collection("active_alerts")
+                .where("userId", "==", currentUserProfile.id)
+                .get();
+            
+            return {
+                allowed: snapshot.size < limits.maxCardAlerts,
+                limit: limits.maxCardAlerts,
                 current: snapshot.size
             };
         }
@@ -573,6 +684,8 @@ export const adminService = {
             await deleteCollection('trade_interactions');
             await deleteCollection('news');
             await deleteCollection('stores');
+            await deleteCollection('notifications');
+            await deleteCollection('active_alerts');
             console.log("DB Wipe Complete.");
             return true;
         } catch (e) {
@@ -746,6 +859,27 @@ export const cardService = {
     await db.collection("binders").doc(cardData.binderId).update({
         cardCount: firebase.firestore.FieldValue.increment(1)
     });
+
+    // TRIGGER ALERTS (Low Cost Implementation)
+    // If this card is being added to a Trade or Auction binder, check for watchers
+    const isTradeable = !cardData.binderType || cardData.binderType === BinderType.FOR_TRADE || cardData.binderType === BinderType.AUCTION;
+    if (isTradeable) {
+        // Run async, don't block UI
+        alertService.findWatchers(newCard.name).then(watcherIds => {
+            watcherIds.forEach(userId => {
+                if (userId !== newCard.userId) { // Don't notify self
+                    notificationService.send(
+                        userId, 
+                        'WISH_ALERT', 
+                        `Found: ${newCard.name}`, 
+                        `${currentUserProfile?.displayName} just listed a card on your wishlist!`,
+                        `/?binder=${newCard.binderId}`,
+                        newCard.imageUrl
+                    );
+                }
+            });
+        }).catch(e => console.error("Error triggering alerts", e));
+    }
     
     return { id: docRef.id, ...newCard } as Card;
   },
@@ -858,10 +992,38 @@ export const auctionService = {
 
         const newBid = (card.currentBid || card.basePrice || 0) + 1;
         
-        await db.collection("cards").doc(card.id).update({
+        const updates: any = {
             currentBid: newBid,
             topBidderId: userId
-        });
+        };
+
+        // AUTO-EXTENSION RULE (Soft Close)
+        // If bid is placed within last 5 minutes, extend by 5 minutes from NOW.
+        if (card.auctionEndDate) {
+            const now = Date.now();
+            const FIVE_MINUTES = 5 * 60 * 1000;
+            const timeLeft = card.auctionEndDate - now;
+            
+            // Check if within the last 5 minutes window
+            if (timeLeft < FIVE_MINUTES && timeLeft > 0) {
+                // Extend the auction
+                updates.auctionEndDate = now + FIVE_MINUTES;
+            }
+        }
+        
+        await db.collection("cards").doc(card.id).update(updates);
+
+        // NOTIFY OUTBID USER
+        if (card.topBidderId && card.topBidderId !== userId) {
+            notificationService.send(
+                card.topBidderId,
+                'OUTBID',
+                'You have been outbid!',
+                `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`,
+                '/auctions', // Ideally deep link to card, but page is fine for now
+                card.imageUrl
+            );
+        }
     },
 
     directBuy: async (card: Card, userId: string): Promise<void> => {
@@ -877,6 +1039,16 @@ export const auctionService = {
             winnerId: userId,
             currentBid: card.buyItNowPrice // Set final price to BIN price
         });
+
+        // Notify Seller
+        notificationService.send(
+            card.userId,
+            'SYSTEM',
+            'Auction Sold!',
+            `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`,
+            `/?trader=${userId}`,
+            card.imageUrl
+        );
     }
 };
 

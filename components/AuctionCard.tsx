@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, AuctionStatus } from '../types';
-import { Gavel, Clock, ArrowUp, ShoppingCart, User, AlertTriangle } from 'lucide-react';
+import { Gavel, Clock, ArrowUp, ShoppingCart, User, AlertTriangle, Zap } from 'lucide-react';
 import { auth } from '../services/store';
 
 interface AuctionCardProps {
@@ -15,6 +15,7 @@ interface AuctionCardProps {
 const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBuyNow, onViewProfile }) => {
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isExpired, setIsExpired] = useState(false);
+    const [isExtended, setIsExtended] = useState(false);
     
     const currentUser = auth.getCurrentUser();
     const isOwner = currentUser?.id === card.userId;
@@ -35,18 +36,30 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));
             const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            // Check if extended (Arbitrary logic: if time is NOT ending at :00 minutes exactly, it might be extended, 
+            // but safer to check if diff < 5 minutes and bidding is active)
+            // Ideally we'd store an "originalEndDate" field, but for now we infer urgency.
+            if (diff < 5 * 60 * 1000 && card.currentBid && card.currentBid > (card.basePrice || 0)) {
+                setIsExtended(true);
+            } else {
+                setIsExtended(false);
+            }
             
             if (days > 0) {
                 setTimeLeft(`${days}d ${hours}h`);
-            } else {
+            } else if (hours > 0) {
                 setTimeLeft(`${hours}h ${minutes}m`);
+            } else {
+                setTimeLeft(`${minutes}m ${seconds}s`);
             }
         };
 
         updateTimer();
-        const interval = setInterval(updateTimer, 60000); // Update every minute
+        const interval = setInterval(updateTimer, 1000); // Update every second for better precision in last minutes
         return () => clearInterval(interval);
-    }, [card.auctionEndDate]);
+    }, [card.auctionEndDate, card.currentBid, card.basePrice]);
 
     const handleBid = () => {
         if (isExpired) return;
@@ -63,7 +76,15 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
     }
 
     return (
-        <div className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col shadow-lg transition-all hover:shadow-amber-900/20 ${isWinning ? 'border-green-500/50' : 'border-slate-800 hover:border-amber-500/50'}`}>
+        <div className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col shadow-lg transition-all hover:shadow-amber-900/20 relative ${isWinning ? 'border-green-500/50' : 'border-slate-800 hover:border-amber-500/50'}`}>
+            
+            {/* Extended Badge */}
+            {isExtended && (
+                <div className="absolute top-2 left-2 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1 animate-pulse">
+                    <Zap size={10} fill="currentColor" /> OVERTIME
+                </div>
+            )}
+
             {/* Header / Image Area */}
             <div className="relative aspect-[2.5/3] overflow-hidden">
                 <img 
@@ -79,8 +100,8 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
                 )}
                 
                 {/* Timer Badge */}
-                <div className="absolute bottom-2 left-2 bg-slate-950/90 backdrop-blur border border-slate-700 text-white text-xs font-mono py-1 px-2 rounded-lg flex items-center gap-1.5 shadow-lg">
-                    <Clock size={12} className={isExpired ? 'text-red-500' : 'text-amber-500'} />
+                <div className={`absolute bottom-2 left-2 backdrop-blur border text-xs font-mono py-1 px-2 rounded-lg flex items-center gap-1.5 shadow-lg ${isExtended ? 'bg-red-900/90 border-red-500 text-red-200' : 'bg-slate-950/90 border-slate-700 text-white'}`}>
+                    <Clock size={12} className={isExpired ? 'text-red-500' : (isExtended ? 'text-white' : 'text-amber-500')} />
                     <span>{timeLeft}</span>
                 </div>
             </div>

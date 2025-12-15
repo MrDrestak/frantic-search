@@ -205,3 +205,21 @@ export interface StoreProfile {
     games: GameType[];
     linkedUserId?: string; // OPTIONAL: ID of the UserProfile within the app to link directly
 }
+
+export interface AppNotification {
+    id: string;
+    userId: string;
+    type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM';
+    title: string;
+    message: string;
+    linkUrl?: string;
+    imageUrl?: string;
+    read: boolean;
+    createdAt: number;
+}
+
+export interface CardAlert {
+    userId: string;
+    cardName: string;
+    createdAt: number;
+}

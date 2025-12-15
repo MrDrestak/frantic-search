@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -154,10 +154,21 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             return;
         }
 
+        let auctionTimestamp = 0;
         if (binder.type === BinderType.AUCTION) {
             if (!auctionEndDate) {
                 alert("Please select an end date for the auction.");
                 return;
+            }
+            // FORCE TIME TO 22:00 GMT-5 (Lima/Quito)
+            // Construct ISO string with offset -05:00
+            const isoString = `${auctionEndDate}T22:00:00-05:00`;
+            auctionTimestamp = new Date(isoString).getTime();
+            
+            if (isNaN(auctionTimestamp)) {
+                // Fallback for older browsers
+                auctionTimestamp = new Date(auctionEndDate).setHours(22, 0, 0, 0); 
+                console.warn("Could not set strict timezone, falling back to local 22:00");
             }
         }
 
@@ -169,7 +180,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         let auctionData = {};
         if (binder.type === BinderType.AUCTION) {
             auctionData = {
-                auctionEndDate: new Date(auctionEndDate).getTime(),
+                auctionEndDate: auctionTimestamp,
                 basePrice: parseFloat(basePrice),
                 buyItNowPrice: parseFloat(buyItNowPrice),
                 currentBid: parseFloat(basePrice),
@@ -808,6 +819,11 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                                     <div className="space-y-4 bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl">
                                         <h4 className="text-amber-400 font-bold flex items-center gap-2"><Gavel size={18} /> Auction Configuration</h4>
                                         
+                                        <div className="bg-blue-900/30 border border-blue-800 rounded p-3 text-xs text-blue-200 flex items-start gap-2">
+                                            <Clock size={16} className="mt-0.5 shrink-0" />
+                                            <p>All auctions end at <strong>22:00 GMT-5</strong> (Lima/Bogota/Quito) on the selected date.</p>
+                                        </div>
+
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-xs uppercase font-bold text-slate-500 mb-1">Finish Date</label>

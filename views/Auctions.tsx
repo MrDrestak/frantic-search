@@ -128,7 +128,7 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
                     </div>
                     <h1 className="text-2xl font-bold text-white">Auction House</h1>
                 </div>
-                <p className="text-slate-400">Bid on exclusive cards or list your own for the highest bidder.</p>
+                <p className="text-slate-400">Bid on exclusive cards or list your own to the highest bidder. All auctions end at 10:00 PM (GMT-05:00 Bogota, Lima, Quito). A last-minute bid triggers a 5-minute extension.</p>
             </header>
 
             {/* Filter Bar */}
