@@ -63,11 +63,11 @@ export const oneSignalService = {
             
             // ANDROID WAKE UP SETTINGS
             priority: 10, // High priority
-            android_channel_id: "e4e94b16-566b-4c60-a88e-73c332159074", // Optional: Use default channel if not set
+            // Removed android_channel_id to use the default channel and avoid 400 errors
             android_visibility: 1, // Public (show on lock screen)
             
             // WEB SETTINGS
-            chrome_web_icon: "https://frantic-search.vercel.app/logo192.png" // Ensure this exists or remove
+            // chrome_web_icon: "..." // Optional
         };
 
         if (targetUserIds && targetUserIds.length > 0) {
@@ -107,11 +107,13 @@ export const oneSignalService = {
             const data = await response.json();
             
             // CRITICAL CHECK: Did OneSignal actually find the user?
+            // Note: If targeting via include_aliases, 'recipients' usually tells us how many matched.
             if (data.recipients === 0) {
                 console.warn("OneSignal Response:", data);
                 if (data.errors && data.errors.length > 0) {
                      throw new Error(`OneSignal Error: ${JSON.stringify(data.errors)}`);
                 }
+                // It's possible to get recipients: 0 if the user hasn't synced yet, but request was valid (200 OK)
                 throw new Error("Notification sent, but 0 recipients found. The user might not have allowed notifications yet, or 'login(userId)' hasn't synced.");
             }
 
