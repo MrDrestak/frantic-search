@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService } from '../services/store';
+import { oneSignalService } from '../services/onesignalService';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -74,6 +75,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const [showContact, setShowContact] = useState(false);
   const [pendingFeedbacks, setPendingFeedbacks] = useState<TradeInteraction[]>([]);
 
+  // Notification State
+  const [notifStatus, setNotifStatus] = useState<{ permission: string, optedIn: boolean, subscriptionId: string | null }>({ permission: 'default', optedIn: false, subscriptionId: null });
+
   // Form State
   const [nickname, setNickname] = useState('');
   const [storeName, setStoreName] = useState('');
@@ -100,6 +104,27 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   useEffect(() => {
       setCurrentPage(1);
   }, [storefrontSearch, gameFilter]);
+
+  useEffect(() => {
+      if (isOwnProfile) {
+          checkNotificationStatus();
+      }
+  }, [isOwnProfile]);
+
+  const checkNotificationStatus = async () => {
+      const status = await oneSignalService.checkStatus();
+      setNotifStatus(status);
+  }
+
+  const handleEnableNotifications = async () => {
+      await oneSignalService.requestPermission();
+      // Wait a moment for the change to register
+      setTimeout(() => {
+          checkNotificationStatus();
+          // Force re-login to ensure ID mapping is fresh
+          if (user) oneSignalService.login(user.id);
+      }, 1000);
+  }
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -408,6 +433,36 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     <h3 className="text-amber-200 font-bold mb-1">Announcement</h3>
                     <p className="text-amber-100/90 text-sm whitespace-pre-wrap">{user.storeAnnouncement}</p>
                 </div>
+            </div>
+        )}
+
+        {/* NOTIFICATION DEBUG CARD (Only for Owner) */}
+        {isOwnProfile && !isEditing && (
+            <div className={`mb-6 border rounded-xl p-4 flex items-center justify-between ${notifStatus.permission === 'granted' ? 'bg-green-950/20 border-green-800' : 'bg-slate-900 border-slate-800'}`}>
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${notifStatus.permission === 'granted' ? 'bg-green-500/20 text-green-400' : 'bg-slate-800 text-slate-400'}`}>
+                        <Bell size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-white font-bold text-sm">Push Notifications</h3>
+                        <p className="text-xs text-slate-400">
+                            Status: <span className="font-mono uppercase">{notifStatus.permission}</span>
+                            {notifStatus.optedIn ? ' (Active)' : ' (Inactive)'}
+                        </p>
+                    </div>
+                </div>
+                {notifStatus.permission !== 'granted' ? (
+                     <button 
+                        onClick={handleEnableNotifications}
+                        className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                     >
+                         Enable
+                     </button>
+                ) : (
+                    <div className="text-green-500 text-xs font-bold flex items-center gap-1">
+                        <CheckCircle size={14} /> Enabled
+                    </div>
+                )}
             </div>
         )}
 

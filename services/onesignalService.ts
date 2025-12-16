@@ -20,7 +20,7 @@ export const oneSignalService = {
                 appId: APP_ID,
                 allowLocalhostAsSecureOrigin: true,
                 notifyButton: {
-                    enable: true,
+                    enable: false, // We will use custom UI in Profile
                 },
             });
             console.log("OneSignal Initialized (Native)");
@@ -30,8 +30,9 @@ export const oneSignalService = {
     login: async (userId: string) => {
         window.OneSignal = window.OneSignal || [];
         window.OneSignal.push(() => {
+            console.log("OneSignal: Logging in as", userId);
             window.OneSignal.login(userId);
-            // Recommended: explicitly tag the user to ensure segmentation works immediately
+            // Explicitly tag to ensure immediate segmentation availability
             window.OneSignal.User.addTag("firebase_uid", userId);
         });
     },
@@ -40,6 +41,32 @@ export const oneSignalService = {
         window.OneSignal = window.OneSignal || [];
         window.OneSignal.push(() => {
             window.OneSignal.logout();
+        });
+    },
+
+    // NEW: Check if notifications are enabled
+    checkStatus: async (): Promise<{ permission: string, optedIn: boolean, subscriptionId: string | null }> => {
+        return new Promise((resolve) => {
+            window.OneSignal = window.OneSignal || [];
+            window.OneSignal.push(async () => {
+                const permission = Notification.permission; // 'default', 'denied', 'granted'
+                const optedIn = window.OneSignal.User.PushSubscription.optedIn;
+                const subscriptionId = window.OneSignal.User.PushSubscription.id;
+                resolve({ permission, optedIn, subscriptionId });
+            });
+        });
+    },
+
+    // NEW: Manually Trigger Prompt
+    requestPermission: async (): Promise<boolean> => {
+        return new Promise((resolve) => {
+            window.OneSignal = window.OneSignal || [];
+            window.OneSignal.push(async () => {
+                await window.OneSignal.Slidedown.promptPush();
+                // Alternatively use native:
+                // await Notification.requestPermission();
+                resolve(window.OneSignal.User.PushSubscription.optedIn);
+            });
         });
     },
 
@@ -63,11 +90,8 @@ export const oneSignalService = {
             
             // ANDROID WAKE UP SETTINGS
             priority: 10, // High priority
-            // Removed android_channel_id to use the default channel and avoid 400 errors
+            // android_channel_id removed to prevent 400 errors
             android_visibility: 1, // Public (show on lock screen)
-            
-            // WEB SETTINGS
-            // chrome_web_icon: "..." // Optional
         };
 
         if (targetUserIds && targetUserIds.length > 0) {
@@ -107,14 +131,14 @@ export const oneSignalService = {
             const data = await response.json();
             
             // CRITICAL CHECK: Did OneSignal actually find the user?
-            // Note: If targeting via include_aliases, 'recipients' usually tells us how many matched.
             if (data.recipients === 0) {
                 console.warn("OneSignal Response:", data);
                 if (data.errors && data.errors.length > 0) {
+                     // If explicit errors exist
                      throw new Error(`OneSignal Error: ${JSON.stringify(data.errors)}`);
                 }
-                // It's possible to get recipients: 0 if the user hasn't synced yet, but request was valid (200 OK)
-                throw new Error("Notification sent, but 0 recipients found. The user might not have allowed notifications yet, or 'login(userId)' hasn't synced.");
+                // Recipients 0 means valid request but no matching user found
+                throw new Error("Notification sent, but 0 recipients found. The user likely has not clicked 'Allow' on notifications yet, or the ID mapping hasn't synced.");
             }
 
             console.log("OneSignal Success:", data);
