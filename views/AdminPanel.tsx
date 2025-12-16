@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
 import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus } from '../types';
@@ -258,7 +258,7 @@ const SystemConfigTab = () => {
         setConfig(prev => {
             if (!prev) return null;
             let finalValue: string | number = value;
-            if (field !== 'currency') finalValue = value === '' ? 0 : parseFloat(value);
+            if (field !== 'currency' && field !== 'paymentLink') finalValue = value === '' ? 0 : parseFloat(value);
             return { ...prev, [tier]: { ...prev[tier], [field]: finalValue } };
         });
     };
@@ -306,26 +306,43 @@ const SystemConfigTab = () => {
                                  </select>
                              </div>
                          </div>
-                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                             {/* Simplified inputs for brevity */}
-                             <div className="space-y-2">
-                                 <h4 className="text-xs uppercase text-indigo-400 font-bold">Trade</h4>
-                                 <input type="number" placeholder="Binders" value={config[tier].maxTradeBinders} onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
-                                 <input type="number" placeholder="Cards/Binder" value={config[tier].maxCardsPerTradeBinder} onChange={(e) => handleChange(tier, 'maxCardsPerTradeBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                         <div className="p-6">
+                             {/* Payment Link Section */}
+                             <div className="mb-6 bg-slate-950/50 p-4 rounded-lg border border-slate-800">
+                                 <label className="text-xs uppercase text-green-400 font-bold mb-2 flex items-center gap-1">
+                                     <CreditCard size={12} /> Payment Checkout Link (Stripe/MercadoPago)
+                                 </label>
+                                 <input 
+                                    type="text" 
+                                    placeholder="https://mpago.la/..." 
+                                    value={config[tier].paymentLink || ''} 
+                                    onChange={(e) => handleChange(tier, 'paymentLink', e.target.value)} 
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white text-sm focus:ring-1 focus:ring-green-500 outline-none" 
+                                 />
+                                 <p className="text-[10px] text-slate-500 mt-1">Paste a Mercado Pago or Stripe payment link here. Users will be redirected here when upgrading.</p>
                              </div>
-                             <div className="space-y-2">
-                                 <h4 className="text-xs uppercase text-pink-400 font-bold">Wishlist</h4>
-                                 <input type="number" placeholder="Binders" value={config[tier].maxWishlistBinders} onChange={(e) => handleChange(tier, 'maxWishlistBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
-                                 <input type="number" placeholder="Cards/Binder" value={config[tier].maxCardsPerWishlistBinder} onChange={(e) => handleChange(tier, 'maxCardsPerWishlistBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
-                             </div>
-                             <div className="space-y-2">
-                                 <h4 className="text-xs uppercase text-amber-400 font-bold">Auction</h4>
-                                 <input type="number" placeholder="Binders" value={config[tier].maxAuctionBinders} onChange={(e) => handleChange(tier, 'maxAuctionBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
-                                 <input type="number" placeholder="Cards/Binder" value={config[tier].maxAuctionCardsPerBinder} onChange={(e) => handleChange(tier, 'maxAuctionCardsPerBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
-                             </div>
-                             <div className="space-y-2">
-                                 <h4 className="text-xs uppercase text-slate-400 font-bold">General</h4>
-                                 <input type="number" placeholder="Showcase Items" value={config[tier].maxShowcaseItems} onChange={(e) => handleChange(tier, 'maxShowcaseItems', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                 {/* Simplified inputs for brevity */}
+                                 <div className="space-y-2">
+                                     <h4 className="text-xs uppercase text-indigo-400 font-bold">Trade</h4>
+                                     <input type="number" placeholder="Binders" value={config[tier].maxTradeBinders} onChange={(e) => handleChange(tier, 'maxTradeBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                     <input type="number" placeholder="Cards/Binder" value={config[tier].maxCardsPerTradeBinder} onChange={(e) => handleChange(tier, 'maxCardsPerTradeBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                 </div>
+                                 <div className="space-y-2">
+                                     <h4 className="text-xs uppercase text-pink-400 font-bold">Wishlist</h4>
+                                     <input type="number" placeholder="Binders" value={config[tier].maxWishlistBinders} onChange={(e) => handleChange(tier, 'maxWishlistBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                     <input type="number" placeholder="Cards/Binder" value={config[tier].maxCardsPerWishlistBinder} onChange={(e) => handleChange(tier, 'maxCardsPerWishlistBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                 </div>
+                                 <div className="space-y-2">
+                                     <h4 className="text-xs uppercase text-amber-400 font-bold">Auction</h4>
+                                     <input type="number" placeholder="Binders" value={config[tier].maxAuctionBinders} onChange={(e) => handleChange(tier, 'maxAuctionBinders', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                     <input type="number" placeholder="Cards/Binder" value={config[tier].maxAuctionCardsPerBinder} onChange={(e) => handleChange(tier, 'maxAuctionCardsPerBinder', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                 </div>
+                                 <div className="space-y-2">
+                                     <h4 className="text-xs uppercase text-slate-400 font-bold">General</h4>
+                                     <input type="number" placeholder="Showcase Items" value={config[tier].maxShowcaseItems} onChange={(e) => handleChange(tier, 'maxShowcaseItems', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm" />
+                                 </div>
                              </div>
                          </div>
                     </div>

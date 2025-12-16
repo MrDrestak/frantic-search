@@ -53,6 +53,9 @@ export interface TierLimits {
   // Pricing
   pricePerMonth: number;
   currency: 'USD' | 'PEN';
+  
+  // Payment
+  paymentLink?: string; // URL to Stripe/MercadoPago checkout
 }
 
 export interface GlobalConfig {

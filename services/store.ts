@@ -23,7 +23,8 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 3, 
         maxCardAlerts: 1,
         pricePerMonth: 0,
-        currency: 'USD'
+        currency: 'USD',
+        paymentLink: ''
     },
     [SubscriptionTier.UNCOMMON]: { 
         maxTradeBinders: 3, 
@@ -35,7 +36,8 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 10, 
         maxCardAlerts: 5,
         pricePerMonth: 5,
-        currency: 'USD'
+        currency: 'USD',
+        paymentLink: ''
     },
     [SubscriptionTier.RARE]: { 
         maxTradeBinders: 10, 
@@ -47,7 +49,8 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 50, 
         maxCardAlerts: 20,
         pricePerMonth: 15,
-        currency: 'USD'
+        currency: 'USD',
+        paymentLink: ''
     },
     [SubscriptionTier.MYTHIC]: { 
         maxTradeBinders: 100, 
@@ -59,7 +62,8 @@ const DEFAULT_CONFIG: GlobalConfig = {
         maxShowcaseItems: 500, 
         maxCardAlerts: 100,
         pricePerMonth: 0, // Reserved for stores (custom)
-        currency: 'USD'
+        currency: 'USD',
+        paymentLink: ''
     },
 };
 

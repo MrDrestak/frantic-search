@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, Crown, Shield, Star, Bell, Check } from 'lucide-react';
+import { X, Crown, Shield, Star, Bell, Check, ExternalLink } from 'lucide-react';
 import { SubscriptionTier, GlobalConfig } from '../types';
 import { configService, subscriptionService } from '../services/store';
 
@@ -16,12 +16,24 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
     const handleSelect = async (tier: SubscriptionTier) => {
         if (tier === currentTier) return;
         
-        // In a real app, integrate Stripe here.
-        const confirmed = window.confirm(`Confirm upgrade to ${tier}? In this demo, payment is simulated.`);
-        if (confirmed) {
-            await subscriptionService.upgradeUser(tier);
-            onUpgrade();
-            onClose();
+        const details = config[tier];
+        const paymentLink = details.paymentLink;
+
+        if (paymentLink && paymentLink.startsWith('http')) {
+            // Redirect to Payment Processor
+            if (confirm(`You will be redirected to our secure payment partner to upgrade to ${tier}. Continue?`)) {
+                window.open(paymentLink, '_blank');
+                // We keep the modal open or close it, user waits for backend to process webhook
+                onClose();
+            }
+        } else {
+             // Fallback for Admin testing or if no link configured
+            const confirmed = window.confirm(`[TEST MODE] Confirm upgrade to ${tier}? (No payment link configured)`);
+            if (confirmed) {
+                await subscriptionService.upgradeUser(tier);
+                onUpgrade();
+                onClose();
+            }
         }
     };
 
@@ -103,7 +115,13 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                         : 'bg-violet-600 hover:bg-violet-700 text-white shadow-violet-900/20 hover:scale-[1.02]'
                     }`}
                 >
-                    {isCurrent ? <span className="flex items-center justify-center gap-2"><Check size={16}/> Active Plan</span> : `Upgrade to ${tier}`}
+                    {isCurrent ? (
+                        <span className="flex items-center justify-center gap-2"><Check size={16}/> Active Plan</span>
+                    ) : (
+                        <span className="flex items-center justify-center gap-2">
+                             Upgrade to {tier} {config[tier].paymentLink ? <ExternalLink size={14}/> : ''}
+                        </span>
+                    )}
                 </button>
             </div>
         );
