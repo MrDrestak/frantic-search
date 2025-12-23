@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserCog } from 'lucide-react';
+/* Added AlertCircle to lucide-react imports */
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserPlus, AlertCircle } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
 import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus } from '../types';
@@ -355,18 +356,18 @@ const SystemConfigTab = () => {
 const UserManagementTab = () => {
     const [targetEmail, setTargetEmail] = useState('');
     const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(SubscriptionTier.RARE);
-    const [isUpdating, setIsUpdating] = useState(false);
+    const [isAssigning, setIsAssigning] = useState(false);
     const [isWiping, setIsWiping] = useState(false);
 
     const handleUpdateTier = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsUpdating(true);
+        setIsAssigning(true);
         try {
             await adminService.assignTierByEmail(targetEmail, selectedTier);
-            alert(`Success! ${targetEmail} updated to ${selectedTier}.`);
+            alert(`Success! ${targetEmail} is now assigned to the ${selectedTier} tier.`);
             setTargetEmail('');
         } catch (e: any) { alert(e.message); }
-        setIsUpdating(false);
+        setIsAssigning(false);
     };
 
     const handleWipe = async () => {
@@ -382,48 +383,42 @@ const UserManagementTab = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
                 <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <UserCog size={20} className="text-violet-500" /> User Tier Management
+                    <UserPlus size={20} className="text-indigo-400" /> User Tier Management
                 </h3>
-                <p className="text-xs text-slate-400 mb-4">
-                    Upgrade friends to Rare or Stores to Mythic. <br/>
-                    <span className="text-amber-500">Warning:</span> Downgrading a user may lock their existing binders.
-                </p>
                 <form onSubmit={handleUpdateTier} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">User Email</label>
+                    <div className="flex flex-col gap-3">
                         <input 
                             type="email" 
-                            placeholder="user@example.com" 
+                            placeholder="User Google Email" 
                             value={targetEmail} 
                             onChange={(e) => setTargetEmail(e.target.value)} 
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500" 
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-violet-500" 
                             required 
                         />
-                    </div>
-                    
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Tier</label>
+                        <div className="flex gap-2">
                             <select 
-                                value={selectedTier}
+                                value={selectedTier} 
                                 onChange={(e) => setSelectedTier(e.target.value as SubscriptionTier)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 appearance-none"
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-violet-500"
                             >
                                 {Object.values(SubscriptionTier).map(tier => (
                                     <option key={tier} value={tier}>{tier}</option>
                                 ))}
                             </select>
-                        </div>
-                        <div className="flex items-end">
                             <button 
                                 type="submit" 
-                                disabled={isUpdating} 
-                                className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 h-10"
+                                disabled={isAssigning} 
+                                className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-2 rounded-lg font-bold transition-all shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2"
                             >
-                                {isUpdating ? <Loader2 className="animate-spin" size={18}/> : 'Update'}
+                                {isAssigning ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                Update Tier
                             </button>
                         </div>
                     </div>
+                    <p className="text-[10px] text-slate-500 flex items-start gap-1">
+                        <AlertCircle size={10} className="mt-0.5 shrink-0" />
+                        Warning: Downgrading a user may lock their existing binders if they exceed the new tier limits.
+                    </p>
                 </form>
             </div>
             <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-6">
