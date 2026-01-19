@@ -16,7 +16,7 @@ const upsertToLibrary = async (card: ScryfallCard) => {
             last_updated: Date.now()
         }, { merge: true });
     } catch (e) {
-        console.warn("Failed to cache card in library", e);
+        // Silently fail to not clutter logs
     }
 };
 
@@ -35,52 +35,82 @@ const getFromLibrary = async (id: string): Promise<ScryfallCard | null> => {
     return null;
 };
 
+/**
+ * Improved Local search fallback. 
+ */
+const searchLocalLibrary = async (query: string): Promise<ScryfallCard[]> => {
+    try {
+        if (!query) return [];
+        
+        const lowerQuery = query.toLowerCase();
+        const capitalizedQuery = query.charAt(0).toUpperCase() + query.slice(1).toLowerCase();
+        
+        const [snapLower, snapCap] = await Promise.all([
+            db.collection(CACHE_COLLECTION)
+                .where('name', '>=', lowerQuery)
+                .where('name', '<=', lowerQuery + '\uf8ff')
+                .limit(10)
+                .get(),
+            db.collection(CACHE_COLLECTION)
+                .where('name', '>=', capitalizedQuery)
+                .where('name', '<=', capitalizedQuery + '\uf8ff')
+                .limit(10)
+                .get()
+        ]);
+        
+        const results = [...snapLower.docs, ...snapCap.docs].map(doc => doc.data() as ScryfallCard);
+        const uniqueMap = new Map<string, ScryfallCard>();
+        results.forEach(card => uniqueMap.set(card.id, card));
+        
+        return Array.from(uniqueMap.values());
+    } catch (e) {
+        console.warn("Local library search failed", e);
+        return [];
+    }
+};
+
 export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
   if (!query || query.length < 3) return [];
   
   try {
-    // We always use Scryfall for searching text to leverage their powerful search engine
-    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`);
+    const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`, {
+        headers: { 'Accept': 'application/json' }
+    });
 
     if (!response.ok) {
-        console.warn(`Scryfall API error: ${response.status} ${response.statusText}`);
-        return [];
+        if (response.status === 404) return await searchLocalLibrary(query);
+        return await searchLocalLibrary(query);
     }
     
     const data = await response.json();
     const results: ScryfallCard[] = data.data || [];
-
-    // Organic growth: Save results to library in the background
-    // (We don't await this to keep the search snappy)
     results.slice(0, 10).forEach(card => upsertToLibrary(card));
-
     return results;
   } catch (error) {
-    console.error("Scryfall search error:", error);
-    return [];
+    console.warn("Scryfall search currently unreachable. Using Lotus Library fallback.");
+    return await searchLocalLibrary(query);
   }
 };
 
 export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]> => {
     if (!oracleId) return [];
     try {
-        // We still fetch the list from Scryfall to ensure we see new editions
-        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`);
+        const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`, {
+            headers: { 'Accept': 'application/json' }
+        });
 
         if (!response.ok) {
-            console.warn(`Scryfall versions error: ${response.status} ${response.statusText}`);
-            return [];
+            const local = await db.collection(CACHE_COLLECTION).where('oracle_id', '==', oracleId).get();
+            return local.docs.map(d => d.data() as ScryfallCard);
         }
         const data = await response.json();
         const results: ScryfallCard[] = data.data || [];
-
-        // Cache all versions found
         results.forEach(card => upsertToLibrary(card));
-
         return results;
     } catch (error) {
-        console.error("Scryfall versions error:", error);
-        return [];
+        console.warn("Scryfall versions unreachable, checking local library.");
+        const local = await db.collection(CACHE_COLLECTION).where('oracle_id', '==', oracleId).get();
+        return local.docs.map(d => d.data() as ScryfallCard);
     }
 }
 
@@ -88,30 +118,63 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
  * Fetches a single card by ID, checking the Lotus Library first.
  */
 export const getCardById = async (id: string): Promise<ScryfallCard | null> => {
-    // 1. Check Library
     const cached = await getFromLibrary(id);
     const now = Date.now();
 
-    // 2. If valid cache (less than 7 days old), return it
     if (cached && cached.last_updated && (now - (cached.last_updated as any)) < CACHE_TTL) {
         return cached;
     }
 
-    // 3. Otherwise (or if stale), fetch from Scryfall
     try {
-        const response = await fetch(`${BASE_URL}/cards/${id}`);
+        const response = await fetch(`${BASE_URL}/cards/${id}`, {
+            headers: { 'Accept': 'application/json' }
+        });
         if (response.ok) {
             const card = await response.json();
-            // Update library
-            await upsertToLibrary(card);
+            upsertToLibrary(card);
             return card;
         }
     } catch (e) {
-        console.error("Error fetching specific card", e);
+        console.warn("Network error fetching card by ID. Using cached version.");
     }
 
-    // 4. Fallback to stale cache if Scryfall is down
     return cached;
+};
+
+/**
+ * Audit prices for a list of card IDs. 
+ * If a card in the library is stale, it refreshes it from Scryfall.
+ */
+export const auditAndRefreshPrices = async (ids: string[]): Promise<Record<string, number>> => {
+    const freshPrices: Record<string, number> = {};
+    const now = Date.now();
+
+    for (const id of ids) {
+        try {
+            const cached = await getFromLibrary(id);
+            let latestCard = cached;
+
+            // If missing or older than 7 days, fetch from Scryfall
+            if (!cached || !cached.last_updated || (now - (cached.last_updated as any)) > CACHE_TTL) {
+                const response = await fetch(`${BASE_URL}/cards/${id}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (response.ok) {
+                    latestCard = await response.json();
+                    if (latestCard) await upsertToLibrary(latestCard);
+                }
+            }
+
+            if (latestCard) {
+                // Determine base price (non-foil first, fallback to foil)
+                const price = latestCard.prices.usd ? parseFloat(latestCard.prices.usd) : (latestCard.prices.usd_foil ? parseFloat(latestCard.prices.usd_foil) : 0);
+                freshPrices[id] = price;
+            }
+        } catch (e) {
+            console.warn(`Failed to audit price for card ${id}`, e);
+        }
+    }
+    return freshPrices;
 };
 
 export const getCardImage = (card: ScryfallCard): string => {
@@ -138,7 +201,6 @@ export const parseCSV = async (file: File): Promise<CSVParseResult> => {
           return;
         }
         
-        // Basic CSV parsing handling quoted values
         const parseLine = (line: string) => {
             const result = [];
             let start = 0;

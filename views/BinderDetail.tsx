@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus, RefreshCw } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -16,13 +16,12 @@ interface BinderDetailProps {
 const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [currentLimit, setCurrentLimit] = useState(25); // Default fallback
+  const [currentLimit, setCurrentLimit] = useState(25);
   const [isOwner, setIsOwner] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
-  // Filter State
   const [filterText, setFilterText] = useState('');
 
-  // Search Flow State
   const [showSearch, setShowSearch] = useState(false);
   const [searchStep, setSearchStep] = useState<'QUERY' | 'VERSIONS' | 'CONFIG'>('QUERY');
   
@@ -33,31 +32,25 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [versionResults, setVersionResults] = useState<ScryfallCard[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
 
-  // CSV State
   const [showCSV, setShowCSV] = useState(false);
   const [importProgress, setImportProgress] = useState<{current: number, total: number} | null>(null);
 
-  // New Card Config
   const [selectedCard, setSelectedCard] = useState<ScryfallCard | null>(null);
   const [condition, setCondition] = useState<CardCondition>(CardCondition.NM);
   const [isFoil, setIsFoil] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
-  // Auction Config State
   const [auctionEndDate, setAuctionEndDate] = useState('');
   const [basePrice, setBasePrice] = useState('0.00');
   const [buyItNowPrice, setBuyItNowPrice] = useState('0.00');
   const [auctionCurrency, setAuctionCurrency] = useState<'USD'|'PEN'>('USD');
 
-  // Delete Confirmation State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Price Modal State
   const [editingPriceCard, setEditingPriceCard] = useState<Card | null>(null);
   const [priceInput, setPriceInput] = useState<string>('');
   const [currencyInput, setCurrencyInput] = useState<'USD' | 'PEN'>('USD');
   
-  // Upgrade Modal State
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
@@ -68,7 +61,6 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
     const currentBinder = await binderService.getBinder(binderId);
     setBinder(currentBinder || null);
     
-    // Check ownership
     const currentUser = auth.getCurrentUser();
     const owner = currentUser && currentBinder && currentUser.id === currentBinder.userId;
     setIsOwner(!!owner);
@@ -76,7 +68,6 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
     const binderCards = await cardService.getCardsInBinder(binderId);
     setCards(binderCards);
 
-    // Calculate Limit based on Type
     if (currentBinder && owner) {
         let checkType: any = 'TRADE_CARD';
         if (currentBinder.type === BinderType.AUCTION) checkType = 'AUCTION_CARD';
@@ -84,13 +75,30 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
         const check = await subscriptionService.checkLimit(checkType, currentBinder.id);
         setCurrentLimit(check.limit);
+
+        // SYNC PRICES IN BACKGROUND
+        if (binderCards.length > 0) {
+            triggerPriceSync(binderCards);
+        }
     }
   };
 
-  // Debounced Search
-  useEffect(() => {
-    if (searchStep !== 'QUERY') return; // Only search in query step
+  const triggerPriceSync = async (binderCards: Card[]) => {
+      setIsSyncing(true);
+      try {
+          await cardService.syncBinderPrices(binderId, binderCards);
+          // Refresh internal state if something changed
+          const updatedCards = await cardService.getCardsInBinder(binderId);
+          setCards(updatedCards);
+      } catch (e) {
+          console.warn("Price sync failed", e);
+      } finally {
+          setIsSyncing(false);
+      }
+  };
 
+  useEffect(() => {
+    if (searchStep !== 'QUERY') return;
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.length >= 3) {
         setIsSearching(true);
@@ -101,14 +109,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         setSearchResults([]);
       }
     }, 500);
-
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, searchStep]);
 
   const handleCardClick = async (card: ScryfallCard) => {
       setSearchStep('VERSIONS');
       setIsLoadingVersions(true);
-      // Fetch all printings of this card
       const prints = await getCardPrintings(card.oracle_id);
       setVersionResults(prints);
       setIsLoadingVersions(false);
@@ -118,13 +124,11 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       setSelectedCard(card);
       setSearchStep('CONFIG');
       setQuantity(1);
-      // Auto-detect if foil only
       if (!card.prices.usd && card.prices.usd_foil) {
           setIsFoil(true);
       } else {
           setIsFoil(false);
       }
-      // Defaults for auction
       setBasePrice(card.prices.usd || '1.00');
       setBuyItNowPrice(card.prices.usd ? (parseFloat(card.prices.usd) * 2).toFixed(2) : '5.00');
   };
@@ -140,13 +144,10 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const handleAddCard = async () => {
     if (!selectedCard || !binder) return;
-    
     try {
-        // LIMIT CHECK (Based on unique documents/cards, not quantity sum)
         let checkType: any = 'TRADE_CARD';
         if (binder.type === BinderType.AUCTION) checkType = 'AUCTION_CARD';
         if (binder.type === BinderType.WISHLIST) checkType = 'WISHLIST_CARD';
-
         const check = await subscriptionService.checkLimit(checkType, binder.id);
         
         if (cards.length >= check.limit) {
@@ -198,11 +199,10 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             price: price,
             purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
             game: binder.game,
-            quantity: binder.type === BinderType.AUCTION ? 1 : quantity, // Force 1 for auctions
+            quantity: binder.type === BinderType.AUCTION ? 1 : quantity,
             ...auctionData
         });
 
-        // Reset UI
         setSelectedCard(null);
         setSearchQuery('');
         setSearchResults([]);
@@ -288,28 +288,23 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
           alert("CSV Import is not available for Auction Binders yet.");
           return;
       }
-
       const currentCount = cards.length;
       const availableSlots = currentLimit - currentCount;
       if (availableSlots <= 0) {
           alert(`This binder is full (Max ${currentLimit} unique cards). Cannot import more cards.`);
           return;
       }
-
       let rowsToProcess = mappedRows;
       let limitReached = false;
       if (mappedRows.length > availableSlots) {
           rowsToProcess = mappedRows.slice(0, availableSlots);
           limitReached = true;
       }
-
       setShowCSV(false);
       setImportProgress({ current: 0, total: rowsToProcess.length });
-
       for (let i = 0; i < rowsToProcess.length; i++) {
           const row = rowsToProcess[i];
           if (!row.name) continue;
-
           try {
               const cleanName = row.name.trim();
               const cleanSet = row.set?.trim();
@@ -318,14 +313,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
               if (cleanSet && cleanCN) query = `set:${cleanSet} cn:${cleanCN}`;
               else if (cleanSet) query = `!"${cleanName}" set:${cleanSet}`;
               else query = `!"${cleanName}"`;
-
               let results = await searchCards(query);
               if (results.length === 0) {
                   let looseQuery = cleanSet ? `${cleanName} set:${cleanSet}` : cleanName;
                   results = await searchCards(looseQuery);
                   if (results.length === 0 && cleanSet) results = await searchCards(cleanName);
               }
-
               const match = results[0];
               if (match) {
                   let cond = CardCondition.NM;
@@ -334,16 +327,12 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                   else if (rowCond.includes('mod') || rowCond === 'mp') cond = CardCondition.MP;
                   else if (rowCond.includes('heav') || rowCond === 'hp') cond = CardCondition.HP;
                   else if (rowCond.includes('dam') || rowCond === 'dmg') cond = CardCondition.DMG;
-
                   const rowFoil = (row.isFoil || '').toString().toLowerCase();
                   const isFoil = rowFoil === 'true' || rowFoil === 'yes' || rowFoil === 'y' || rowFoil === 'foil';
-                  
                   const rowQty = parseInt(row.quantity);
                   const qty = (!isNaN(rowQty) && rowQty > 0) ? rowQty : 1;
-
                   const priceStr = isFoil ? match.prices.usd_foil : match.prices.usd;
                   const price = priceStr ? parseFloat(priceStr) : 0;
-
                   await cardService.addCard({
                       binderId: binder.id,
                       userId: binder.userId,
@@ -443,7 +432,19 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       <header className="flex items-center gap-4 flex-none flex-wrap">
         <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"><ArrowLeft size={24} /></button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2 truncate">{binder.name}{binder.type === BinderType.AUCTION && <Gavel size={20} className="text-amber-500" />}<span className={`text-xs px-2 py-0.5 rounded border ml-2 ${binder.type === BinderType.WISHLIST ? 'border-pink-500 text-pink-400' : binder.type === BinderType.AUCTION ? 'border-amber-500 text-amber-400' : 'border-indigo-500 text-indigo-400'}`}>{binder.type}</span>{!isOwner && <span className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 flex items-center gap-1"><Eye size={10} /> View Only</span>}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2 truncate">
+            {binder.name}
+            {binder.type === BinderType.AUCTION && <Gavel size={20} className="text-amber-500" />}
+            <span className={`text-xs px-2 py-0.5 rounded border ml-2 ${binder.type === BinderType.WISHLIST ? 'border-pink-500 text-pink-400' : binder.type === BinderType.AUCTION ? 'border-amber-500 text-amber-400' : 'border-indigo-500 text-indigo-400'}`}>
+                {binder.type}
+            </span>
+            {!isOwner && <span className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 flex items-center gap-1"><Eye size={10} /> View Only</span>}
+            {isSyncing && (
+                <span className="text-[10px] text-violet-400 animate-pulse flex items-center gap-1 font-bold ml-2">
+                    <RefreshCw size={10} className="animate-spin" /> Syncing prices...
+                </span>
+            )}
+          </h1>
           <p className="text-slate-400 text-sm">{cards.length} {isOwner ? `/ ${currentLimit} ` : ''} Unique Cards</p>
         </div>
         <div className="flex gap-2 shrink-0"><button onClick={handleWhatsAppShare} className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded-lg transition-colors border border-transparent hover:border-green-400" title="Share to WhatsApp"><MessageCircle size={20} /></button><button onClick={handleShareBinder} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-blue-400" title="Copy Link"><Share2 size={20} /></button>{isOwner && (<><button onClick={() => setShowDeleteModal(true)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-red-400" title="Delete Binder"><Trash2 size={20} /></button>{binder.type !== BinderType.AUCTION && (<button onClick={() => setShowCSV(true)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"><Upload size={18} /> <span className="hidden md:inline">Upload CSV</span></button>)}<button onClick={() => setShowSearch(true)} className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-violet-900/20"><Plus size={18} /> <span className="hidden md:inline">Add Card</span></button></>)}</div>
@@ -475,7 +476,6 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
                                 <div className="space-y-3"><label className="block text-sm font-medium text-slate-300">Condition</label><div className="flex flex-wrap gap-2">{Object.values(CardCondition).map((c) => (<button key={c} onClick={() => setCondition(c)} className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border transition-all ${condition === c ? 'bg-violet-600 border-violet-500 text-white shadow-lg shadow-violet-900/50' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'}`}>{c}</button>))}</div></div>
 
-                                {/* QUANTITY SELECTOR (Only for non-auctions) */}
                                 {binder.type !== BinderType.AUCTION && (
                                     <div className="space-y-3">
                                         <label className="block text-sm font-medium text-slate-300">Quantity</label>

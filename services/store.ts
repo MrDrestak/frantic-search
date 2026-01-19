@@ -3,6 +3,7 @@ import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
 import { Binder, BinderType, Card, CardCondition, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert, FeedbackValue } from '../types';
 import { oneSignalService } from './onesignalService';
+import { auditAndRefreshPrices } from './scryfallService';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
@@ -422,7 +423,6 @@ export const tradeService = {
         if (!currentUserProfile) return [];
         const uid = currentUserProfile.id;
         try {
-            // Find where I am buyer or seller and status is PENDING or still missing my feedback
             const buyerSnap = await db.collection('trade_interactions')
                 .where('buyerId', '==', uid)
                 .where('status', '==', 'PENDING')
@@ -440,12 +440,8 @@ export const tradeService = {
             return all.filter(i => {
                 const isBuyer = i.buyerId === uid;
                 const isSeller = i.sellerId === uid;
-                
-                // If I already gave feedback, don't show it anymore
                 if (isBuyer && i.buyerFeedback !== undefined) return false;
                 if (isSeller && i.sellerFeedback !== undefined) return false;
-
-                // Only show after minTime elapsed
                 return (now - i.timestamp) >= minTime;
             });
         } catch (e) {
@@ -470,32 +466,22 @@ export const tradeService = {
                 : { sellerFeedback: feedback, sellerConfirmedAt: Date.now() };
 
             const nextData = { ...data, ...updates };
-
-            // Logic Check: Searcher marked success, Trader marked failure
-            const searcherExito = isBuyer ? feedback !== FeedbackValue.NO_CONCRETADO : data.buyerFeedback !== FeedbackValue.NO_CONCRETADO;
-            const traderNo = isBuyer ? data.sellerFeedback === FeedbackValue.NO_CONCRETADO : feedback === FeedbackValue.NO_CONCRETADO;
-            
             const bothAnswered = (nextData.buyerFeedback !== undefined && nextData.sellerFeedback !== undefined);
 
             if (bothAnswered) {
-                // Determine Scoring
                 let buyerAward = 0;
                 let sellerAward = 0;
-
                 const buyerVal = nextData.buyerFeedback!;
                 const sellerVal = nextData.sellerFeedback!;
 
                 if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal === FeedbackValue.NO_CONCRETADO) {
-                    // Searcher Exito but Trader No Concretado -> +1 to both
                     buyerAward = 1;
                     sellerAward = 1;
                 } else if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal !== FeedbackValue.NO_CONCRETADO) {
-                    // Both confirmed it happened
-                    buyerAward = sellerVal as number; // Buyer gets points based on how seller rated them
-                    sellerAward = buyerVal as number; // Seller gets points based on how buyer rated them
+                    buyerAward = sellerVal as number;
+                    sellerAward = buyerVal as number;
                 }
 
-                // Update Scores
                 if (buyerAward !== 0) {
                     t.update(db.collection('users').doc(data.buyerId), {
                         searcherScore: firebase.firestore.FieldValue.increment(buyerAward)
@@ -506,10 +492,8 @@ export const tradeService = {
                         traderScore: firebase.firestore.FieldValue.increment(sellerAward)
                     });
                 }
-
                 updates.status = 'COMPLETED';
             }
-
             t.update(interactionRef, updates);
         });
     },
@@ -554,7 +538,6 @@ export const subscriptionService = {
             if (type === 'AUCTION_CARD') limit = limits.maxAuctionCardsPerBinder;
             if (type === 'TRADE_CARD') limit = limits.maxCardsPerTradeBinder;
             if (type === 'WISHLIST_CARD') limit = limits.maxCardsPerWishlistBinder;
-            // NOTE: Per user feedback, limit is based on unique cards (documents), not total quantity sum.
             return { allowed: cards.length < limit, limit: limit, current: cards.length };
         }
         if (type === 'SHOWCASE_ITEM') {
@@ -711,7 +694,7 @@ export const cardService = {
       currency: cardData.currency ?? null, 
       price: cardData.price ?? 0, 
       currentBid: cardData.basePrice || 0,
-      quantity: isAuction ? 1 : (cardData.quantity || 1), // Force quantity 1 for auctions
+      quantity: isAuction ? 1 : (cardData.quantity || 1),
       ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && { auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE })
     };
     const docRef = await db.collection("cards").add(newCard);
@@ -730,6 +713,28 @@ export const cardService = {
   },
   updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
       await db.collection("cards").doc(cardId).update({ customPrice, currency });
+  },
+  syncBinderPrices: async (binderId: string, cards: Card[]) => {
+      // 1. Identify cards that haven't been synced in library or are old
+      const scryfallIds = Array.from(new Set(cards.map(c => c.scryfallId)));
+      const freshPrices = await auditAndRefreshPrices(scryfallIds);
+
+      // 2. Batch update card documents if price has changed significantly or is out of sync
+      const batch = db.batch();
+      let hasUpdates = false;
+
+      for (const card of cards) {
+          const newPrice = freshPrices[card.scryfallId];
+          if (newPrice !== undefined && newPrice !== card.price) {
+              const ref = db.collection("cards").doc(card.id);
+              batch.update(ref, { price: newPrice });
+              hasUpdates = true;
+          }
+      }
+
+      if (hasUpdates) {
+          await batch.commit();
+      }
   },
   removeCard: async (cardId: string) => {
     const cardRef = db.collection("cards").doc(cardId);
