@@ -2,7 +2,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { showcaseService, newsService, storeDirectoryService, auth } from '../services/store';
 import { ShowcaseItem, NewsItem, StoreProfile, GameType } from '../types';
-import { Star, ExternalLink, MapPin, Gamepad2, Layers, Loader2, Filter, Check, Globe } from 'lucide-react';
+import { Star, ExternalLink, MapPin, Gamepad2, Layers, Loader2, Filter, Check, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
+import HolographicCard from '../components/HolographicCard';
 
 interface HomeProps {
     onNavigate: (page: string) => void;
@@ -38,7 +39,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         const loadAll = async () => {
             setLoading(true);
             try {
-                // Execute promises individually to handle partial failures
                 const showcasePromise = showcaseService.getNewestShowcase().catch(e => { console.warn(e); return []; });
                 const newsPromise = newsService.getNews().catch(e => { console.warn(e); return []; });
                 const storesPromise = storeDirectoryService.getStores().catch(e => { console.warn(e); return []; });
@@ -67,19 +67,34 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
             });
         }
         setFilteredShowcaseItems(items);
-        setActiveIndex(0); // Reset index when filter changes
+        setActiveIndex(0);
     }, [showcaseFilter, allShowcaseItems]);
 
     // Carousel Auto-Rotation Logic
     useEffect(() => {
-        if (filteredShowcaseItems.length === 0 || isHoveringCarousel) return;
+        if (filteredShowcaseItems.length <= 1 || isHoveringCarousel) return;
         
         const interval = setInterval(() => {
             setActiveIndex(current => (current + 1) % filteredShowcaseItems.length);
-        }, 4000); // 4 seconds
+        }, 6000); // 6 seconds for better viewing experience
 
         return () => clearInterval(interval);
     }, [filteredShowcaseItems.length, isHoveringCarousel]);
+
+    const handlePrev = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex(current => (current - 1 + filteredShowcaseItems.length) % filteredShowcaseItems.length);
+    };
+
+    const handleNext = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex(current => (current + 1) % filteredShowcaseItems.length);
+    };
+
+    const handleDotClick = (e: React.MouseEvent, idx: number) => {
+        e.stopPropagation();
+        setActiveIndex(idx);
+    };
 
     const filteredNews = newsItems
         .filter(n => !newsFilter || n.game === newsFilter)
@@ -96,10 +111,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
 
     const handleStoreClick = (store: StoreProfile) => {
         if (store.linkedUserId) {
-            // Priority: Internal Profile
             onViewProfile(store.linkedUserId);
         } else if (store.websiteUrl) {
-            // Fallback: External Website
             window.open(store.websiteUrl, '_blank');
         }
     };
@@ -110,12 +123,12 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         <div className="p-4 md:p-8 space-y-12 pb-24">
             {/* SECTION 1: NEWEST SHOWCASE CAROUSEL */}
             <section>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
                     <div className="flex items-center gap-2">
                         <Star className="text-amber-500" />
-                        <h2 className="text-2xl font-bold text-white">Newest Showcase</h2>
+                        <h2 className="text-2xl font-bold text-white">Featured Showcase</h2>
                     </div>
-                    {/* Showcase Filter Dropdown */}
+                    
                     <div className="relative w-48">
                         <Filter className="absolute left-3 top-2.5 text-slate-500" size={16} />
                         <select 
@@ -133,49 +146,57 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 
                 {filteredShowcaseItems.length === 0 ? (
                     <div className="h-64 bg-slate-900 rounded-2xl flex flex-col items-center justify-center text-slate-500 border border-slate-800">
-                        <p>No showcase items found for this filter.</p>
+                        <p>No showcase items found.</p>
                         {showcaseFilter && <button onClick={() => setShowcaseFilter('')} className="text-violet-400 underline mt-2">Clear Filter</button>}
                     </div>
                 ) : (
                     <div 
-                        className="relative w-full max-w-4xl mx-auto h-80 md:h-96 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 group cursor-pointer"
+                        className="relative group/carousel"
                         onMouseEnter={() => setIsHoveringCarousel(true)}
                         onMouseLeave={() => setIsHoveringCarousel(false)}
-                        onClick={() => onNavigate('showcase')}
                     >
-                        {/* Background Blur */}
-                        <div 
-                            className="absolute inset-0 bg-cover bg-center blur-xl opacity-30 transition-all duration-700"
-                            style={{ backgroundImage: `url(${filteredShowcaseItems[activeIndex].imageUrl})` }}
+                        <HolographicCard 
+                            imageUrl={filteredShowcaseItems[activeIndex].imageUrl}
+                            name={filteredShowcaseItems[activeIndex].name}
+                            sellerName={filteredShowcaseItems[activeIndex].sellerName}
+                            onClick={() => onNavigate('showcase')}
                         />
                         
-                        {/* Main Image */}
-                        <div className="absolute inset-0 flex items-center justify-center p-4">
-                             <img 
-                                src={filteredShowcaseItems[activeIndex].imageUrl} 
-                                alt={filteredShowcaseItems[activeIndex].name}
-                                className="h-full object-contain rounded-lg shadow-2xl drop-shadow-2xl transition-all duration-500 transform hover:scale-105"
-                             />
-                        </div>
+                        {/* PREMIUM CAROUSEL CONTROLS - Reubicado a la parte superior derecha */}
+                        <div className="absolute top-6 right-6 flex items-center gap-4 z-50 animate-in fade-in slide-in-from-top-4 duration-500">
+                            {/* Arrow Controls */}
+                            <div className="flex items-center bg-black/40 backdrop-blur-xl border border-white/10 rounded-full p-1 shadow-2xl">
+                                <button 
+                                    onClick={handlePrev}
+                                    className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all active:scale-90"
+                                    title="Previous Card"
+                                >
+                                    <ChevronLeft size={24} />
+                                </button>
 
-                        {/* Overlay Info */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 pt-12 flex justify-between items-end">
-                            <div>
-                                <h3 className="text-white font-bold text-xl md:text-2xl truncate max-w-xs md:max-w-md drop-shadow-md">{filteredShowcaseItems[activeIndex].name}</h3>
-                                <p className="text-slate-300 text-sm flex items-center gap-2">
-                                    <span className="opacity-70">Sold by</span> 
-                                    <span className="font-bold text-amber-400">{filteredShowcaseItems[activeIndex].sellerName}</span>
-                                </p>
-                            </div>
-                            
-                            {/* Indicators */}
-                            <div className="flex gap-2 mb-1">
-                                {filteredShowcaseItems.map((_, idx) => (
-                                    <div 
-                                        key={idx}
-                                        className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-6 bg-white' : 'w-1.5 bg-slate-600'}`}
-                                    />
-                                ))}
+                                {/* Dot Indicators - Larger and Interactive */}
+                                <div className="flex gap-2.5 px-3">
+                                    {filteredShowcaseItems.map((_, idx) => (
+                                        <button 
+                                            key={idx}
+                                            onClick={(e) => handleDotClick(e, idx)}
+                                            className={`h-2.5 rounded-full transition-all duration-300 ${
+                                                idx === activeIndex 
+                                                ? 'w-8 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]' 
+                                                : 'w-2.5 bg-white/20 hover:bg-white/40'
+                                            }`}
+                                            title={`Go to item ${idx + 1}`}
+                                        />
+                                    ))}
+                                </div>
+
+                                <button 
+                                    onClick={handleNext}
+                                    className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all active:scale-90"
+                                    title="Next Card"
+                                >
+                                    <ChevronRight size={24} />
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -251,18 +272,15 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                     {stores.map(store => (
                         <div key={store.id} className="flex flex-col items-center text-center group relative">
-                            {/* Verified Badge */}
                             {store.linkedUserId && (
                                 <div className="absolute top-2 right-2 z-10 bg-blue-500 text-white rounded-full p-1 shadow-lg border border-slate-900" title="Verified Partner">
                                     <Check size={12} strokeWidth={3} />
                                 </div>
                             )}
 
-                            {/* Logo */}
                             <button 
                                 onClick={() => handleStoreClick(store)}
                                 className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-xl flex items-center justify-center p-2 mb-3 transition-transform duration-300 group-hover:scale-105 overflow-hidden cursor-pointer shadow-lg border-0"
-                                title={store.linkedUserId ? "View Store Profile" : "Visit Website"}
                             >
                                 <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
                             </button>
@@ -280,26 +298,22 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                                     target="_blank" 
                                     rel="noreferrer"
                                     className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1"
-                                    title="View Location"
                                 >
                                     <MapPin size={10} /> {store.location}
                                 </a>
                                 
-                                {/* Globe Icon - Always External Website */}
                                 {store.websiteUrl && (
                                      <a 
                                         href={store.websiteUrl}
                                         target="_blank"
                                         rel="noreferrer"
                                         className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1"
-                                        title="Official Website"
                                      >
                                          <Globe size={10} />
                                      </a>
                                 )}
                             </div>
 
-                            {/* Game Badges */}
                             <div className="flex gap-1 justify-center flex-wrap mt-1">
                                 {store.games.map(g => (
                                     <span 
@@ -312,11 +326,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             </div>
                         </div>
                     ))}
-                    {stores.length === 0 && (
-                         <div className="col-span-full py-10 text-center text-slate-500 border border-slate-800 border-dashed rounded-xl">
-                            No partner stores listed yet.
-                        </div>
-                    )}
                 </div>
             </section>
         </div>
