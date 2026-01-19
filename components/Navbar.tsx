@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Layers, ShoppingBag, MessageSquare, User, Star, Gavel, Home } from 'lucide-react';
+import { Layers, ShoppingBag, User, Star, Gavel, Home } from 'lucide-react';
 
 interface NavbarProps {
   currentPage: string;

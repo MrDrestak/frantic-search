@@ -1,15 +1,11 @@
 
 import firebase from 'firebase/compat/app';
 import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, ChatMessage, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert } from '../types';
+import { Binder, BinderType, Card, CardCondition, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert, FeedbackValue } from '../types';
 import { oneSignalService } from './onesignalService';
 
 // CONVERSION UTILS
 const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
-
-// CONSTANTS
-// Deprecated: BINDER_CARD_LIMIT is now dynamic per tier/binder type.
-export const BINDER_CARD_LIMIT = 25; 
 
 // DEFAULTS
 const DEFAULT_CONFIG: GlobalConfig = {
@@ -55,13 +51,13 @@ const DEFAULT_CONFIG: GlobalConfig = {
     [SubscriptionTier.MYTHIC]: { 
         maxTradeBinders: 100, 
         maxCardsPerTradeBinder: 500,
-        maxWishlistBinders: 0, // Stores don't need wishlists
+        maxWishlistBinders: 0, 
         maxCardsPerWishlistBinder: 0,
         maxAuctionBinders: 10, 
         maxAuctionCardsPerBinder: 50, 
         maxShowcaseItems: 500, 
         maxCardAlerts: 100,
-        pricePerMonth: 0, // Reserved for stores (custom)
+        pricePerMonth: 0, 
         currency: 'USD',
         paymentLink: ''
     },
@@ -94,7 +90,6 @@ export const auth = {
           customData = userDoc.data() || {};
       }
 
-      // Hardcode admin check for specific email
       const isAdmin = customData.isAdmin || user.email === 'walterpacora88@gmail.com';
 
       const profile: UserProfile = {
@@ -103,10 +98,11 @@ export const auth = {
         displayName: user.displayName || 'Unnamed Trader',
         photoURL: user.photoURL || undefined,
         isOnline: true,
-        subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON, // Default to Common
+        subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
         isAdmin: isAdmin,
-        successfulTrades: customData.successfulTrades || 0,
-        preferredGame: customData.preferredGame || '', // Default to empty (All)
+        traderScore: customData.traderScore || customData.successfulTrades || 0,
+        searcherScore: customData.searcherScore || 0,
+        preferredGame: customData.preferredGame || '',
         ...customData
       };
 
@@ -115,19 +111,16 @@ export const auth = {
           email: profile.email,
           photoURL: profile.photoURL,
           lastLogin: Date.now(),
-          // Don't overwrite tier if it exists (allows admin to set Mythic)
           subscriptionTier: customData.subscriptionTier || profile.subscriptionTier,
           isAdmin: profile.isAdmin,
-          successfulTrades: profile.successfulTrades,
+          traderScore: profile.traderScore,
+          searcherScore: profile.searcherScore,
           preferredGame: profile.preferredGame || null
       }, { merge: true });
 
       currentUserProfile = profile;
       localStorage.removeItem('lotus_is_guest');
-      
-      // Load config on login
       await configService.loadConfig();
-
       return profile;
     } catch (error: any) {
       console.error("Login failed", error);
@@ -147,7 +140,8 @@ export const auth = {
           isOnline: true,
           subscriptionTier: SubscriptionTier.COMMON,
           isAdmin: false,
-          successfulTrades: 0,
+          traderScore: 0,
+          searcherScore: 0,
           preferredGame: ''
       };
       
@@ -155,20 +149,18 @@ export const auth = {
       await configService.loadConfig();
       return guestProfile;
   },
-  getCurrentUser: () => {
-    return currentUserProfile;
-  },
+  getCurrentUser: () => currentUserProfile,
   getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
       try {
           const doc = await db.collection("users").doc(userId).get();
           if (doc.exists) {
               const data = doc.data() as any;
-              // Ensure tier exists
               return { 
                   id: doc.id, 
                   ...data,
                   subscriptionTier: data.subscriptionTier || SubscriptionTier.COMMON,
-                  successfulTrades: data.successfulTrades || 0
+                  traderScore: data.traderScore || data.successfulTrades || 0,
+                  searcherScore: data.searcherScore || 0
               } as UserProfile;
           }
           return null;
@@ -180,7 +172,6 @@ export const auth = {
   updateProfile: async (updates: Partial<UserProfile>): Promise<void> => {
       const user = firebaseAuth.currentUser;
       const current = currentUserProfile;
-      
       if (!current) throw new Error("No user logged in");
 
       try {
@@ -203,8 +194,8 @@ export const auth = {
               email: current.email,
               whatsapp: updates.whatsapp || null,
               preferredStore: updates.preferredStore || null,
-              preferredGame: updates.preferredGame || null, // Persist game preference
-              storeAnnouncement: updates.storeAnnouncement || null, // New Announcement field
+              preferredGame: updates.preferredGame || null,
+              storeAnnouncement: updates.storeAnnouncement || null,
               updatedAt: Date.now()
           };
           
@@ -231,7 +222,6 @@ export const auth = {
             if (userDoc.exists) customData = userDoc.data() || {};
         } catch(e) { console.warn("Offline or error fetching profile", e); }
 
-        // Hardcode admin check for specific email
         const isAdmin = customData.isAdmin || firebaseUser.email === 'walterpacora88@gmail.com';
 
         const profile: UserProfile = {
@@ -242,12 +232,13 @@ export const auth = {
             isOnline: true,
             subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
             isAdmin: isAdmin,
-            successfulTrades: customData.successfulTrades || 0,
+            traderScore: customData.traderScore || customData.successfulTrades || 0,
+            searcherScore: customData.searcherScore || 0,
             preferredGame: customData.preferredGame || '',
             ...customData
         };
         currentUserProfile = profile;
-        await configService.loadConfig(); // Ensure config is loaded
+        await configService.loadConfig();
         callback(profile);
       } else {
         const isGuest = localStorage.getItem('lotus_is_guest');
@@ -261,7 +252,8 @@ export const auth = {
                 isOnline: true,
                 subscriptionTier: SubscriptionTier.COMMON,
                 isAdmin: false,
-                successfulTrades: 0,
+                traderScore: 0,
+                searcherScore: 0,
                 preferredGame: ''
              };
              currentUserProfile = guestProfile;
@@ -280,7 +272,6 @@ export const auth = {
 export const configService = {
     loadConfig: async () => {
         try {
-            // Load Tier Config
             const doc = await db.collection("settings").doc("global").get();
             if (doc.exists) {
                 const data = doc.data() as GlobalConfig;
@@ -299,7 +290,6 @@ export const configService = {
                 currentConfig = DEFAULT_CONFIG;
             }
 
-            // Load System Config
             const sysDoc = await db.collection("settings").doc("system").get();
             if (sysDoc.exists) {
                 currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysDoc.data() as SystemConfig) };
@@ -329,99 +319,57 @@ export const configService = {
 
 // NOTIFICATION SERVICE
 export const notificationService = {
-    // Send a notification to a specific user
     send: async (userId: string, type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM', title: string, message: string, linkUrl?: string, imageUrl?: string) => {
         try {
             const notification: Omit<AppNotification, 'id'> = {
-                userId,
-                type,
-                title,
-                message,
-                linkUrl,
-                imageUrl,
-                read: false,
-                createdAt: Date.now()
+                userId, type, title, message, linkUrl, imageUrl, read: false, createdAt: Date.now()
             };
             await db.collection("notifications").add(notification);
         } catch (e) {
             console.error("Failed to send notification", e);
         }
     },
-
-    // Mark as read
     markAsRead: async (notificationId: string) => {
         await db.collection("notifications").doc(notificationId).update({ read: true });
     },
-
     markAllAsRead: async (userId: string) => {
-        const snap = await db.collection("notifications")
-            .where("userId", "==", userId)
-            .where("read", "==", false)
-            .get();
-        
+        const snap = await db.collection("notifications").where("userId", "==", userId).where("read", "==", false).get();
         const batch = db.batch();
-        snap.docs.forEach(doc => {
-            batch.update(doc.ref, { read: true });
-        });
+        snap.docs.forEach(doc => batch.update(doc.ref, { read: true }));
         await batch.commit();
     },
-
-    // Cleanup old notifications (Call periodically or on load)
     cleanup: async (userId: string) => {
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        const snap = await db.collection("notifications")
-            .where("userId", "==", userId)
-            .where("createdAt", "<", thirtyDaysAgo)
-            .get();
-        
+        const snap = await db.collection("notifications").where("userId", "==", userId).where("createdAt", "<", thirtyDaysAgo).get();
         const batch = db.batch();
         snap.docs.forEach(doc => batch.delete(doc.ref));
         if (!snap.empty) await batch.commit();
     }
 };
 
-// ALERT SERVICE (Search Bell)
+// ALERT SERVICE
 export const alertService = {
-    // Check if user is watching a card
     isWatching: async (userId: string, cardName: string): Promise<boolean> => {
-        // Use composite ID for quick check
         const id = `${userId}_${cardName.replace(/\//g, '_')}`;
         const doc = await db.collection("active_alerts").doc(id).get();
         return doc.exists;
     },
-
     toggleAlert: async (userId: string, cardName: string): Promise<boolean> => {
         const id = `${userId}_${cardName.replace(/\//g, '_')}`;
         const ref = db.collection("active_alerts").doc(id);
         const doc = await ref.get();
-
         if (doc.exists) {
-            // Remove
             await ref.delete();
-            return false; // Now NOT watching
+            return false;
         } else {
-            // Check Limits
             const limits = await subscriptionService.checkLimit('CARD_ALERT');
-            if (!limits.allowed) {
-                throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
-            }
-
-            // Add
-            await ref.set({
-                userId,
-                cardName,
-                createdAt: Date.now()
-            });
-            return true; // Now watching
+            if (!limits.allowed) throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
+            await ref.set({ userId, cardName, createdAt: Date.now() });
+            return true;
         }
     },
-
-    // Helper: Find all users watching a specific card name
     findWatchers: async (cardName: string): Promise<string[]> => {
-        const snap = await db.collection("active_alerts")
-            .where("cardName", "==", cardName)
-            .get();
-        
+        const snap = await db.collection("active_alerts").where("cardName", "==", cardName).get();
         return snap.docs.map(d => (d.data() as CardAlert).userId);
     }
 };
@@ -430,32 +378,25 @@ export const alertService = {
 export const tradeService = {
     logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
         if (!currentUserProfile) return;
-        if (currentUserProfile.id === sellerId) return; // Self contact doesn't count
+        if (currentUserProfile.id === sellerId) return; 
 
         try {
-            // Check for duplicate recent interactions (throttle)
-            // UPDATED: Simplified query to avoid index errors. Removed orderBy.
             const recentSnap = await db.collection('trade_interactions')
                 .where('buyerId', '==', currentUserProfile.id)
                 .where('sellerId', '==', sellerId)
                 .where('status', '==', 'PENDING')
                 .get();
 
-            // If an interaction exists from less than 24h ago, don't spam
             if (!recentSnap.empty) {
-                // Find latest in memory
                 const interactions = recentSnap.docs.map(d => d.data());
                 interactions.sort((a, b) => b.timestamp - a.timestamp);
                 const last = interactions[0];
-                
-                if (Date.now() - last.timestamp < 24 * 60 * 60 * 1000) {
-                    return; 
-                }
+                if (Date.now() - last.timestamp < 24 * 60 * 60 * 1000) return; 
             }
 
-            const interaction: TradeInteraction = {
-                id: '', // filled by firestore
+            const interaction: Omit<TradeInteraction, 'id'> = {
                 buyerId: currentUserProfile.id,
+                buyerName: currentUserProfile.displayName,
                 sellerId,
                 sellerName,
                 cardName,
@@ -464,6 +405,14 @@ export const tradeService = {
             };
 
             await db.collection('trade_interactions').add(interaction);
+            
+            // Notify Seller
+            oneSignalService.sendNotification(
+                "¡Atención!",
+                `Un Searcher te ha contactado por tu ${cardName}.`,
+                [sellerId]
+            ).catch(err => console.error("Push Notification Failed", err));
+
         } catch (e) {
             console.error("Failed to log trade interaction", e);
         }
@@ -471,23 +420,33 @@ export const tradeService = {
 
     getPendingFeedback: async (): Promise<TradeInteraction[]> => {
         if (!currentUserProfile) return [];
-        
+        const uid = currentUserProfile.id;
         try {
-            const snap = await db.collection('trade_interactions')
-                .where('buyerId', '==', currentUserProfile.id)
+            // Find where I am buyer or seller and status is PENDING or still missing my feedback
+            const buyerSnap = await db.collection('trade_interactions')
+                .where('buyerId', '==', uid)
+                .where('status', '==', 'PENDING')
+                .get();
+            
+            const sellerSnap = await db.collection('trade_interactions')
+                .where('sellerId', '==', uid)
                 .where('status', '==', 'PENDING')
                 .get();
 
+            const all = [...buyerSnap.docs, ...sellerSnap.docs].map(doc => mapDoc(doc) as TradeInteraction);
             const now = Date.now();
             const minTime = currentSystemConfig.minTradeConfirmHours * 60 * 60 * 1000;
-            const maxTime = currentSystemConfig.maxTradeConfirmHours * 60 * 60 * 1000;
 
-            const pending = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TradeInteraction));
-            
-            // Filter locally for time window
-            return pending.filter(i => {
-                const diff = now - i.timestamp;
-                return diff >= minTime && diff <= maxTime;
+            return all.filter(i => {
+                const isBuyer = i.buyerId === uid;
+                const isSeller = i.sellerId === uid;
+                
+                // If I already gave feedback, don't show it anymore
+                if (isBuyer && i.buyerFeedback !== undefined) return false;
+                if (isSeller && i.sellerFeedback !== undefined) return false;
+
+                // Only show after minTime elapsed
+                return (now - i.timestamp) >= minTime;
             });
         } catch (e) {
             console.error("Failed to get pending feedback", e);
@@ -495,28 +454,63 @@ export const tradeService = {
         }
     },
 
-    confirmTrade: async (interactionId: string, isSuccessful: boolean) => {
+    submitFeedback: async (interactionId: string, feedback: FeedbackValue) => {
         if (!currentUserProfile) return;
-
+        const uid = currentUserProfile.id;
         const interactionRef = db.collection('trade_interactions').doc(interactionId);
-        
+
         await db.runTransaction(async (t) => {
             const doc = await t.get(interactionRef);
             if (!doc.exists) throw new Error("Interaction not found");
             const data = doc.data() as TradeInteraction;
 
-            if (isSuccessful) {
-                // Update Interaction
-                t.update(interactionRef, { status: 'CONFIRMED' });
-                
-                // Increment Seller Rep
-                const sellerRef = db.collection('users').doc(data.sellerId);
-                t.update(sellerRef, {
-                    successfulTrades: firebase.firestore.FieldValue.increment(1)
-                });
-            } else {
-                t.update(interactionRef, { status: 'CANCELLED' });
+            const isBuyer = data.buyerId === uid;
+            const updates: Partial<TradeInteraction> = isBuyer 
+                ? { buyerFeedback: feedback, buyerConfirmedAt: Date.now() }
+                : { sellerFeedback: feedback, sellerConfirmedAt: Date.now() };
+
+            const nextData = { ...data, ...updates };
+
+            // Logic Check: Searcher marked success, Trader marked failure
+            const searcherExito = isBuyer ? feedback !== FeedbackValue.NO_CONCRETADO : data.buyerFeedback !== FeedbackValue.NO_CONCRETADO;
+            const traderNo = isBuyer ? data.sellerFeedback === FeedbackValue.NO_CONCRETADO : feedback === FeedbackValue.NO_CONCRETADO;
+            
+            const bothAnswered = (nextData.buyerFeedback !== undefined && nextData.sellerFeedback !== undefined);
+
+            if (bothAnswered) {
+                // Determine Scoring
+                let buyerAward = 0;
+                let sellerAward = 0;
+
+                const buyerVal = nextData.buyerFeedback!;
+                const sellerVal = nextData.sellerFeedback!;
+
+                if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal === FeedbackValue.NO_CONCRETADO) {
+                    // Searcher Exito but Trader No Concretado -> +1 to both
+                    buyerAward = 1;
+                    sellerAward = 1;
+                } else if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal !== FeedbackValue.NO_CONCRETADO) {
+                    // Both confirmed it happened
+                    buyerAward = sellerVal as number; // Buyer gets points based on how seller rated them
+                    sellerAward = buyerVal as number; // Seller gets points based on how buyer rated them
+                }
+
+                // Update Scores
+                if (buyerAward !== 0) {
+                    t.update(db.collection('users').doc(data.buyerId), {
+                        searcherScore: firebase.firestore.FieldValue.increment(buyerAward)
+                    });
+                }
+                if (sellerAward !== 0) {
+                    t.update(db.collection('users').doc(data.sellerId), {
+                        traderScore: firebase.firestore.FieldValue.increment(sellerAward)
+                    });
+                }
+
+                updates.status = 'COMPLETED';
             }
+
+            t.update(interactionRef, updates);
         });
     },
 
@@ -530,110 +524,57 @@ export const subscriptionService = {
     upgradeUser: async (tier: SubscriptionTier) => {
         const user = currentUserProfile;
         if (!user) return;
-        
         if (localStorage.getItem('lotus_is_guest') !== 'true') {
-            await db.collection("users").doc(user.id).update({
-                subscriptionTier: tier
-            });
+            await db.collection("users").doc(user.id).update({ subscriptionTier: tier });
         }
-        
         currentUserProfile = { ...user, subscriptionTier: tier };
     },
-    
-    // Check if user has reached their limit
     checkLimit: async (type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD' | 'CARD_ALERT', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
         if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
-        
         const tier = currentUserProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        
         if (type === 'TRADE_BINDER') {
             const binders = await binderService.getUserBinders(currentUserProfile.id);
             const tradeBinders = binders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
-            return {
-                allowed: tradeBinders.length < limits.maxTradeBinders,
-                limit: limits.maxTradeBinders,
-                current: tradeBinders.length
-            };
+            return { allowed: tradeBinders.length < limits.maxTradeBinders, limit: limits.maxTradeBinders, current: tradeBinders.length };
         }
-
         if (type === 'WISHLIST_BINDER') {
             const binders = await binderService.getUserBinders(currentUserProfile.id);
             const wishBinders = binders.filter(b => b.type === BinderType.WISHLIST);
-            return {
-                allowed: wishBinders.length < limits.maxWishlistBinders,
-                limit: limits.maxWishlistBinders,
-                current: wishBinders.length
-            };
+            return { allowed: wishBinders.length < limits.maxWishlistBinders, limit: limits.maxWishlistBinders, current: wishBinders.length };
         }
-
         if (type === 'AUCTION_BINDER') {
             const binders = await binderService.getUserBinders(currentUserProfile.id);
             const auctionBinders = binders.filter(b => b.type === BinderType.AUCTION);
-            return {
-                allowed: auctionBinders.length < limits.maxAuctionBinders,
-                limit: limits.maxAuctionBinders,
-                current: auctionBinders.length
-            };
+            return { allowed: auctionBinders.length < limits.maxAuctionBinders, limit: limits.maxAuctionBinders, current: auctionBinders.length };
         }
-
-        // Card Limits Checks (Used for UI Display primarily, addCard does its own check to be safe)
         if ((type === 'AUCTION_CARD' || type === 'TRADE_CARD' || type === 'WISHLIST_CARD') && binderId) {
             const cards = await cardService.getCardsInBinder(binderId);
             let limit = 0;
             if (type === 'AUCTION_CARD') limit = limits.maxAuctionCardsPerBinder;
             if (type === 'TRADE_CARD') limit = limits.maxCardsPerTradeBinder;
             if (type === 'WISHLIST_CARD') limit = limits.maxCardsPerWishlistBinder;
-
-            return {
-                allowed: cards.length < limit,
-                limit: limit,
-                current: cards.length
-            };
+            // NOTE: Per user feedback, limit is based on unique cards (documents), not total quantity sum.
+            return { allowed: cards.length < limit, limit: limit, current: cards.length };
         }
-        
         if (type === 'SHOWCASE_ITEM') {
-            const snapshot = await db.collection("cards")
-                .where("userId", "==", currentUserProfile.id)
-                .where("isShowcase", "==", true)
-                .get();
-            
-            return {
-                allowed: snapshot.size < limits.maxShowcaseItems,
-                limit: limits.maxShowcaseItems,
-                current: snapshot.size
-            };
+            const snapshot = await db.collection("cards").where("userId", "==", currentUserProfile.id).where("isShowcase", "==", true).get();
+            return { allowed: snapshot.size < limits.maxShowcaseItems, limit: limits.maxShowcaseItems, current: snapshot.size };
         }
-
         if (type === 'CARD_ALERT') {
-            const snapshot = await db.collection("active_alerts")
-                .where("userId", "==", currentUserProfile.id)
-                .get();
-            
-            return {
-                allowed: snapshot.size < limits.maxCardAlerts,
-                limit: limits.maxCardAlerts,
-                current: snapshot.size
-            };
+            const snapshot = await db.collection("active_alerts").where("userId", "==", currentUserProfile.id).get();
+            return { allowed: snapshot.size < limits.maxCardAlerts, limit: limits.maxCardAlerts, current: snapshot.size };
         }
-
         return { allowed: true, limit: 999, current: 0 };
     },
-
-    // New Helper: Determine if a specific binder is locked for a user based on their tier limits
-    // Logic: Binders are sorted by creation date. If user has 3, limit is 1, the newest 2 are locked.
     isBinderLocked: async (binder: Binder): Promise<boolean> => {
         if (!currentUserProfile) return false;
-        if (binder.userId !== currentUserProfile.id) return false; // Viewing others' binders is always fine unless private (not impl)
-
+        if (binder.userId !== currentUserProfile.id) return false;
         const allBinders = await binderService.getUserBinders(currentUserProfile.id);
-        
-        // Filter by same type category
         let categoryBinders: Binder[] = [];
         let limit = 0;
         const tier = currentUserProfile.subscriptionTier;
         const config = currentConfig[tier] || DEFAULT_CONFIG[tier];
-
         if (binder.type === BinderType.AUCTION) {
             categoryBinders = allBinders.filter(b => b.type === BinderType.AUCTION);
             limit = config.maxAuctionBinders;
@@ -644,15 +585,8 @@ export const subscriptionService = {
             categoryBinders = allBinders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
             limit = config.maxTradeBinders;
         }
-
-        // Sort by creation date ascending (Oldest first)
         categoryBinders.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Find index of current binder
         const index = categoryBinders.findIndex(b => b.id === binder.id);
-        
-        // If index is greater than or equal to limit, it's locked (0-based index vs 1-based count)
-        // e.g. Limit 1. Index 0 is safe. Index 1 is locked.
         return index >= limit;
     }
 };
@@ -661,14 +595,10 @@ export const subscriptionService = {
 export const adminService = {
     assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
         const snapshot = await db.collection("users").where("email", "==", email).get();
-        if (snapshot.empty) {
-            throw new Error(`User with email ${email} not found.`);
-        }
-        const userDoc = snapshot.docs[0];
-        await userDoc.ref.update({ subscriptionTier: tier });
+        if (snapshot.empty) throw new Error(`User with email ${email} not found.`);
+        await snapshot.docs[0].ref.update({ subscriptionTier: tier });
         return true;
     },
-
     wipeDatabase: async () => {
         const deleteCollection = async (path: string) => {
             const ref = db.collection(path);
@@ -680,9 +610,7 @@ export const adminService = {
                 await batch.commit();
             }
         };
-
         try {
-            console.log("Starting DB Wipe...");
             await deleteCollection('users');
             await deleteCollection('binders');
             await deleteCollection('cards');
@@ -691,12 +619,8 @@ export const adminService = {
             await deleteCollection('stores');
             await deleteCollection('notifications');
             await deleteCollection('active_alerts');
-            console.log("DB Wipe Complete.");
             return true;
-        } catch (e) {
-            console.error("DB Wipe Failed", e);
-            throw e;
-        }
+        } catch (e) { console.error("DB Wipe Failed", e); throw e; }
     }
 };
 
@@ -706,55 +630,31 @@ export const binderService = {
     try {
         const snapshot = await db.collection("binders").where("userId", "==", userId).get();
         return snapshot.docs.map(doc => mapDoc(doc) as Binder);
-    } catch (e: any) {
-        console.error("Error fetching binders", e);
-        return [];
-    }
+    } catch (e: any) { return []; }
   },
-
-  // NEW METHOD: Fetch specific binder by ID
   getBinder: async (binderId: string): Promise<Binder | null> => {
       try {
           const doc = await db.collection("binders").doc(binderId).get();
-          if (doc.exists) {
-              return mapDoc(doc) as Binder;
-          }
+          if (doc.exists) return mapDoc(doc) as Binder;
           return null;
-      } catch (e) {
-          console.error("Error fetching specific binder", e);
-          return null;
-      }
+      } catch (e) { return null; }
   },
-
   createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
     try {
-        const newBinder = {
-          ...binderData,
-          createdAt: Date.now(),
-          cardCount: 0
-        };
+        const newBinder = { ...binderData, createdAt: Date.now(), cardCount: 0 };
         const docRef = await db.collection("binders").add(newBinder);
         return { id: docRef.id, ...newBinder } as Binder;
-    } catch (e: any) {
-        console.error("Detailed Create Binder Error:", e);
-        throw e;
-    }
+    } catch (e: any) { throw e; }
   },
-
   deleteBinder: async (binderId: string) => {
     await db.collection("binders").doc(binderId).delete();
-    
     const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
-    
     const CHUNK_SIZE = 450;
     const docs = snapshot.docs;
-
     for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
         const chunk = docs.slice(i, i + CHUNK_SIZE);
         const batch = db.batch();
-        chunk.forEach((doc) => {
-            batch.delete(doc.ref);
-        });
+        chunk.forEach((doc) => batch.delete(doc.ref));
         await batch.commit();
     }
   }
@@ -766,149 +666,79 @@ export const cardService = {
     const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
     return snapshot.docs.map(doc => mapDoc(doc) as Card);
   },
-
   getTraderInventory: async (userId: string): Promise<Card[]> => {
     try {
-        // 1. Get user profile to determine tier limits
         const userProfile = await auth.getUserPublicProfile(userId);
         if (!userProfile) return [];
-
         const tier = userProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-
-        // 2. Get user binders
         const binderSnap = await db.collection("binders").where("userId", "==", userId).get();
         const tradeBinders: Binder[] = [];
-        
         binderSnap.docs.forEach(doc => {
             const data = doc.data() as Binder;
-            if (data.type === BinderType.FOR_TRADE || data.type === BinderType.COLLECTION) {
-                tradeBinders.push({ id: doc.id, ...data });
-            }
+            if (data.type === BinderType.FOR_TRADE || data.type === BinderType.COLLECTION) tradeBinders.push({ id: doc.id, ...data });
         });
-
-        // 3. APPLY VAULT LOGIC: Sort by date (oldest first) and take only the allowed amount
         tradeBinders.sort((a, b) => a.createdAt - b.createdAt);
         const activeBinders = tradeBinders.slice(0, limits.maxTradeBinders);
         const activeBinderIds = new Set(activeBinders.map(b => b.id));
-
         if (activeBinderIds.size === 0) return [];
-
-        // 4. Get all cards and filter
         const cardSnap = await db.collection("cards").where("userId", "==", userId).get();
         const allCards = cardSnap.docs.map(doc => mapDoc(doc) as Card);
-
         return allCards.filter(card => activeBinderIds.has(card.binderId));
-    } catch (e) {
-        console.error("Error fetching trader inventory", e);
-        return [];
-    }
+    } catch (e) { return []; }
   },
-
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
     const binderRef = db.collection("binders").doc(cardData.binderId);
     const binderSnap = await binderRef.get();
-    
+    let isAuction = false;
     if (binderSnap.exists) {
         const binder = binderSnap.data() as Binder;
-        
-        // Dynamic Limit Check
-        // 1. Get User's Tier (We can use currentUserProfile since they are performing action)
+        isAuction = binder.type === BinderType.AUCTION;
         if (!currentUserProfile) throw new Error("User session not found");
-        
         const tier = currentUserProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        
-        let maxCards = 0;
-        switch (binder.type) {
-            case BinderType.FOR_TRADE:
-            case BinderType.COLLECTION:
-                maxCards = limits.maxCardsPerTradeBinder;
-                break;
-            case BinderType.WISHLIST:
-                maxCards = limits.maxCardsPerWishlistBinder;
-                break;
-            case BinderType.AUCTION:
-                maxCards = limits.maxAuctionCardsPerBinder;
-                break;
-            default:
-                maxCards = 20;
-        }
-
+        let maxCards = (binder.type === BinderType.FOR_TRADE || binder.type === BinderType.COLLECTION) ? limits.maxCardsPerTradeBinder : (binder.type === BinderType.WISHLIST ? limits.maxCardsPerWishlistBinder : (isAuction ? limits.maxAuctionCardsPerBinder : 20));
         const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
-        const currentCount = countSnap.size;
-
-        if (currentCount >= maxCards) {
-            throw new Error(`Limit reached for this binder type. Max ${maxCards} cards.`);
-        }
+        if (countSnap.size >= maxCards) throw new Error(`Limit reached for this binder type. Max ${maxCards} cards.`);
     }
-
     const newCard = {
-      ...cardData,
-      addedAt: Date.now(),
+      ...cardData, 
+      addedAt: Date.now(), 
       isShowcase: false, 
-      game: cardData.game || GameType.MTG,
-      purchaseUrl: cardData.purchaseUrl ?? null,
-      customPrice: cardData.customPrice ?? null,
-      currency: cardData.currency ?? null,
-      price: cardData.price ?? 0,
+      game: cardData.game || GameType.MTG, 
+      purchaseUrl: cardData.purchaseUrl ?? null, 
+      customPrice: cardData.customPrice ?? null, 
+      currency: cardData.currency ?? null, 
+      price: cardData.price ?? 0, 
       currentBid: cardData.basePrice || 0,
-      
-      ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && {
-          auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE
-      })
+      quantity: isAuction ? 1 : (cardData.quantity || 1), // Force quantity 1 for auctions
+      ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && { auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE })
     };
-    
     const docRef = await db.collection("cards").add(newCard);
-    
-    await db.collection("binders").doc(cardData.binderId).update({
-        cardCount: firebase.firestore.FieldValue.increment(1)
-    });
-
-    // TRIGGER ALERTS (Low Cost Implementation)
-    // If this card is being added to a Trade or Auction binder, check for watchers
+    await db.collection("binders").doc(cardData.binderId).update({ cardCount: firebase.firestore.FieldValue.increment(1) });
     const isTradeable = !cardData.binderType || cardData.binderType === BinderType.FOR_TRADE || cardData.binderType === BinderType.AUCTION;
     if (isTradeable) {
-        // Run async, don't block UI
         alertService.findWatchers(newCard.name).then(watcherIds => {
             watcherIds.forEach(userId => {
-                if (userId !== newCard.userId) { // Don't notify self
-                    notificationService.send(
-                        userId, 
-                        'WISH_ALERT', 
-                        `Found: ${newCard.name}`, 
-                        `${currentUserProfile?.displayName} just listed a card on your wishlist!`,
-                        `/?binder=${newCard.binderId}`,
-                        newCard.imageUrl
-                    );
+                if (userId !== newCard.userId) {
+                    notificationService.send(userId, 'WISH_ALERT', `Found: ${newCard.name}`, `${currentUserProfile?.displayName} just listed a card on your wishlist!`, `/?binder=${newCard.binderId}`, newCard.imageUrl);
                 }
             });
         }).catch(e => console.error("Error triggering alerts", e));
     }
-    
     return { id: docRef.id, ...newCard } as Card;
   },
-
   updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
-      await db.collection("cards").doc(cardId).update({ 
-          customPrice,
-          currency
-      });
+      await db.collection("cards").doc(cardId).update({ customPrice, currency });
   },
-
   removeCard: async (cardId: string) => {
     const cardRef = db.collection("cards").doc(cardId);
     const cardSnap = await cardRef.get();
     if (!cardSnap.exists) return;
     const cardData = cardSnap.data();
     await cardRef.delete();
-    if (cardData && cardData.binderId) {
-        await db.collection("binders").doc(cardData.binderId).update({
-            cardCount: firebase.firestore.FieldValue.increment(-1)
-        });
-    }
+    if (cardData && cardData.binderId) await db.collection("binders").doc(cardData.binderId).update({ cardCount: firebase.firestore.FieldValue.increment(-1) });
   },
-
   toggleShowcase: async (cardId: string, isShowcase: boolean) => {
       await db.collection("cards").doc(cardId).update({ isShowcase });
   }
@@ -918,56 +748,25 @@ export const cardService = {
 export const showcaseService = {
     getShowcaseItems: async (game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
         try {
-            const snapshot = await db.collection("cards")
-                .where("isShowcase", "==", true)
-                .limit(50)
-                .get();
-
+            const snapshot = await db.collection("cards").where("isShowcase", "==", true).limit(50).get();
             let cards = snapshot.docs.map(doc => mapDoc(doc) as Card);
             cards = cards.sort((a, b) => b.addedAt - a.addedAt);
-            
             const userIds: string[] = Array.from(new Set(cards.map(c => c.userId)));
             const userMap = new Map<string, string>(); 
-
             await Promise.all(userIds.map(async (uid: string) => {
                 try {
                     const userDoc = await db.collection("users").doc(uid).get();
-                    if (userDoc.exists) {
-                        userMap.set(uid, (userDoc.data() as any)?.displayName || 'Unknown Trader');
-                    } else {
-                        userMap.set(uid, 'Unknown Trader');
-                    }
-                } catch (e: any) {
-                    console.warn(`Failed to fetch user ${uid}`, e);
-                    userMap.set(uid, 'Unknown Trader');
-                }
+                    userMap.set(uid, (userDoc.data() as any)?.displayName || 'Unknown Trader');
+                } catch (e: any) { userMap.set(uid, 'Unknown Trader'); }
             }));
-
-            const items: ShowcaseItem[] = cards.map(card => ({
-                ...card,
-                sellerId: card.userId,
-                sellerName: userMap.get(card.userId) || 'Unknown Trader'
-            }));
-
-            return items;
-        } catch (e: any) {
-            console.error("Error fetching showcase items", e);
-            return [];
-        }
+            return cards.map(card => ({ ...card, sellerId: card.userId, sellerName: userMap.get(card.userId) || 'Unknown Trader' }));
+        } catch (e: any) { return []; }
     },
-    
-    // Updated: Get top 10 newest
     getNewestShowcase: async (): Promise<ShowcaseItem[]> => {
-        // Since we can't easily do a global sort without composite indexes on everything, 
-        // we'll reuse getShowcaseItems (which fetches 50) and take top 10.
-        // In production, you'd use a specific index: .orderBy('addedAt', 'desc').limit(10)
         try {
             const items = await showcaseService.getShowcaseItems();
             return items.slice(0, 10);
-        } catch(e) {
-            console.error("Error fetching newest showcase", e);
-            return [];
-        }
+        } catch(e) { return []; }
     }
 }
 
@@ -975,224 +774,90 @@ export const showcaseService = {
 export const auctionService = {
     getAllAuctions: async (): Promise<Card[]> => {
         try {
-            const snapshot = await db.collection("cards")
-                .where("binderType", "==", BinderType.AUCTION)
-                .where("auctionStatus", "==", AuctionStatus.ACTIVE)
-                .get();
-                
+            const snapshot = await db.collection("cards").where("binderType", "==", BinderType.AUCTION).where("auctionStatus", "==", AuctionStatus.ACTIVE).get();
             return snapshot.docs.map(doc => mapDoc(doc) as Card);
-        } catch (e) {
-            console.error("Error fetching auctions", e);
-            return [];
-        }
+        } catch (e) { return []; }
     },
-
     placeBid: async (card: Card, userId: string): Promise<void> => {
         if (!card.id) return;
-        
-        // Prevent self-bidding
-        if (card.userId === userId) {
-            throw new Error("You cannot bid on your own auction.");
-        }
-
+        if (card.userId === userId) throw new Error("You cannot bid on your own auction.");
         const newBid = (card.currentBid || card.basePrice || 0) + 1;
         const prevBidderId = card.topBidderId;
-        
-        const updates: any = {
-            currentBid: newBid,
-            topBidderId: userId
-        };
-
-        // AUTO-EXTENSION RULE (Soft Close)
-        // If bid is placed within last 5 minutes, extend by 5 minutes from NOW.
+        const updates: any = { currentBid: newBid, topBidderId: userId };
         if (card.auctionEndDate) {
             const now = Date.now();
-            const FIVE_MINUTES = 5 * 60 * 1000;
             const timeLeft = card.auctionEndDate - now;
-            
-            // Check if within the last 5 minutes window
-            if (timeLeft < FIVE_MINUTES && timeLeft > 0) {
-                // Extend the auction
-                updates.auctionEndDate = now + FIVE_MINUTES;
-            }
+            if (timeLeft < 5 * 60 * 1000 && timeLeft > 0) updates.auctionEndDate = now + 5 * 60 * 1000;
         }
-        
         await db.collection("cards").doc(card.id).update(updates);
-
-        // NOTIFY OUTBID USER (IN-APP)
         if (prevBidderId && prevBidderId !== userId) {
-            notificationService.send(
-                prevBidderId,
-                'OUTBID',
-                'You have been outbid!',
-                `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`,
-                '/auctions', // Ideally deep link to card, but page is fine for now
-                card.imageUrl
-            );
-
-            // SEND PUSH NOTIFICATION (OneSignal)
-            // Note: Sending this via REST API from frontend is okay for this prototype but ideally should be backend function
-            oneSignalService.sendNotification(
-                "You have been outbid!",
-                `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Tap to reclaim your glory!`,
-                [prevBidderId],
-                `${window.location.origin}/?binder=${card.binderId}` // Deep link attempt
-            ).catch(err => console.error("Push Notification Failed", err));
+            notificationService.send(prevBidderId, 'OUTBID', 'You have been outbid!', `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`, '/auctions', card.imageUrl);
+            oneSignalService.sendNotification("You have been outbid!", `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Tap to reclaim your glory!`, [prevBidderId], `${window.location.origin}/?binder=${card.binderId}`).catch(err => console.error("Push Notification Failed", err));
         }
     },
-
     directBuy: async (card: Card, userId: string): Promise<void> => {
         if (!card.id) return;
-
-        // Prevent self-buying
-        if (card.userId === userId) {
-            throw new Error("You cannot buy your own auction.");
-        }
-
-        await db.collection("cards").doc(card.id).update({
-            auctionStatus: AuctionStatus.SOLD,
-            winnerId: userId,
-            currentBid: card.buyItNowPrice // Set final price to BIN price
-        });
-
-        // Notify Seller
-        notificationService.send(
-            card.userId,
-            'SYSTEM',
-            'Auction Sold!',
-            `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`,
-            `/?trader=${userId}`,
-            card.imageUrl
-        );
-        
-        // Push Notification to Seller
-        oneSignalService.sendNotification(
-            "Auction Sold!",
-            `Your ${card.name} was bought instantly! Check your dashboard.`,
-            [card.userId]
-        ).catch(err => console.error("Push Notification Failed", err));
+        if (card.userId === userId) throw new Error("You cannot buy your own auction.");
+        await db.collection("cards").doc(card.id).update({ auctionStatus: AuctionStatus.SOLD, winnerId: userId, currentBid: card.buyItNowPrice });
+        notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
+        oneSignalService.sendNotification("Auction Sold!", `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error("Push Notification Failed", err));
     }
 };
-
 
 // MATCHING SERVICE
 export const matchingService = {
   findMatches: async (currentUserId: string): Promise<MatchResult[]> => {
-    const myBinderSnap = await db.collection("binders")
-        .where("userId", "==", currentUserId)
-        .where("type", "==", BinderType.WISHLIST)
-        .get();
-        
+    const myBinderSnap = await db.collection("binders").where("userId", "==", currentUserId).where("type", "==", BinderType.WISHLIST).get();
     const myBinderIds = myBinderSnap.docs.map(d => d.id);
     if (myBinderIds.length === 0) return [];
-
-    const myCardsSnap = await db.collection("cards").where("userId", "==", currentUserId).get();
-    const allMyCards = myCardsSnap.docs.map(d => mapDoc(d) as Card);
-    
+    const myWantsSnap = await db.collection("cards").where("userId", "==", currentUserId).get();
+    const allMyCards = myWantsSnap.docs.map(d => mapDoc(d) as Card);
     const myWants = allMyCards.filter(c => myBinderIds.includes(c.binderId));
     if (myWants.length === 0) return [];
-    
     const matches: MatchResult[] = [];
     const uniqueWantNames: string[] = Array.from(new Set(myWants.map(w => w.name)));
     const namesToSearch: string[] = uniqueWantNames.slice(0, 10); 
-    
     if (namesToSearch.length > 0) {
-        const marketSnap = await db.collection("cards")
-            .where("name", "in", namesToSearch)
-            .get();
-
+        const marketSnap = await db.collection("cards").where("name", "in", namesToSearch).get();
         const candidates = marketSnap.docs.map(d => mapDoc(d) as Card);
-
         for (const candidate of candidates) {
             const candidateUserId = String(candidate.userId);
             if (candidateUserId === currentUserId) continue; 
-
-            // SMART MATCHING LOGIC
-            // 1. Try to find a wishlist item that matches both Name and ScryfallID (Exact Version)
             const exactWant = myWants.find(w => w.name === candidate.name && w.scryfallId === candidate.scryfallId);
-            // 2. Fallback: Find any wishlist item with the same name
             const looseWant = myWants.find(w => w.name === candidate.name);
-
             const wantCard = exactWant || looseWant;
-
             if (wantCard) {
-                const matchType = exactWant ? 'EXACT' : 'LOOSE';
-                
-                let sellerProfile: UserProfile = {
-                    id: candidateUserId,
-                    displayName: 'Remote User', 
-                    email: '',
-                    isOnline: false,
-                    subscriptionTier: SubscriptionTier.COMMON,
-                    successfulTrades: 0,
-                    preferredGame: ''
-                };
-
+                let sellerProfile: UserProfile = { id: candidateUserId, displayName: 'Remote User', email: '', isOnline: false, subscriptionTier: SubscriptionTier.COMMON, traderScore: 0, searcherScore: 0, preferredGame: '' };
                 try {
                     const userDoc = await db.collection("users").doc(candidateUserId).get();
-                    if (userDoc.exists) {
-                        sellerProfile = { ...sellerProfile, ...(userDoc.data() as any) };
-                    }
-                } catch (e: any) {
-                    console.warn("Could not fetch seller details", e);
-                }
-
-                matches.push({
-                    card: wantCard,
-                    matchCard: candidate,
-                    seller: sellerProfile,
-                    matchType: matchType
-                });
+                    if (userDoc.exists) sellerProfile = { ...sellerProfile, ...(userDoc.data() as any) };
+                } catch (e: any) {}
+                matches.push({ card: wantCard, matchCard: candidate, seller: sellerProfile, matchType: exactWant ? 'EXACT' : 'LOOSE' });
             }
         }
     }
-    
     return matches;
   }
 };
 
-// NEW SERVICES
+// NEWS & STORE SERVICES
 export const newsService = {
     getNews: async (): Promise<NewsItem[]> => {
         try {
             const snap = await db.collection("news").orderBy('date', 'desc').limit(20).get();
             return snap.docs.map(d => mapDoc(d) as NewsItem);
-        } catch (e) {
-            console.error("Error fetching news", e);
-            return [];
-        }
+        } catch (e) { return []; }
     },
-    addNews: async (news: Omit<NewsItem, 'id'>) => {
-        await db.collection("news").add(news);
-    },
-    deleteNews: async (id: string) => {
-        await db.collection("news").doc(id).delete();
-    }
+    addNews: async (news: Omit<NewsItem, 'id'>) => { await db.collection("news").add(news); },
+    deleteNews: async (id: string) => { await db.collection("news").doc(id).delete(); }
 };
-
 export const storeDirectoryService = {
     getStores: async (): Promise<StoreProfile[]> => {
         try {
             const snap = await db.collection("stores").get();
             return snap.docs.map(d => mapDoc(d) as StoreProfile);
-        } catch (e) {
-            console.error("Error fetching stores", e);
-            return [];
-        }
+        } catch (e) { return []; }
     },
-    addStore: async (store: Omit<StoreProfile, 'id'>) => {
-        await db.collection("stores").add(store);
-    },
-    deleteStore: async (id: string) => {
-        await db.collection("stores").doc(id).delete();
-    }
-};
-
-export const messagingService = {
-    getMessages: async (userId: string): Promise<ChatMessage[]> => {
-        return [];
-    },
-    sendMessage: async (senderId: string, receiverId: string, content: string) => {
-        return {} as ChatMessage;
-    }
+    addStore: async (store: Omit<StoreProfile, 'id'>) => { await db.collection("stores").add(store); },
+    deleteStore: async (id: string) => { await db.collection("stores").doc(id).delete(); }
 };

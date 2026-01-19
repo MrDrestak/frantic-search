@@ -137,9 +137,6 @@ const App: React.FC = () => {
     
     if (currentPage === 'market') {
       return <MarketMatch 
-          onOpenChat={(userId) => {
-             console.log("Open chat with", userId);
-          }} 
           onViewProfile={(userId) => {
               setViewingProfileId(userId);
           }}

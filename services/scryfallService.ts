@@ -1,13 +1,45 @@
 
 import { ScryfallCard } from '../types';
+import { db } from './firebase';
 
 const BASE_URL = 'https://api.scryfall.com';
+const CACHE_COLLECTION = 'cards_library';
+const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 Days in milliseconds
+
+/**
+ * Helper to save a card to our global Firestore library
+ */
+const upsertToLibrary = async (card: ScryfallCard) => {
+    try {
+        await db.collection(CACHE_COLLECTION).doc(card.id).set({
+            ...card,
+            last_updated: Date.now()
+        }, { merge: true });
+    } catch (e) {
+        console.warn("Failed to cache card in library", e);
+    }
+};
+
+/**
+ * Helper to get a card from our global Firestore library
+ */
+const getFromLibrary = async (id: string): Promise<ScryfallCard | null> => {
+    try {
+        const doc = await db.collection(CACHE_COLLECTION).doc(id).get();
+        if (doc.exists) {
+            return doc.data() as ScryfallCard;
+        }
+    } catch (e) {
+        console.warn("Failed to fetch from library", e);
+    }
+    return null;
+};
 
 export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
   if (!query || query.length < 3) return [];
   
   try {
-    // Simplified fetch: Scryfall is a public API, standard fetch works best.
+    // We always use Scryfall for searching text to leverage their powerful search engine
     const response = await fetch(`${BASE_URL}/cards/search?q=${encodeURIComponent(query)}`);
 
     if (!response.ok) {
@@ -16,7 +48,13 @@ export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
     }
     
     const data = await response.json();
-    return data.data || [];
+    const results: ScryfallCard[] = data.data || [];
+
+    // Organic growth: Save results to library in the background
+    // (We don't await this to keep the search snappy)
+    results.slice(0, 10).forEach(card => upsertToLibrary(card));
+
+    return results;
   } catch (error) {
     console.error("Scryfall search error:", error);
     return [];
@@ -26,7 +64,7 @@ export const searchCards = async (query: string): Promise<ScryfallCard[]> => {
 export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]> => {
     if (!oracleId) return [];
     try {
-        // Fetch all prints, ordered by release date descending
+        // We still fetch the list from Scryfall to ensure we see new editions
         const response = await fetch(`${BASE_URL}/cards/search?q=oracle_id:${oracleId}&unique=prints&order=released&dir=desc`);
 
         if (!response.ok) {
@@ -34,12 +72,47 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
             return [];
         }
         const data = await response.json();
-        return data.data || [];
+        const results: ScryfallCard[] = data.data || [];
+
+        // Cache all versions found
+        results.forEach(card => upsertToLibrary(card));
+
+        return results;
     } catch (error) {
         console.error("Scryfall versions error:", error);
         return [];
     }
 }
+
+/**
+ * Fetches a single card by ID, checking the Lotus Library first.
+ */
+export const getCardById = async (id: string): Promise<ScryfallCard | null> => {
+    // 1. Check Library
+    const cached = await getFromLibrary(id);
+    const now = Date.now();
+
+    // 2. If valid cache (less than 7 days old), return it
+    if (cached && cached.last_updated && (now - (cached.last_updated as any)) < CACHE_TTL) {
+        return cached;
+    }
+
+    // 3. Otherwise (or if stale), fetch from Scryfall
+    try {
+        const response = await fetch(`${BASE_URL}/cards/${id}`);
+        if (response.ok) {
+            const card = await response.json();
+            // Update library
+            await upsertToLibrary(card);
+            return card;
+        }
+    } catch (e) {
+        console.error("Error fetching specific card", e);
+    }
+
+    // 4. Fallback to stale cache if Scryfall is down
+    return cached;
+};
 
 export const getCardImage = (card: ScryfallCard): string => {
   if (card.image_uris?.normal) return card.image_uris.normal;

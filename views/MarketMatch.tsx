@@ -1,10 +1,10 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { matchingService, auth, tradeService } from '../services/store';
 import { MatchResult, Card } from '../types';
-import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star } from 'lucide-react';
 
 interface MarketMatchProps {
-    onOpenChat: (userId: string) => void;
     onViewProfile: (userId: string) => void;
 }
 
@@ -67,6 +67,11 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
                           </button>
                       </div>
                   </div>
+                  {/* Trader Score Badge */}
+                  <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold border border-amber-500/20">
+                      <Star size={10} fill="currentColor" />
+                      {match.seller.traderScore}
+                  </div>
               </div>
               
               {match.seller.preferredStore && (
@@ -85,7 +90,7 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
     </div>
 );
 
-const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) => {
+const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -114,25 +119,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
       }
   };
 
-  // Group Matches by Wishlist Card (using Card Name as key for simplicity in display, though ID would be stricter)
   const groupedMatches = useMemo(() => {
       const groups = new Map<string, { wantCard: Card, exact: MatchResult[], loose: MatchResult[] }>();
-      
       matches.forEach(m => {
-          // Use name + set to uniquely identify the "Want" visual group if we want to show "My Wishlist: Sol Ring (Alpha)"
-          // For now, let's group by the ID of the card in my wishlist to be precise.
           const key = m.card.id;
-          
-          if (!groups.has(key)) {
-              groups.set(key, { wantCard: m.card, exact: [], loose: [] });
-          }
+          if (!groups.has(key)) groups.set(key, { wantCard: m.card, exact: [], loose: [] });
           const group = groups.get(key)!;
-          
-          if (m.matchType === 'EXACT') {
-              group.exact.push(m);
-          } else {
-              group.loose.push(m);
-          }
+          if (m.matchType === 'EXACT') group.exact.push(m);
+          else group.loose.push(m);
       });
       return Array.from(groups.values());
   }, [matches]);
@@ -177,7 +171,6 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                                 </div>
                            </div>
                            
-                           {/* SCENARIO 1: Exact Matches Found */}
                            {hasExact && (
                                <>
                                    {group.exact.map(m => (
@@ -189,19 +182,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                                             onContact={handleContact}
                                        />
                                    ))}
-                                   
                                    {hasLoose && (
                                        <div className="text-center">
-                                           <button 
-                                                onClick={() => toggleGroup(group.wantCard.id)}
-                                                className="text-xs text-slate-500 hover:text-white flex items-center justify-center gap-1 mx-auto py-2 transition-colors"
-                                           >
+                                           <button onClick={() => toggleGroup(group.wantCard.id)} className="text-xs text-slate-500 hover:text-white flex items-center justify-center gap-1 mx-auto py-2 transition-colors">
                                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                                {isExpanded ? 'Hide' : 'View'} {group.loose.length} other version{group.loose.length !== 1 && 's'} available
                                            </button>
                                        </div>
                                    )}
-
                                    {isExpanded && hasLoose && (
                                         <div className="pl-4 md:pl-8 border-l-2 border-slate-800 space-y-3 mt-2">
                                             {group.loose.map(m => (
@@ -217,8 +205,6 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onOpenChat, onViewProfile }) 
                                    )}
                                </>
                            )}
-
-                           {/* SCENARIO 2: No Exact Matches, Only Loose */}
                            {!hasExact && hasLoose && (
                                <div className="space-y-3">
                                    <div className="bg-amber-900/10 border border-amber-500/20 rounded-lg p-3 flex items-center gap-3">

@@ -39,6 +39,12 @@ const REQUIRED_FIELDS = [
     required: false,
     aliases: ['is foil', 'foil', 'finish', 'is_foil', 'printing'] 
   },
+  { 
+    key: 'quantity', 
+    label: 'Quantity', 
+    required: false,
+    aliases: ['quantity', 'qty', 'count', 'amount', 'total', 'units'] 
+  },
 ];
 
 const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {

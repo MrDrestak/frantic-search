@@ -77,12 +77,16 @@ export interface UserProfile {
   photoURL?: string;
   whatsapp?: string;
   preferredStore?: string;
-  preferredGame?: string; // New Field: Persists user game preference
-  storeAnnouncement?: string; // New Field: Storefront Announcement/Status
+  preferredGame?: string; 
+  storeAnnouncement?: string; 
   isOnline?: boolean;
   subscriptionTier: SubscriptionTier;
   isAdmin?: boolean;
-  successfulTrades?: number;
+  
+  // REPUTATION SYSTEM
+  traderScore: number;
+  searcherScore: number;
+  successfulTrades?: number; // Legacy, map to traderScore
 }
 
 export interface Binder {
@@ -116,6 +120,7 @@ export interface Card {
   binderType?: BinderType;
   isShowcase?: boolean;
   game?: string;
+  quantity: number; // New field
   
   // Auction Specifics
   auctionEndDate?: number; // Timestamp
@@ -139,23 +144,28 @@ export interface MatchResult {
   matchType?: 'EXACT' | 'LOOSE';
 }
 
-export interface ChatMessage {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  content: string;
-  timestamp: number;
-  read: boolean;
+export enum FeedbackValue {
+    MALO = -2,
+    BUENO = 1,
+    EXCELENTE = 3,
+    NO_CONCRETADO = 0 // Specialized case
 }
 
 export interface TradeInteraction {
     id: string;
     buyerId: string;
     sellerId: string;
-    sellerName: string; // Cached for display
-    cardName?: string; // Context
+    sellerName: string; 
+    buyerName: string; // Added for dual feedback
+    cardName?: string; 
     timestamp: number;
-    status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'IGNORED';
+    status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED';
+    
+    // DUAL FEEDBACK TRACKING
+    buyerFeedback?: FeedbackValue;
+    sellerFeedback?: FeedbackValue;
+    buyerConfirmedAt?: number;
+    sellerConfirmedAt?: number;
 }
 
 export interface ScryfallCard {
@@ -185,6 +195,7 @@ export interface ScryfallCard {
     cardhoarder?: string;
     card_kingdom?: string;
   };
+  last_updated?: number; // Field for global cache library logic
 }
 
 // NEW INTERFACES FOR HOME PAGE

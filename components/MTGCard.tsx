@@ -25,6 +25,8 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onS
       }
   };
 
+  const quantity = card.quantity || 1;
+
   return (
     <div className="flex flex-col gap-1">
       <div className="relative group perspective-1000">
@@ -36,6 +38,13 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onS
               loading="lazy"
           />
           
+          {/* Quantity Badge */}
+          {quantity > 1 && (
+              <div className="absolute bottom-2 right-2 z-30 bg-black/80 backdrop-blur text-white text-[10px] md:text-xs font-black px-1.5 py-0.5 rounded border border-white/20 shadow-lg group-hover:scale-110 transition-transform">
+                  x{quantity}
+              </div>
+          )}
+
           {/* Foil Shine Effect */}
           {card.isFoil && (
               <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 pointer-events-none mix-blend-overlay transition-opacity" />
