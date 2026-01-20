@@ -19,11 +19,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
     const [auctions, setAuctions] = useState<Card[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Carousel State
     const [activeIndex, setActiveIndex] = useState(0);
     const [isHoveringCarousel, setIsHoveringCarousel] = useState(false);
     
-    // Filters
     const [newsFilter, setNewsFilter] = useState<string>('');
     const [showcaseFilter, setShowcaseFilter] = useState<string>('');
 
@@ -60,7 +58,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         loadAll();
     }, []);
 
-    // Logic for Featured Auction
     const featuredAuction = useMemo(() => {
         if (!auctions.length || !currentUser) return null;
         const myAuctions = auctions.filter(a => a.topBidderId === currentUser.id);
@@ -71,7 +68,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         return null;
     }, [auctions, currentUser]);
 
-    // Carousel Filter & Rotation
     useEffect(() => {
         let items = allShowcaseItems;
         if (showcaseFilter) items = items.filter(item => (item.game || GameType.MTG) === showcaseFilter);
@@ -115,7 +111,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         </select>
                     </div>
                     
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative">
+                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative min-h-[400px]">
                         {filteredShowcaseItems.length > 0 ? (
                             <div 
                                 className="h-full group/carousel"
@@ -128,14 +124,13 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                                     sellerName={filteredShowcaseItems[activeIndex].sellerName}
                                     onClick={() => onNavigate('showcase')}
                                 />
-                                {/* Carousel Navigation */}
                                 <div className="absolute top-4 right-4 flex items-center gap-2 z-30">
                                     <button onClick={() => setActiveIndex(c => (c - 1 + filteredShowcaseItems.length) % filteredShowcaseItems.length)} className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors"><ChevronLeft size={16}/></button>
                                     <button onClick={() => setActiveIndex(c => (c + 1) % filteredShowcaseItems.length)} className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors"><ChevronRight size={16}/></button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="h-96 flex flex-col items-center justify-center text-slate-600">
+                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
                                 <Sparkles size={48} className="mb-2 opacity-20" />
                                 <p>No hay showcase destacado disponible.</p>
                             </div>
@@ -150,7 +145,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         <h2 className="text-xl font-bold text-white uppercase tracking-wider">Featured Auction</h2>
                     </div>
 
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group">
+                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group min-h-[400px]">
                         {featuredAuction ? (
                             <div 
                                 onClick={() => onNavigate('auctions')}
@@ -159,7 +154,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                                 <div className="flex-1 relative overflow-hidden">
                                     <img src={featuredAuction.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
                                     {featuredAuction.topBidderId === currentUser?.id && (
-                                        <div className="absolute top-3 left-3 bg-green-600 text-[10px] font-black px-2 py-0.5 rounded-full text-white flex items-center gap-1 shadow-lg animate-pulse">
+                                        <div className="absolute top-3 left-3 bg-green-600 text-[10px] font-black px-2 py-0.5 rounded-full text-white flex items-center gap-1 shadow-lg animate-pulse z-10">
                                             <TrendingUp size={10} /> GANANDO
                                         </div>
                                     )}
@@ -201,7 +196,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         <h2 className="text-xl font-bold text-white uppercase tracking-wider">Partner Stores</h2>
                     </div>
 
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-inner">
+                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-inner min-h-[300px]">
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
                             {stores.slice(0, 8).map(store => (
                                 <motion.div 
@@ -243,7 +238,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         </select>
                     </div>
 
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-5 space-y-4">
+                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-5 space-y-4 min-h-[300px]">
                         {newsItems.filter(n => !newsFilter || n.game === newsFilter).slice(0, 4).map(news => (
                             <a 
                                 key={news.id} 
