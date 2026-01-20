@@ -1,9 +1,10 @@
 
-import React, { useEffect, useState, useRef } from 'react';
-import { showcaseService, newsService, storeDirectoryService, auth } from '../services/store';
-import { ShowcaseItem, NewsItem, StoreProfile, GameType } from '../types';
-import { Star, ExternalLink, MapPin, Gamepad2, Layers, Loader2, Filter, Check, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { showcaseService, newsService, storeDirectoryService, auth, auctionService } from '../services/store';
+import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus } from '../types';
+import { Star, ExternalLink, MapPin, Layers, Loader2, Filter, Check, Globe, ChevronLeft, ChevronRight, Gavel, Clock, Zap, TrendingUp, Sparkles } from 'lucide-react';
 import HolographicCard from '../components/HolographicCard';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface HomeProps {
     onNavigate: (page: string) => void;
@@ -13,9 +14,9 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
     const [allShowcaseItems, setAllShowcaseItems] = useState<ShowcaseItem[]>([]);
     const [filteredShowcaseItems, setFilteredShowcaseItems] = useState<ShowcaseItem[]>([]);
-    
     const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
     const [stores, setStores] = useState<StoreProfile[]>([]);
+    const [auctions, setAuctions] = useState<Card[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Carousel State
@@ -26,30 +27,32 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
     const [newsFilter, setNewsFilter] = useState<string>('');
     const [showcaseFilter, setShowcaseFilter] = useState<string>('');
 
-    // User Preference
+    const currentUser = auth.getCurrentUser();
+
     useEffect(() => {
-        const user = auth.getCurrentUser();
-        if (user && user.preferredGame) {
-            setNewsFilter(user.preferredGame);
-            setShowcaseFilter(user.preferredGame);
+        if (currentUser && currentUser.preferredGame) {
+            setNewsFilter(currentUser.preferredGame);
+            setShowcaseFilter(currentUser.preferredGame);
         }
-    }, []);
+    }, [currentUser]);
 
     useEffect(() => {
         const loadAll = async () => {
             setLoading(true);
             try {
-                const showcasePromise = showcaseService.getNewestShowcase().catch(e => { console.warn(e); return []; });
-                const newsPromise = newsService.getNews().catch(e => { console.warn(e); return []; });
-                const storesPromise = storeDirectoryService.getStores().catch(e => { console.warn(e); return []; });
+                const showcasePromise = showcaseService.getNewestShowcase().catch(() => []);
+                const newsPromise = newsService.getNews().catch(() => []);
+                const storesPromise = storeDirectoryService.getStores().catch(() => []);
+                const auctionPromise = auctionService.getAllAuctions().catch(() => []);
 
-                const [sc, nw, st] = await Promise.all([showcasePromise, newsPromise, storesPromise]);
+                const [sc, nw, st, auc] = await Promise.all([showcasePromise, newsPromise, storesPromise, auctionPromise]);
                 
                 setAllShowcaseItems(sc);
                 setNewsItems(nw);
                 setStores(st);
+                setAuctions(auc);
             } catch (e) {
-                console.error("Critical error loading home data", e);
+                console.error("Error loading home data", e);
             } finally {
                 setLoading(false);
             }
@@ -57,27 +60,41 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         loadAll();
     }, []);
 
-    // Filter Showcase Items Logic
+    // Selection Logic for Featured Auction
+    const featuredAuction = useMemo(() => {
+        if (!auctions.length || !currentUser) return null;
+
+        // Situation A: Active participation
+        const myAuctions = auctions.filter(a => a.topBidderId === currentUser.id);
+        if (myAuctions.length > 0) {
+            return myAuctions.sort((a, b) => (b.currentBid || 0) - (a.currentBid || 0))[0];
+        }
+
+        // Situation B: Discovery (Freshness)
+        const twoDaysAgo = Date.now() - (2 * 24 * 60 * 60 * 1000);
+        const freshAuctions = auctions.filter(a => a.addedAt >= twoDaysAgo);
+        if (freshAuctions.length > 0) {
+            return freshAuctions.sort((a, b) => (b.currentBid || 0) - (a.currentBid || 0))[0];
+        }
+
+        return null;
+    }, [auctions, currentUser]);
+
+    // Carousel Auto-Rotation Logic
     useEffect(() => {
         let items = allShowcaseItems;
         if (showcaseFilter) {
-            items = items.filter(item => {
-                const itemGame = item.game || GameType.MTG;
-                return itemGame === showcaseFilter;
-            });
+            items = items.filter(item => (item.game || GameType.MTG) === showcaseFilter);
         }
         setFilteredShowcaseItems(items);
         setActiveIndex(0);
     }, [showcaseFilter, allShowcaseItems]);
 
-    // Carousel Auto-Rotation Logic
     useEffect(() => {
         if (filteredShowcaseItems.length <= 1 || isHoveringCarousel) return;
-        
         const interval = setInterval(() => {
             setActiveIndex(current => (current + 1) % filteredShowcaseItems.length);
-        }, 6000); // 6 seconds for better viewing experience
-
+        }, 6000);
         return () => clearInterval(interval);
     }, [filteredShowcaseItems.length, isHoveringCarousel]);
 
@@ -91,15 +108,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         setActiveIndex(current => (current + 1) % filteredShowcaseItems.length);
     };
 
-    const handleDotClick = (e: React.MouseEvent, idx: number) => {
-        e.stopPropagation();
-        setActiveIndex(idx);
-    };
-
-    const filteredNews = newsItems
-        .filter(n => !newsFilter || n.game === newsFilter)
-        .slice(0, 4);
-
     const getGameBadgeColor = (game: GameType) => {
         switch(game) {
             case GameType.MTG: return 'bg-indigo-900/50 text-indigo-300 border-indigo-700';
@@ -109,32 +117,29 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         }
     };
 
-    const handleStoreClick = (store: StoreProfile) => {
-        if (store.linkedUserId) {
-            onViewProfile(store.linkedUserId);
-        } else if (store.websiteUrl) {
-            window.open(store.websiteUrl, '_blank');
-        }
-    };
-
-    if (loading) return <div className="p-10 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Home...</div>;
+    if (loading) return (
+        <div className="h-[80vh] flex flex-col items-center justify-center p-8 text-center">
+            <Loader2 size={48} className="text-violet-500 animate-spin mb-4" />
+            <p className="text-slate-500 font-medium">Cargando experiencia Lotus...</p>
+        </div>
+    );
 
     return (
-        <div className="p-4 md:p-8 space-y-12 pb-24">
-            {/* SECTION 1: NEWEST SHOWCASE CAROUSEL */}
-            <section>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
-                    <div className="flex items-center gap-2">
-                        <Star className="text-amber-500" />
-                        <h2 className="text-2xl font-bold text-white">Featured Showcase</h2>
-                    </div>
-                    
-                    <div className="relative w-48">
-                        <Filter className="absolute left-3 top-2.5 text-slate-500" size={16} />
+        <div className="p-4 md:p-8 space-y-8 md:space-y-12 pb-24">
+            {/* GRID LAYOUT FOR DESKTOP, STACK FOR MOBILE */}
+            <div className="grid grid-cols-1 md:grid-cols-20 gap-8">
+                
+                {/* 1. FEATURED SHOWCASE (75% Desktop, Top Mobile) */}
+                <section className="col-span-1 md:col-span-15 order-1">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-2">
+                            <Star className="text-amber-500" />
+                            <h2 className="text-2xl font-bold text-white tracking-tight">Featured Showcase</h2>
+                        </div>
                         <select 
                             value={showcaseFilter}
                             onChange={(e) => setShowcaseFilter(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none appearance-none"
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:ring-2 focus:ring-amber-500 outline-none appearance-none cursor-pointer"
                         >
                             <option value="">All Games</option>
                             {Object.values(GameType).map(g => (
@@ -142,192 +147,196 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             ))}
                         </select>
                     </div>
-                </div>
-                
-                {filteredShowcaseItems.length === 0 ? (
-                    <div className="h-64 bg-slate-900 rounded-2xl flex flex-col items-center justify-center text-slate-500 border border-slate-800">
-                        <p>No showcase items found.</p>
-                        {showcaseFilter && <button onClick={() => setShowcaseFilter('')} className="text-violet-400 underline mt-2">Clear Filter</button>}
-                    </div>
-                ) : (
-                    <div 
-                        className="relative group/carousel"
-                        onMouseEnter={() => setIsHoveringCarousel(true)}
-                        onMouseLeave={() => setIsHoveringCarousel(false)}
-                    >
-                        <HolographicCard 
-                            imageUrl={filteredShowcaseItems[activeIndex].imageUrl}
-                            name={filteredShowcaseItems[activeIndex].name}
-                            sellerName={filteredShowcaseItems[activeIndex].sellerName}
-                            onClick={() => onNavigate('showcase')}
-                        />
-                        
-                        {/* PREMIUM CAROUSEL CONTROLS - Reubicado a la parte superior derecha */}
-                        <div className="absolute top-6 right-6 flex items-center gap-4 z-50 animate-in fade-in slide-in-from-top-4 duration-500">
-                            {/* Arrow Controls */}
-                            <div className="flex items-center bg-black/40 backdrop-blur-xl border border-white/10 rounded-full p-1 shadow-2xl">
-                                <button 
-                                    onClick={handlePrev}
-                                    className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all active:scale-90"
-                                    title="Previous Card"
-                                >
-                                    <ChevronLeft size={24} />
-                                </button>
-
-                                {/* Dot Indicators - Larger and Interactive */}
-                                <div className="flex gap-2.5 px-3">
-                                    {filteredShowcaseItems.map((_, idx) => (
-                                        <button 
-                                            key={idx}
-                                            onClick={(e) => handleDotClick(e, idx)}
-                                            className={`h-2.5 rounded-full transition-all duration-300 ${
-                                                idx === activeIndex 
-                                                ? 'w-8 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]' 
-                                                : 'w-2.5 bg-white/20 hover:bg-white/40'
-                                            }`}
-                                            title={`Go to item ${idx + 1}`}
-                                        />
-                                    ))}
-                                </div>
-
-                                <button 
-                                    onClick={handleNext}
-                                    className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all active:scale-90"
-                                    title="Next Card"
-                                >
-                                    <ChevronRight size={24} />
-                                </button>
-                            </div>
+                    
+                    {filteredShowcaseItems.length === 0 ? (
+                        <div className="h-96 md:h-[32rem] bg-slate-900/50 rounded-3xl flex flex-col items-center justify-center text-slate-500 border border-dashed border-slate-800">
+                            <Sparkles size={48} className="mb-4 opacity-20" />
+                            <p className="text-lg">No hay tesoros que mostrar en esta categoría.</p>
                         </div>
-                    </div>
-                )}
-            </section>
-
-            {/* SECTION 2: NEWS */}
-            <section>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                            <Layers className="text-violet-500" /> Latest News
-                        </h2>
-                        <p className="text-slate-400 text-sm">Updates from the TCG world.</p>
-                    </div>
-                    <select 
-                        value={newsFilter} 
-                        onChange={(e) => setNewsFilter(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-violet-500 outline-none"
-                    >
-                        <option value="">All Games</option>
-                        {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {filteredNews.map(news => (
-                        <a 
-                            key={news.id} 
-                            href={news.linkUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-900/10 transition-all group flex flex-col h-full"
+                    ) : (
+                        <div 
+                            className="relative group/carousel"
+                            onMouseEnter={() => setIsHoveringCarousel(true)}
+                            onMouseLeave={() => setIsHoveringCarousel(false)}
                         >
-                            <div className="h-40 overflow-hidden relative">
-                                <img 
-                                    src={news.imageUrl} 
-                                    alt={news.title} 
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                />
-                                <div className="absolute top-2 left-2">
-                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border backdrop-blur-md ${getGameBadgeColor(news.game)}`}>
-                                         {news.game === GameType.MTG ? 'MTG' : news.game === GameType.POKEMON ? 'PKM' : 'YGO'}
-                                     </span>
+                            <HolographicCard 
+                                imageUrl={filteredShowcaseItems[activeIndex].imageUrl}
+                                name={filteredShowcaseItems[activeIndex].name}
+                                sellerName={filteredShowcaseItems[activeIndex].sellerName}
+                                onClick={() => onNavigate('showcase')}
+                            />
+                            
+                            <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
+                                <div className="flex items-center bg-black/40 backdrop-blur-xl border border-white/10 rounded-full p-1 shadow-2xl">
+                                    <button onClick={handlePrev} className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all"><ChevronLeft size={20} /></button>
+                                    <div className="flex gap-2 px-2">
+                                        {filteredShowcaseItems.slice(0, 10).map((_, idx) => (
+                                            <button 
+                                                key={idx} 
+                                                onClick={(e) => { e.stopPropagation(); setActiveIndex(idx); }}
+                                                className={`h-1.5 rounded-full transition-all duration-300 ${idx === activeIndex ? 'w-6 bg-amber-400' : 'w-1.5 bg-white/20'}`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button onClick={handleNext} className="p-2 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-all"><ChevronRight size={20} /></button>
                                 </div>
                             </div>
-                            <div className="p-4 flex flex-col flex-1">
-                                <h3 className="text-white font-bold leading-tight mb-2 group-hover:text-violet-400 transition-colors line-clamp-2">
-                                    {news.title}
-                                </h3>
-                                <div className="mt-auto flex justify-between items-center text-xs text-slate-500">
-                                    <span>{news.sourceName}</span>
-                                    <span>{new Date(news.date).toLocaleDateString()}</span>
-                                </div>
-                            </div>
-                        </a>
-                    ))}
-                    {filteredNews.length === 0 && (
-                        <div className="col-span-full py-10 text-center text-slate-500 border border-slate-800 border-dashed rounded-xl">
-                            No news available.
                         </div>
                     )}
-                </div>
-            </section>
+                </section>
 
-            {/* SECTION 3: STORES DIRECTORY */}
-            <section>
-                 <div className="flex items-center gap-2 mb-6">
-                    <MapPin className="text-green-500" />
-                    <h2 className="text-2xl font-bold text-white">Partner Stores</h2>
-                </div>
+                {/* 2. FEATURED AUCTION (25% Desktop, 2nd Mobile) */}
+                <section className="col-span-1 md:col-span-5 order-2">
+                    <div className="flex items-center gap-2 mb-6">
+                        <Gavel className="text-amber-500" />
+                        <h2 className="text-2xl font-bold text-white tracking-tight">Featured Auction</h2>
+                    </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                    {stores.map(store => (
-                        <div key={store.id} className="flex flex-col items-center text-center group relative">
-                            {store.linkedUserId && (
-                                <div className="absolute top-2 right-2 z-10 bg-blue-500 text-white rounded-full p-1 shadow-lg border border-slate-900" title="Verified Partner">
-                                    <Check size={12} strokeWidth={3} />
-                                </div>
-                            )}
-
-                            <button 
-                                onClick={() => handleStoreClick(store)}
-                                className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-xl flex items-center justify-center p-2 mb-3 transition-transform duration-300 group-hover:scale-105 overflow-hidden cursor-pointer shadow-lg border-0"
+                    <div className="h-full">
+                        {featuredAuction ? (
+                            <motion.div 
+                                onClick={() => onNavigate('auctions')}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`h-[32rem] md:h-[calc(32rem-3rem)] rounded-3xl overflow-hidden border relative group cursor-pointer transition-all duration-500 shadow-2xl ${
+                                    featuredAuction.topBidderId === currentUser?.id 
+                                    ? 'border-green-500/50 shadow-green-900/20 ring-1 ring-green-500/20' 
+                                    : 'border-slate-800 hover:border-amber-500/50 shadow-black'
+                                }`}
                             >
-                                <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
-                            </button>
-
-                            <button 
-                                onClick={() => handleStoreClick(store)}
-                                className="text-white font-bold mb-1 hover:text-indigo-400 transition-colors"
-                            >
-                                {store.name}
-                            </button>
-                            
-                            <div className="flex items-center gap-3 mb-2">
-                                <a 
-                                    href={store.mapsUrl} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="text-xs text-slate-400 hover:text-green-400 flex items-center gap-1"
-                                >
-                                    <MapPin size={10} /> {store.location}
-                                </a>
+                                <img src={featuredAuction.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
                                 
-                                {store.websiteUrl && (
-                                     <a 
-                                        href={store.websiteUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1"
-                                     >
-                                         <Globe size={10} />
-                                     </a>
-                                )}
-                            </div>
+                                {/* Overlay Gradiente */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent p-6 flex flex-col justify-end">
+                                    {featuredAuction.topBidderId === currentUser?.id && (
+                                        <div className="absolute top-4 left-4 bg-green-600 text-white text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 shadow-lg animate-pulse">
+                                            <TrendingUp size={12} /> GANANDO
+                                        </div>
+                                    )}
 
-                            <div className="flex gap-1 justify-center flex-wrap mt-1">
-                                {store.games.map(g => (
-                                    <span 
-                                        key={g} 
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getGameBadgeColor(g)}`}
-                                    >
-                                        {g === GameType.MTG ? 'MTG' : g === GameType.POKEMON ? 'PKM' : 'YGO'}
-                                    </span>
-                                ))}
+                                    <div className="mb-4">
+                                        <h3 className="text-white font-black text-2xl truncate drop-shadow-lg">{featuredAuction.name}</h3>
+                                        <p className="text-slate-400 text-sm font-medium">{featuredAuction.setName}</p>
+                                    </div>
+
+                                    <div className="bg-slate-950/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] uppercase font-bold text-slate-500">Current Bid</span>
+                                            <div className="text-xl font-black text-white">
+                                                {featuredAuction.currency === 'PEN' ? 'S/' : '$'} {featuredAuction.currentBid?.toFixed(2)}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                                            <div className="flex items-center gap-2 text-amber-500">
+                                                <Clock size={14} />
+                                                <span className="text-xs font-bold uppercase tracking-widest">Active</span>
+                                            </div>
+                                            <button className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl text-xs font-black transition-colors">
+                                                PUJAR AHORA
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ) : (
+                            <div className="h-[32rem] md:h-[calc(32rem-3rem)] bg-slate-900/40 rounded-3xl border border-slate-800 border-dashed flex flex-col items-center justify-center p-8 text-center space-y-6">
+                                <motion.div
+                                    animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
+                                    transition={{ duration: 4, repeat: Infinity }}
+                                    className="p-6 bg-amber-500/10 rounded-full text-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.1)] border border-amber-500/20"
+                                >
+                                    <Gavel size={48} />
+                                </motion.div>
+                                <div className="space-y-2">
+                                    <h3 className="text-white font-bold text-xl">En espera de nuevas subastas</h3>
+                                    <p className="text-slate-500 text-sm leading-relaxed">Únete al Discord o revisa más tarde para descubrir piezas únicas.</p>
+                                </div>
                             </div>
+                        )}
+                    </div>
+                </section>
+
+                {/* 3. PARTNER STORES (60% Desktop, 3rd Mobile) */}
+                <section className="col-span-1 md:col-span-12 order-3">
+                    <div className="flex items-center gap-2 mb-8">
+                        <MapPin className="text-green-500" />
+                        <h2 className="text-2xl font-bold text-white tracking-tight">Partner Stores</h2>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+                        {stores.slice(0, 8).map(store => (
+                            <motion.div 
+                                key={store.id} 
+                                whileHover={{ y: -5 }}
+                                className="flex flex-col items-center group"
+                            >
+                                <div 
+                                    onClick={() => store.linkedUserId ? onViewProfile(store.linkedUserId) : window.open(store.websiteUrl, '_blank')}
+                                    className="w-full aspect-square bg-white rounded-2xl flex items-center justify-center p-4 mb-4 cursor-pointer shadow-lg group-hover:shadow-green-500/10 transition-all border-4 border-transparent group-hover:border-green-500/20"
+                                >
+                                    <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
+                                </div>
+                                <h3 className="text-white font-bold text-sm mb-1 text-center truncate w-full">{store.name}</h3>
+                                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
+                                    <MapPin size={10} /> {store.location.split(',')[0]}
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                </section>
+
+                {/* 4. LATEST NEWS (40% Desktop, 4th Mobile) */}
+                <section className="col-span-1 md:col-span-8 order-4">
+                    <div className="flex justify-between items-center mb-8">
+                        <div className="flex items-center gap-2">
+                            <Layers className="text-violet-500" />
+                            <h2 className="text-2xl font-bold text-white tracking-tight">Latest News</h2>
                         </div>
-                    ))}
-                </div>
-            </section>
+                        <select 
+                            value={newsFilter} 
+                            onChange={(e) => setNewsFilter(e.target.value)}
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs outline-none"
+                        >
+                            <option value="">All Games</option>
+                            {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="space-y-4">
+                        {newsItems.filter(n => !newsFilter || n.game === newsFilter).slice(0, 4).map(news => (
+                            <a 
+                                key={news.id} 
+                                href={news.linkUrl} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="flex gap-4 p-3 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-violet-500/50 hover:bg-slate-900 transition-all group overflow-hidden"
+                            >
+                                <div className="w-24 h-24 shrink-0 rounded-xl overflow-hidden relative">
+                                    <img src={news.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
+                                    <div className="absolute inset-0 bg-black/20" />
+                                </div>
+                                <div className="flex-1 flex flex-col justify-between py-1">
+                                    <h3 className="text-white font-bold text-sm line-clamp-2 leading-snug group-hover:text-violet-400 transition-colors">{news.title}</h3>
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                        <span>{news.sourceName}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-1 h-1 rounded-full bg-slate-700" />
+                                            <span>{new Date(news.date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        ))}
+                        {newsItems.length === 0 && (
+                            <div className="py-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl">
+                                <p className="text-sm font-medium">Buscando noticias en el multiverso...</p>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+            </div>
         </div>
     );
 };

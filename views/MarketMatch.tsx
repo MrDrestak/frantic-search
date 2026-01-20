@@ -3,6 +3,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { matchingService, auth, tradeService } from '../services/store';
 import { MatchResult, Card } from '../types';
 import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import PremiumLoading from '../components/PremiumLoading';
+import { motion } from 'framer-motion';
 
 interface MarketMatchProps {
     onViewProfile: (userId: string) => void;
@@ -102,11 +104,16 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   const loadMatches = async () => {
     setLoading(true);
     const user = auth.getCurrentUser();
-    if (user) {
-        const results = await matchingService.findMatches(user.id);
-        setMatches(results);
+    try {
+        if (user) {
+            const results = await matchingService.findMatches(user.id);
+            setMatches(results);
+        }
+    } catch (e) {
+        console.error("Match error", e);
+    } finally {
+        setTimeout(() => setLoading(false), 800);
     }
-    setLoading(false);
   };
 
   const handleContact = async (match: MatchResult) => {
@@ -138,6 +145,10 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
       setExpandedGroups(next);
   }
 
+  if (loading) {
+    return <PremiumLoading text="Buscando en el multiverso" subtext="Rastreando colecciones..." color="indigo" />;
+  }
+
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24">
        <header>
@@ -145,9 +156,7 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
           <p className="text-slate-400">We found people selling cards from your Wishlists.</p>
        </header>
 
-       {loading ? (
-           <div className="text-center py-20 text-slate-500">Scanning the multiverse...</div>
-       ) : groupedMatches.length === 0 ? (
+       {groupedMatches.length === 0 ? (
            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
                <h3 className="text-xl text-white mb-2">No matches found yet</h3>
                <p className="text-slate-400">Add more cards to your "Wishlist" binders, or wait for others to list them.</p>

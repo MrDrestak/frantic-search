@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { binderService, auth, subscriptionService, configService } from '../services/store';
 import { Binder, BinderType, GameType, SubscriptionTier } from '../types';
 import BinderCard from '../components/BinderCard';
-import { Plus, X, Lock, Gavel, Loader2, Sparkles } from 'lucide-react';
+import PremiumLoading from '../components/PremiumLoading';
+import { Plus, X, Lock, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -33,15 +34,10 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     setLoading(true);
     
     try {
-        // 1. Single Fetch: Get all binders at once
         const data = await binderService.getUserBinders(currentUser.id);
-        
-        // 2. Optimization: Calculate lock status locally (Alternative 1)
-        // This avoids calling Firebase for every single binder
         const config = configService.getConfig()[currentUser.subscriptionTier];
         const status: Record<string, boolean> = {};
         
-        // Group by category to check limits correctly
         const auctions = data.filter(b => b.type === BinderType.AUCTION).sort((a, b) => a.createdAt - b.createdAt);
         const wishlists = data.filter(b => b.type === BinderType.WISHLIST).sort((a, b) => a.createdAt - b.createdAt);
         const trades = data.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION).sort((a, b) => a.createdAt - b.createdAt);
@@ -55,7 +51,6 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     } catch (e) {
         console.error("Failed to load binders", e);
     } finally {
-        // Small delay to ensure the animation looks intentional
         setTimeout(() => setLoading(false), 800);
     }
   };
@@ -122,32 +117,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   };
 
   if (loading) {
-    return (
-        <div className="h-[60vh] flex flex-col items-center justify-center p-8 text-center">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="relative mb-8"
-            >
-                <div className="absolute inset-0 bg-violet-600/30 blur-3xl rounded-full animate-pulse" />
-                <Loader2 size={48} className="text-violet-500 animate-spin relative z-10" />
-            </motion.div>
-            
-            <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="space-y-2"
-            >
-                <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-pink-400 to-indigo-400 animate-gradient-x">
-                    Cargando tus Binders
-                </h2>
-                <p className="text-slate-500 text-sm font-medium flex items-center justify-center gap-2">
-                    <Sparkles size={14} className="text-amber-500" /> Preparando tu colección...
-                </p>
-            </motion.div>
-        </div>
-    );
+    return <PremiumLoading text="Cargando tus Binders" subtext="Preparando tu colección..." color="violet" />;
   }
 
   return (
@@ -204,7 +174,6 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         )}
       </AnimatePresence>
 
-      {/* Create Modal */}
       <AnimatePresence>
         {isCreating && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -295,7 +264,6 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         )}
       </AnimatePresence>
 
-      {/* Binder Grid with Staggered Animation */}
       <motion.div 
         variants={{
             hidden: { opacity: 0 },
