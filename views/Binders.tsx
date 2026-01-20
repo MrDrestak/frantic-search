@@ -1,10 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
-import { binderService, auth, subscriptionService } from '../services/store';
+import { binderService, auth, subscriptionService, configService } from '../services/store';
 import { Binder, BinderType, GameType, SubscriptionTier } from '../types';
 import BinderCard from '../components/BinderCard';
-import { Plus, X, Lock, Gavel } from 'lucide-react';
+import { Plus, X, Lock, Gavel, Loader2, Sparkles } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface BindersProps {
   onSelectBinder: (binderId: string) => void;
@@ -13,6 +14,7 @@ interface BindersProps {
 const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
   const [binders, setBinders] = useState<Binder[]>([]);
   const [lockedStatus, setLockedStatus] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newBinderName, setNewBinderName] = useState('');
   const [newBinderType, setNewBinderType] = useState<BinderType>(BinderType.FOR_TRADE);
@@ -28,20 +30,38 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
   const loadBinders = async () => {
     if (!currentUser) return;
-    const data = await binderService.getUserBinders(currentUser.id);
+    setLoading(true);
     
-    // Check lock status for each
-    const status: Record<string, boolean> = {};
-    for (const b of data) {
-        status[b.id] = await subscriptionService.isBinderLocked(b);
+    try {
+        // 1. Single Fetch: Get all binders at once
+        const data = await binderService.getUserBinders(currentUser.id);
+        
+        // 2. Optimization: Calculate lock status locally (Alternative 1)
+        // This avoids calling Firebase for every single binder
+        const config = configService.getConfig()[currentUser.subscriptionTier];
+        const status: Record<string, boolean> = {};
+        
+        // Group by category to check limits correctly
+        const auctions = data.filter(b => b.type === BinderType.AUCTION).sort((a, b) => a.createdAt - b.createdAt);
+        const wishlists = data.filter(b => b.type === BinderType.WISHLIST).sort((a, b) => a.createdAt - b.createdAt);
+        const trades = data.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION).sort((a, b) => a.createdAt - b.createdAt);
+
+        auctions.forEach((b, idx) => status[b.id] = idx >= config.maxAuctionBinders);
+        wishlists.forEach((b, idx) => status[b.id] = idx >= config.maxWishlistBinders);
+        trades.forEach((b, idx) => status[b.id] = idx >= config.maxTradeBinders);
+
+        setLockedStatus(status);
+        setBinders(data);
+    } catch (e) {
+        console.error("Failed to load binders", e);
+    } finally {
+        // Small delay to ensure the animation looks intentional
+        setTimeout(() => setLoading(false), 800);
     }
-    setLockedStatus(status);
-    setBinders(data);
   };
 
   const handleBinderClick = (binder: Binder) => {
       if (lockedStatus[binder.id]) {
-          // Trigger upgrade modal instead of opening
           setShowUpgradeModal(true);
       } else {
           onSelectBinder(binder.id);
@@ -50,27 +70,15 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
   const handleShareBinder = (binder: Binder) => {
       if (!currentUser) return;
-
-      // Use origin to ensure we point to the root domain (e.g., https://frantic-search.vercel.app/)
       const url = `${window.location.origin}/?binder=${binder.id}`;
+      const profileHeader = `Display Name: *${currentUser.displayName}*\nPrefered Game: ${currentUser.preferredGame || 'Any'}\nPrefered Store: ${currentUser.preferredStore || 'No Preference'}\nTrader Count: ${currentUser.successfulTrades || 0}`;
       
-      // Construct Profile Card Text (No Emojis, Specific Labels)
-      const profileHeader = `Display Name: *${currentUser.displayName}*\nPrefered Game: ${currentUser.preferredGame || 'Any'}\nPrefered Store: ${currentUser.preferredStore || 'No Preference'}\nTrader Count: ${currentUser.successfulTrades}`;
-      
-      let specificPhrase = "";
-      
-      if (binder.type === BinderType.WISHLIST) {
-          specificPhrase = "Estoy buscando estas cartas, en estas ediciones:";
-      } else {
-          // Default for Trade, Auction, Collection
-          specificPhrase = "Tengo este binder que puede interesar:";
-      }
+      let specificPhrase = binder.type === BinderType.WISHLIST 
+        ? "Estoy buscando estas cartas, en estas ediciones:" 
+        : "Tengo este binder que puede interesar:";
 
       const fullMessage = `${profileHeader}\n\n${specificPhrase}\n${url}`;
-
-      // Open WhatsApp
-      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(fullMessage)}`;
-      window.open(whatsappUrl, '_blank');
+      window.open(`https://wa.me/?text=${encodeURIComponent(fullMessage)}`, '_blank');
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -78,37 +86,22 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
     if (!currentUser || !newBinderName.trim()) return;
 
     try {
-        // Prevent Wishlist for Mythic via logic (double check)
         if (isMythic && newBinderType === BinderType.WISHLIST) {
             alert("Stores (Mythic Tier) cannot create Wishlists.");
             return;
         }
 
-        // WhatsApp Validation for Auctions
-        if (newBinderType === BinderType.AUCTION) {
-            if (!currentUser.whatsapp) {
-                alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before creating an Auction Binder.");
-                return;
-            }
+        if (newBinderType === BinderType.AUCTION && !currentUser.whatsapp) {
+            alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before creating an Auction Binder.");
+            return;
         }
 
-        // Limit Check based on Type
         let checkType: 'TRADE_BINDER' | 'AUCTION_BINDER' | 'WISHLIST_BINDER' = 'TRADE_BINDER';
-        if (newBinderType === BinderType.AUCTION) {
-            checkType = 'AUCTION_BINDER';
-        } else if (newBinderType === BinderType.WISHLIST) {
-            checkType = 'WISHLIST_BINDER';
-        }
+        if (newBinderType === BinderType.AUCTION) checkType = 'AUCTION_BINDER';
+        else if (newBinderType === BinderType.WISHLIST) checkType = 'WISHLIST_BINDER';
 
         const check = await subscriptionService.checkLimit(checkType);
         if (!check.allowed) {
-            if (newBinderType === BinderType.AUCTION) {
-                  alert(`You have reached the Auction Binder limit (${check.limit}) for your tier.`);
-            } else if (newBinderType === BinderType.WISHLIST) {
-                  alert(`You have reached the Wishlist Binder limit (${check.limit}) for your tier.`);
-            } else {
-                  alert(`You have reached the Trade Binder limit (${check.limit}) for your tier.`);
-            }
             setShowUpgradeModal(true);
             return;
         }
@@ -124,22 +117,51 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         setIsCreating(false);
         loadBinders();
     } catch (error: any) {
-        console.error("Failed to create binder", error);
         alert("Failed to create binder. " + (error.message || ""));
     }
   };
 
+  if (loading) {
+    return (
+        <div className="h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative mb-8"
+            >
+                <div className="absolute inset-0 bg-violet-600/30 blur-3xl rounded-full animate-pulse" />
+                <Loader2 size={48} className="text-violet-500 animate-spin relative z-10" />
+            </motion.div>
+            
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="space-y-2"
+            >
+                <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-pink-400 to-indigo-400 animate-gradient-x">
+                    Cargando tus Binders
+                </h2>
+                <p className="text-slate-500 text-sm font-medium flex items-center justify-center gap-2">
+                    <Sparkles size={14} className="text-amber-500" /> Preparando tu colección...
+                </p>
+            </motion.div>
+        </div>
+    );
+  }
+
   return (
-    <div className="p-4 md:p-8 space-y-6 pb-24">
+    <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="p-4 md:p-8 space-y-6 pb-24"
+    >
       {/* Upgrade Modal */}
       {showUpgradeModal && currentUser && (
           <SubscriptionModal 
             onClose={() => setShowUpgradeModal(false)}
             currentTier={currentUser.subscriptionTier}
-            onUpgrade={() => {
-                // User upgraded. Refresh logic.
-                loadBinders();
-            }}
+            onUpgrade={() => loadBinders()}
           />
       )}
 
@@ -157,115 +179,148 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
       </header>
       
       {/* Alert for locked binders */}
-      {Object.values(lockedStatus).some(isLocked => isLocked) && (
-          <div className="bg-amber-900/20 border border-amber-500/50 p-4 rounded-xl flex items-center gap-3">
-              <div className="bg-amber-500/20 p-2 rounded-full text-amber-500">
-                  <Lock size={20} />
-              </div>
-              <div className="flex-1">
-                  <h3 className="text-amber-400 font-bold">Subscription Limit Exceeded</h3>
-                  <p className="text-sm text-slate-300">Some binders are locked because they exceed your current plan limits. Upgrade to unlock them.</p>
-              </div>
-              <button 
-                onClick={() => setShowUpgradeModal(true)}
-                className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
-              >
-                  Upgrade
-              </button>
-          </div>
-      )}
+      <AnimatePresence>
+        {Object.values(lockedStatus).some(isLocked => isLocked) && (
+            <motion.div 
+                initial={{ opacity: 0, height: 0, y: -20 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -20 }}
+                className="bg-amber-900/20 border border-amber-500/50 p-4 rounded-xl flex items-center gap-3"
+            >
+                <div className="bg-amber-500/20 p-2 rounded-full text-amber-500">
+                    <Lock size={20} />
+                </div>
+                <div className="flex-1">
+                    <h3 className="text-amber-400 font-bold">Subscription Limit Exceeded</h3>
+                    <p className="text-sm text-slate-300">Some binders are locked because they exceed your current plan limits. Upgrade to unlock them.</p>
+                </div>
+                <button 
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
+                >
+                    Upgrade
+                </button>
+            </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Create Modal */}
-      {isCreating && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-white">Create New Binder</h2>
-              <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
-                <X size={24} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Binder Name</label>
-                <input 
-                  autoFocus
-                  type="text" 
-                  value={newBinderName}
-                  onChange={(e) => setNewBinderName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                  placeholder="e.g. Rare Trades or Auction House 1"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Purpose</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setNewBinderType(BinderType.FOR_TRADE)}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                      newBinderType === BinderType.FOR_TRADE 
-                      ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300' 
-                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    For Trade / Sell
-                  </button>
-                  
-                  {/* Wishlist Button - Disabled/Hidden for Mythic */}
-                  {isMythic ? (
-                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/50 text-slate-600 text-sm font-medium flex flex-col items-center justify-center opacity-50 cursor-not-allowed text-center">
-                          <Lock size={16} className="mb-1" />
-                          <span>Wishlist</span>
-                          <span className="text-[9px] uppercase">N/A for Store</span>
-                      </div>
-                  ) : (
-                      <button
-                        type="button"
-                        onClick={() => setNewBinderType(BinderType.WISHLIST)}
-                        className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                          newBinderType === BinderType.WISHLIST 
-                          ? 'bg-pink-600/20 border-pink-500 text-pink-300' 
-                          : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        Wishlist
-                      </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setNewBinderType(BinderType.AUCTION)}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center gap-1 ${
-                      newBinderType === BinderType.AUCTION 
-                      ? 'bg-amber-600/20 border-amber-500 text-amber-300' 
-                      : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    <Gavel size={16} /> Auction
-                  </button>
+      <AnimatePresence>
+        {isCreating && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
+            >
+                <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-white">Create New Binder</h2>
+                <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
+                    <X size={24} />
+                </button>
                 </div>
-              </div>
+                
+                <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Binder Name</label>
+                    <input 
+                    autoFocus
+                    type="text" 
+                    value={newBinderName}
+                    onChange={(e) => setNewBinderName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                    placeholder="e.g. Rare Trades or Auction House 1"
+                    />
+                </div>
 
-              <button 
-                type="submit"
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg font-medium transition-colors"
-              >
-                Create Binder
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Purpose</label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setNewBinderType(BinderType.FOR_TRADE)}
+                        className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                        newBinderType === BinderType.FOR_TRADE 
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300' 
+                        : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                    >
+                        For Trade / Sell
+                    </button>
+                    
+                    {isMythic ? (
+                        <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/50 text-slate-600 text-sm font-medium flex flex-col items-center justify-center opacity-50 cursor-not-allowed text-center">
+                            <Lock size={16} className="mb-1" />
+                            <span>Wishlist</span>
+                            <span className="text-[9px] uppercase">N/A for Store</span>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setNewBinderType(BinderType.WISHLIST)}
+                            className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                            newBinderType === BinderType.WISHLIST 
+                            ? 'bg-pink-600/20 border-pink-500 text-pink-300' 
+                            : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                            }`}
+                        >
+                            Wishlist
+                        </button>
+                    )}
 
-      {/* Binder Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <button
+                        type="button"
+                        onClick={() => setNewBinderType(BinderType.AUCTION)}
+                        className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center gap-1 ${
+                        newBinderType === BinderType.AUCTION 
+                        ? 'bg-amber-600/20 border-amber-500 text-amber-300' 
+                        : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                    >
+                        <Gavel size={16} /> Auction
+                    </button>
+                    </div>
+                </div>
+
+                <button 
+                    type="submit"
+                    className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg font-medium transition-colors"
+                >
+                    Create Binder
+                </button>
+                </form>
+            </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
+      {/* Binder Grid with Staggered Animation */}
+      <motion.div 
+        variants={{
+            hidden: { opacity: 0 },
+            show: {
+                opacity: 1,
+                transition: {
+                    staggerChildren: 0.1
+                }
+            }
+        }}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      >
         {binders.map(binder => {
             const isLocked = lockedStatus[binder.id];
             return (
-                <div key={binder.id} className="relative group">
+                <motion.div 
+                    key={binder.id} 
+                    variants={{
+                        hidden: { opacity: 0, y: 20, scale: 0.95 },
+                        show: { opacity: 1, y: 0, scale: 1 }
+                    }}
+                    className="relative group"
+                >
                     <BinderCard 
                         binder={binder} 
                         onClick={() => handleBinderClick(binder)} 
@@ -285,17 +340,21 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                             </div>
                         </div>
                     )}
-                </div>
+                </motion.div>
             );
         })}
         
         {binders.length === 0 && (
-            <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl"
+            >
                 <p>No binders found. Create one to get started!</p>
-            </div>
+            </motion.div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
