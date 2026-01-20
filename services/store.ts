@@ -91,7 +91,9 @@ export const auth = {
           customData = userDoc.data() || {};
       }
 
-      const isAdmin = customData.isAdmin || user.email === 'walterpacora88@gmail.com';
+      // CORRECCIÓN: Eliminada validación por correo electrónico. 
+      // Se utiliza estrictamente el campo isAdmin de Firestore.
+      const isAdmin = !!customData.isAdmin;
 
       const profile: UserProfile = {
         id: user.uid,
@@ -223,7 +225,8 @@ export const auth = {
             if (userDoc.exists) customData = userDoc.data() || {};
         } catch(e) { console.warn("Offline or error fetching profile", e); }
 
-        const isAdmin = customData.isAdmin || firebaseUser.email === 'walterpacora88@gmail.com';
+        // CORRECCIÓN: Validación estricta por campo isAdmin de Firestore.
+        const isAdmin = !!customData.isAdmin;
 
         const profile: UserProfile = {
             id: firebaseUser.uid,

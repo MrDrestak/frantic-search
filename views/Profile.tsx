@@ -469,10 +469,19 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                         </div>
 
                         {isOwnProfile && (
-                            <div className="mt-5 flex gap-3 w-full mb-8">
+                            <div className="mt-5 flex gap-3 w-full mb-8 flex-wrap">
                                 <button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors border border-slate-700"><Edit2 size={16} /> <span className="whitespace-nowrap">Edit Profile</span></button>
                                 {user.subscriptionTier !== SubscriptionTier.MYTHIC && (
                                     <button onClick={() => setShowSubscriptionModal(true)} className="flex-1 md:flex-none bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-lg shadow-violet-900/20"><Crown size={16} /> <span className="whitespace-nowrap">Update Plan</span></button>
+                                )}
+                                
+                                {user.isAdmin && onAdminClick && (
+                                    <button 
+                                        onClick={onAdminClick}
+                                        className="flex-1 md:flex-none bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-bold transition-all border border-red-900/50"
+                                    >
+                                        <ShieldAlert size={16} /> Admin Panel
+                                    </button>
                                 )}
                             </div>
                         )}
