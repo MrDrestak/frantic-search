@@ -49,7 +49,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         setLockedStatus(status);
         setBinders(data);
     } catch (e) {
-        console.error("Failed to load binders", e);
+        console.error("Falla en la carga de Binders.", e); //Failed to load binders
     } finally {
         setTimeout(() => setLoading(false), 800);
     }
@@ -82,12 +82,12 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
     try {
         if (isMythic && newBinderType === BinderType.WISHLIST) {
-            alert("Stores (Mythic Tier) cannot create Wishlists.");
+            alert("Tiendas (Mythic Tier) no puede crear Lista de Deseos."); //Stores (Mythic Tier) cannot create Wishlists.
             return;
         }
 
         if (newBinderType === BinderType.AUCTION && !currentUser.whatsapp) {
-            alert("Profile Incomplete: You must set a WhatsApp number in your Profile settings before creating an Auction Binder.");
+            alert("Perfil incompleto: Debes seleccionar un número de Whatsapp en tu configuración de perfil antes de poder crear un Binder de Subasta."); //Profile Incomplete: You must set a WhatsApp number in your Profile settings before creating an Auction Binder.
             return;
         }
 
@@ -112,7 +112,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
         setIsCreating(false);
         loadBinders();
     } catch (error: any) {
-        alert("Failed to create binder. " + (error.message || ""));
+        alert("Falla en crear tu Binder. " + (error.message || "")); //Failed to create binder
     }
   };
 
@@ -137,8 +137,8 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">Your Binders</h1>
-          <p className="text-slate-400">Manage your collection, trade lists, and auctions</p>
+          <h1 className="text-2xl font-bold text-white">Tus Binders</h1>
+          <p className="text-slate-400">Organiza tu colección: Binders de intercambio/venta, deseos (las cartas que buscas) y tus subastas.</p> //Manage your collection, trade lists, and auctions
         </div>
         <button 
           onClick={() => setIsCreating(true)}
@@ -161,8 +161,8 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                     <Lock size={20} />
                 </div>
                 <div className="flex-1">
-                    <h3 className="text-amber-400 font-bold">Subscription Limit Exceeded</h3>
-                    <p className="text-sm text-slate-300">Some binders are locked because they exceed your current plan limits. Upgrade to unlock them.</p>
+                    <h3 className="text-amber-400 font-bold">Haz llegado al límite de tu suscripción</h3> //Subscription Limit Exceeded
+                    <p className="text-sm text-slate-300">Algunos Binders se encuentran bloqueados. porque superan el límite de tu plan actual. Mejora tu plan para desbloquearlos.</p> //Some binders are locked because they exceed your current plan limits. Upgrade to unlock them.
                 </div>
                 <button 
                     onClick={() => setShowUpgradeModal(true)}
@@ -184,7 +184,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
             >
                 <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">Create New Binder</h2>
+                <h2 className="text-xl font-bold text-white">Crea un Nuevo Binder</h2>
                 <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
                     <X size={24} />
                 </button>
@@ -192,7 +192,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 
                 <form onSubmit={handleCreate} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">Binder Name</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Nombre de tu Binder</label>
                     <input 
                     autoFocus
                     type="text" 
@@ -204,7 +204,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">Purpose</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Tipo de Binder</label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <button
                         type="button"
@@ -215,7 +215,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                         : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                         }`}
                     >
-                        For Trade / Sell
+                        Intercambio / Venta
                     </button>
                     
                     {isMythic ? (
@@ -234,7 +234,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                             : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                             }`}
                         >
-                            Wishlist
+                            Lista de Deseos
                         </button>
                     )}
 
@@ -247,7 +247,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                         : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                         }`}
                     >
-                        <Gavel size={16} /> Auction
+                       Subasta
                     </button>
                     </div>
                 </div>
@@ -256,7 +256,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                     type="submit"
                     className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg font-medium transition-colors"
                 >
-                    Create Binder
+                    Crear un Binder
                 </button>
                 </form>
             </motion.div>
@@ -318,7 +318,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 animate={{ opacity: 1 }}
                 className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl"
             >
-                <p>No binders found. Create one to get started!</p>
+                <p>No se encontró ningún Binder. ¡Crea uno para iniciar!</p> //No binders found. Create one to get started!
             </motion.div>
         )}
       </motion.div>

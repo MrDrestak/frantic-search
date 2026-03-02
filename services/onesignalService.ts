@@ -7,144 +7,149 @@ declare global {
 }
 
 const APP_ID = "181d9c5a-7cfd-4fc7-961e-b58799cd476e";
-// Updated Key provided by user
 const REST_API_KEY = "os_v2_app_daozywt47vh4pfq6wwdzttkhny7nuawlmkkehqvtshtldyxplfcnqrpn4erbbxqr2mxvyglagogh6zn6zcgfixviffxrns7a3t7otvi";
 
 export const oneSignalService = {
+    isInitialized: false,
     init: async () => {
-        // Initialize the command queue if the SDK hasn't loaded yet
         window.OneSignal = window.OneSignal || [];
         
-        window.OneSignal.push(() => {
-            window.OneSignal.init({
-                appId: APP_ID,
-                allowLocalhostAsSecureOrigin: true,
-                notifyButton: {
-                    enable: false, // We will use custom UI in Profile
-                },
+        // Check if we are on the allowed domain or localhost
+        const allowedDomain = "frantic-search.vercel.app";
+        const isAllowedDomain = window.location.hostname === allowedDomain;
+        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        
+        if (!isAllowedDomain && !isLocalhost) {
+            console.warn(`OneSignal: Initialization skipped. Current domain (${window.location.hostname}) is not the authorized domain (${allowedDomain}).`);
+            return false;
+        }
+
+        return new Promise((resolve) => {
+            window.OneSignal.push(() => {
+                window.OneSignal.init({
+                    appId: APP_ID,
+                    allowLocalhostAsSecureOrigin: true,
+                    serviceWorkerParam: { scope: "/" },
+                    serviceWorkerPath: "OneSignalSDKWorker.js",
+                    notifyButton: {
+                        enable: false,
+                    },
+                }).then(() => {
+                    console.log("OneSignal Initialized Success");
+                    oneSignalService.isInitialized = true;
+                    resolve(true);
+                }).catch((e: any) => {
+                    console.error("OneSignal Init Error:", e);
+                    resolve(false);
+                });
             });
-            console.log("OneSignal Initialized (Native)");
         });
     },
 
     login: async (userId: string) => {
+        if (!userId || !oneSignalService.isInitialized) return;
         window.OneSignal = window.OneSignal || [];
-        window.OneSignal.push(() => {
-            console.log("OneSignal: Logging in as", userId);
-            window.OneSignal.login(userId);
-            // Explicitly tag to ensure immediate segmentation availability
-            window.OneSignal.User.addTag("firebase_uid", userId);
+        window.OneSignal.push(async () => {
+            try {
+                await window.OneSignal.login(userId);
+                await window.OneSignal.User.addTag("firebase_uid", userId);
+                console.log("OneSignal: User logged in and tagged:", userId);
+            } catch (e) {
+                console.error("OneSignal Login Error:", e);
+            }
         });
     },
 
     logout: async () => {
+        if (!oneSignalService.isInitialized) return;
         window.OneSignal = window.OneSignal || [];
         window.OneSignal.push(() => {
             window.OneSignal.logout();
         });
     },
 
-    // NEW: Check if notifications are enabled
     checkStatus: async (): Promise<{ permission: string, optedIn: boolean, subscriptionId: string | null }> => {
+        if (!oneSignalService.isInitialized) {
+            return { permission: "default", optedIn: false, subscriptionId: null };
+        }
         return new Promise((resolve) => {
             window.OneSignal = window.OneSignal || [];
-            window.OneSignal.push(async () => {
-                const permission = Notification.permission; // 'default', 'denied', 'granted'
-                const optedIn = window.OneSignal.User.PushSubscription.optedIn;
-                const subscriptionId = window.OneSignal.User.PushSubscription.id;
-                resolve({ permission, optedIn, subscriptionId });
+            window.OneSignal.push(() => {
+                const permission = Notification.permission;
+                const pushSubscription = window.OneSignal.User.PushSubscription;
+                resolve({ 
+                    permission, 
+                    optedIn: pushSubscription?.optedIn || false, 
+                    subscriptionId: pushSubscription?.id || null 
+                });
             });
         });
     },
 
-    // NEW: Manually Trigger Prompt
     requestPermission: async (): Promise<boolean> => {
+        if (!oneSignalService.isInitialized) return false;
         return new Promise((resolve) => {
             window.OneSignal = window.OneSignal || [];
             window.OneSignal.push(async () => {
-                await window.OneSignal.Slidedown.promptPush();
-                // Alternatively use native:
-                // await Notification.requestPermission();
-                resolve(window.OneSignal.User.PushSubscription.optedIn);
+                try {
+                    // Intentar primero con el prompt nativo que es más fiable
+                    await window.OneSignal.Notifications.requestPermission();
+                    const isSubscribed = window.OneSignal.User.PushSubscription.optedIn;
+                    resolve(isSubscribed);
+                } catch (e) {
+                    console.error("Permission Request Error:", e);
+                    resolve(false);
+                }
             });
         });
     },
 
-    // Send a notification via REST API (Admin or System Triggered)
     sendNotification: async (
         title: string, 
         message: string, 
-        targetUserIds?: string[], // If null/empty, sends to ALL subscribed users
+        targetUserIds?: string[], 
         url?: string
     ) => {
-        const headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": `Basic ${REST_API_KEY}`
-        };
-
         const body: any = {
             app_id: APP_ID,
             headings: { en: title },
             contents: { en: message },
-            url: url || "https://frantic-search.vercel.app/",
-            
-            // ANDROID WAKE UP SETTINGS
-            priority: 10, // High priority
-            // android_channel_id removed to prevent 400 errors
-            android_visibility: 1, // Public (show on lock screen)
+            url: url || window.location.origin,
+            priority: 10,
+            android_visibility: 1,
         };
 
         if (targetUserIds && targetUserIds.length > 0) {
-            // Target specific users by their Firebase UID (External ID)
-            body.include_aliases = {
-                external_id: targetUserIds
-            };
+            body.include_aliases = { external_id: targetUserIds };
             body.target_channel = "push";
         } else {
-            // Target everyone
             body.included_segments = ["Total Subscriptions"];
         }
 
         try {
-            // Switched to corsproxy.io which is generally more stable than thingproxy.
-            // Using encodeURIComponent ensures the target URL is passed correctly.
+            // Usamos un proxy más robusto para evitar CORS y Failed to fetch
             const targetUrl = "https://onesignal.com/api/v1/notifications";
-            const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
+            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl);
             
-            console.log("Sending Notification Body:", JSON.stringify(body));
-
             const response = await fetch(proxyUrl, {
                 method: "POST",
-                headers: headers,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Basic ${REST_API_KEY}`
+                },
                 body: JSON.stringify(body)
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                // 403 usually means Key is invalid or Proxy stripped the header
-                if (response.status === 403) {
-                    console.error("Access Denied: Please check if your REST_API_KEY is correct.");
-                }
-                throw new Error(`OneSignal API Error: ${response.status} ${errorText}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`OneSignal Error ${response.status}: ${JSON.stringify(errorData)}`);
             }
 
             const data = await response.json();
-            
-            // CRITICAL CHECK: Did OneSignal actually find the user?
-            if (data.recipients === 0) {
-                console.warn("OneSignal Response:", data);
-                if (data.errors && data.errors.length > 0) {
-                     // If explicit errors exist
-                     throw new Error(`OneSignal Error: ${JSON.stringify(data.errors)}`);
-                }
-                // Recipients 0 means valid request but no matching user found
-                throw new Error("Notification sent, but 0 recipients found. The user likely has not clicked 'Allow' on notifications yet, or the ID mapping hasn't synced.");
-            }
-
-            console.log("OneSignal Success:", data);
+            console.log("Notification Success:", data);
             return data;
         } catch (error) {
-            console.error("Failed to send OneSignal notification", error);
+            console.error("Failed to send notification:", error);
             throw error;
         }
     }

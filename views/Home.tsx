@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { showcaseService, newsService, storeDirectoryService, auth, auctionService } from '../services/store';
-import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus } from '../types';
+import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus, BinderType } from '../types';
 import { Star, MapPin, Layers, Loader2, ChevronLeft, ChevronRight, Gavel, Clock, Zap, TrendingUp, Sparkles, Megaphone } from 'lucide-react';
 import HolographicCard from '../components/HolographicCard';
 import { motion } from 'framer-motion';
@@ -58,14 +58,27 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         loadAll();
     }, []);
 
+    // Logic for Featured Auction (Based on user specific criteria)
     const featuredAuction = useMemo(() => {
-        if (!auctions.length || !currentUser) return null;
-        const myAuctions = auctions.filter(a => a.topBidderId === currentUser.id);
-        if (myAuctions.length > 0) return myAuctions.sort((a, b) => (b.currentBid || 0) - (a.currentBid || 0))[0];
-        const twoDaysAgo = Date.now() - (2 * 24 * 60 * 60 * 1000);
-        const freshAuctions = auctions.filter(a => a.addedAt >= twoDaysAgo);
-        if (freshAuctions.length > 0) return freshAuctions.sort((a, b) => (b.currentBid || 0) - (a.currentBid || 0))[0];
-        return null;
+        const now = Date.now();
+        // Solo consideramos subastas que no han expirado (endDate >= ahora) y están en estado ACTIVE
+        const activeAuctions = auctions.filter(a => 
+            a.auctionEndDate && 
+            a.auctionEndDate >= now && 
+            (a.auctionStatus === AuctionStatus.ACTIVE || a.binderType === BinderType.AUCTION)
+        );
+
+        if (!activeAuctions.length || !currentUser) return null;
+
+        // CRITERIO 1: Participación Activa (Usuario es el mejor postor actual)
+        const myParticipations = activeAuctions.filter(a => a.topBidderId === currentUser.id);
+        if (myParticipations.length > 0) {
+            // Si hay varias, mostramos la de mayor valor actual
+            return myParticipations.sort((a, b) => (b.currentBid || 0) - (a.currentBid || 0))[0];
+        }
+
+        // CRITERIO 2: Descubrimiento (La más reciente creada que siga activa)
+        return activeAuctions.sort((a, b) => b.addedAt - a.addedAt)[0];
     }, [auctions, currentUser]);
 
     useEffect(() => {
@@ -180,7 +193,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-                                <motion.div animate={{ rotate: [0, -10, 10, 0] }} transition={{ duration: 5, repeat: Infinity }} className="p-4 bg-amber-500/10 rounded-full text-amber-600">
+                                <motion.div 
+                                    animate={{ 
+                                        rotate: [0, -10, 10, 0],
+                                        boxShadow: ["0 0 0px rgba(245,158,11,0)", "0 0 30px rgba(245,158,11,0.3)", "0 0 0px rgba(245,158,11,0)"]
+                                    }} 
+                                    transition={{ duration: 4, repeat: Infinity }} 
+                                    className="p-4 bg-amber-500/10 rounded-full text-amber-600 border border-amber-500/20"
+                                >
                                     <Gavel size={32} />
                                 </motion.div>
                                 <p className="text-slate-500 text-xs font-medium px-4">En espera de nuevas subastas en el multiverso.</p>

@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue } from '../types';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown } from 'lucide-react';
+// Added AlertTriangle to imports
+import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown, BellOff } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
@@ -62,8 +63,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Auction History State
   const [myAuctions, setMyAuctions] = useState<Card[]>([]);
   const [bidderNames, setBidderNames] = useState<Record<string, string>>({});
-  const [showAuctions, setShowAuctions] = useState(false);
-
+  
   // Storefront State
   const [storefrontCards, setStorefrontCards] = useState<Card[]>([]);
   const [storefrontSearch, setStorefrontSearch] = useState('');
@@ -77,6 +77,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   // Notification State
   const [notifStatus, setNotifStatus] = useState<{ permission: string, optedIn: boolean, subscriptionId: string | null }>({ permission: 'default', optedIn: false, subscriptionId: null });
+  const [isActivatingNotif, setIsActivatingNotif] = useState(false);
 
   // Form State
   const [nickname, setNickname] = useState('');
@@ -107,6 +108,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   useEffect(() => {
       if (isOwnProfile) {
           checkNotificationStatus();
+          // Re-check periodically to see if permission changed
+          const interval = setInterval(checkNotificationStatus, 5000);
+          return () => clearInterval(interval);
       }
   }, [isOwnProfile]);
 
@@ -116,11 +120,18 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   }
 
   const handleEnableNotifications = async () => {
-      await oneSignalService.requestPermission();
-      setTimeout(() => {
-          checkNotificationStatus();
-          if (user) oneSignalService.login(user.id);
-      }, 1000);
+      setIsActivatingNotif(true);
+      try {
+          const success = await oneSignalService.requestPermission();
+          if (success && user) {
+              await oneSignalService.login(user.id);
+          }
+          await checkNotificationStatus();
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsActivatingNotif(false);
+      }
   }
 
   const loadProfile = async () => {
@@ -385,6 +396,42 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                 </button>
             )}
         </header>
+
+        {isOwnProfile && (
+            <div className={`mb-6 p-4 rounded-xl border transition-all ${notifStatus.optedIn ? 'bg-green-950/20 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${notifStatus.optedIn ? 'bg-green-500/10 text-green-500' : 'bg-slate-800 text-slate-500'}`}>
+                            {notifStatus.optedIn ? <Bell size={20} /> : <BellOff size={20} />}
+                        </div>
+                        <div>
+                            <h3 className={`font-bold ${notifStatus.optedIn ? 'text-green-400' : 'text-white'}`}>
+                                {notifStatus.optedIn ? 'Notificaciones Activas' : 'Notificaciones Desactivadas'}
+                            </h3>
+                            <p className="text-xs text-slate-400">
+                                {notifStatus.optedIn ? `Recibirás alertas de subastas y deseos. ID: ${notifStatus.subscriptionId?.slice(0, 8)}...` : 'Activa las alertas para no perderte pujas ni cartas de tu lista.'}
+                            </p>
+                        </div>
+                    </div>
+                    {!notifStatus.optedIn && (
+                        <button 
+                            onClick={handleEnableNotifications}
+                            disabled={isActivatingNotif}
+                            className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                        >
+                            {isActivatingNotif ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
+                            Activar
+                        </button>
+                    )}
+                </div>
+                {notifStatus.permission === 'denied' && (
+                    <div className="mt-3 flex items-center gap-2 text-[10px] text-red-400 bg-red-950/20 p-2 rounded border border-red-900/30">
+                        <AlertTriangle size={12} />
+                        Las notificaciones están bloqueadas en tu navegador. Debes permitirlas manualmente en la configuración del sitio.
+                    </div>
+                )}
+            </div>
+        )}
 
         {!isEditing && user.storeAnnouncement && (
             <div className="bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-500/30 p-4 rounded-xl mb-6 flex items-start gap-4 shadow-lg">
