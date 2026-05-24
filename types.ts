@@ -1,239 +1,236 @@
+// Enums
+export type GameType = 'MTG';
+export type BinderType = 'FOR_TRADE' | 'WISHLIST' | 'AUCTION';
+export type CardCondition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
+export type SubscriptionTier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'MYTHIC';
+export type AuctionStatus = 'ACTIVE' | 'SOLD' | 'ENDED';
+export type CurrencyType = 'USD' | 'PEN';
+export type FeedbackValue = 'MALO' | 'BUENO' | 'EXCELENTE' | 'NO_CONCRETADO';
+export type TradeStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED';
+export type NotificationType = 'OUTBID' | 'WISH_ALERT' | 'SYSTEM';
+export type ReportReason = 'SCAM' | 'NOT_SHIPPED' | 'DAMAGED_UNDECLARED' | 'ABUSIVE' | 'OTHER';
+export type ReportStatus = 'OPEN' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
 
-export enum GameType {
-  MTG = 'Magic: The Gathering',
-  POKEMON = 'Pokémon',
-  YUGIOH = 'Yu-Gi-Oh!'
-}
-
-export enum BinderType {
-  FOR_TRADE = 'For Trade/Sell',
-  WISHLIST = 'Wishlist',
-  COLLECTION = 'Personal Collection',
-  AUCTION = 'Auction'
-}
-
-export enum CardCondition {
-  NM = 'Near Mint',
-  LP = 'Lightly Played',
-  MP = 'Moderately Played',
-  HP = 'Heavily Played',
-  DMG = 'Damaged'
-}
-
-export enum SubscriptionTier {
-  COMMON = 'Common',
-  UNCOMMON = 'Uncommon',
-  RARE = 'Rare',
-  MYTHIC = 'Mythic'
-}
-
-export enum AuctionStatus {
-  ACTIVE = 'ACTIVE',
-  SOLD = 'SOLD', // Via Direct Buy
-  ENDED = 'ENDED' // Time ran out
-}
-
-export interface TierLimits {
-  // Trade Settings
-  maxTradeBinders: number;
-  maxCardsPerTradeBinder: number;
-
-  // Wishlist Settings
-  maxWishlistBinders: number;
-  maxCardsPerWishlistBinder: number;
-
-  // Auction Settings
-  maxAuctionBinders: number;
-  maxAuctionCardsPerBinder: number;
-
-  // General Settings
-  maxShowcaseItems: number;
-  maxCardAlerts: number;
-  
-  // Pricing
-  pricePerMonth: number;
-  currency: 'USD' | 'PEN';
-  
-  // Payment
-  paymentLink?: string; // URL to Stripe/MercadoPago checkout
-}
-
-export interface GlobalConfig {
-  [SubscriptionTier.COMMON]: TierLimits;
-  [SubscriptionTier.UNCOMMON]: TierLimits;
-  [SubscriptionTier.RARE]: TierLimits;
-  [SubscriptionTier.MYTHIC]: TierLimits;
-}
-
-export interface SystemConfig {
-    minTradeConfirmHours: number;
-    maxTradeConfirmHours: number;
-}
-
-export interface UserProfile {
+// Tables
+export interface User {
   id: string;
   email: string;
-  displayName: string;
-  photoURL?: string;
-  whatsapp?: string;
-  preferredStore?: string;
-  preferredGame?: string; 
-  storeAnnouncement?: string; 
-  isOnline?: boolean;
-  subscriptionTier: SubscriptionTier;
-  isAdmin?: boolean;
-  
-  // REPUTATION SYSTEM
-  traderScore: number;
-  searcherScore: number;
-  successfulTrades?: number; // Legacy, map to traderScore
+  display_name: string;
+  photo_url: string | null;
+  whatsapp: string | null;
+  preferred_store: string | null;
+  preferred_game: GameType;
+  store_announcement: string | null;
+  subscription_tier: SubscriptionTier;
+  trial_ends_at: string | null;
+  trader_score: number;
+  searcher_score: number;
+  is_admin: boolean;
+  last_login: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Binder {
   id: string;
-  userId: string;
+  user_id: string;
   game: GameType;
   type: BinderType;
   name: string;
-  coverImage?: string;
-  cardCount: number;
-  createdAt: number;
+  cover_image: string | null;
+  card_count: number;
+  price_multiplier: number | null;
+  created_at: string;
 }
 
 export interface Card {
   id: string;
-  binderId: string;
-  userId: string;
-  scryfallId: string;
+  binder_id: string;
+  user_id: string;
+  scryfall_id: string;
   name: string;
-  setName: string;
-  collectorNumber: string;
-  imageUrl: string;
+  set_name: string | null;
+  collector_number: string | null;
+  image_url: string | null;
+  rarity: string | null;
+  game: GameType;
   condition: CardCondition;
-  isFoil: boolean;
-  rarity: string;
-  price?: number; 
-  customPrice?: number; // User defined price
-  currency?: 'USD' | 'PEN'; // User defined currency
-  purchaseUrl?: string; // Card Kingdom link
-  addedAt: number;
-  binderType?: BinderType;
-  isShowcase?: boolean;
-  game?: string;
-  quantity: number; // New field
-  
-  // Auction Specifics
-  auctionEndDate?: number; // Timestamp
-  basePrice?: number;
-  buyItNowPrice?: number;
-  currentBid?: number;
-  topBidderId?: string;
-  auctionStatus?: AuctionStatus;
-  winnerId?: string; // Final winner
+  is_foil: boolean;
+  quantity: number;
+  custom_price: number | null;
+  currency: CurrencyType | null;
+  binder_type: BinderType | null;
+  is_showcase: boolean;
+  purchase_url: string | null;
+  added_at: string;
+  // Auction fields
+  auction_end_date: string | null;
+  base_price: number | null;
+  buy_it_now_price: number | null;
+  auction_currency: CurrencyType | null;
+  current_bid: number | null;
+  top_bidder_id: string | null;
+  bid_count: number;
+  auction_status: AuctionStatus | null;
+  winner_id: string | null;
 }
 
-export interface ShowcaseItem extends Card {
-  sellerName: string;
-  sellerId: string;
-}
-
-export interface MatchResult {
-  card: Card;
-  matchCard: Card;
-  seller: UserProfile;
-  matchType?: 'EXACT' | 'LOOSE';
-}
-
-export enum FeedbackValue {
-    MALO = -2,
-    BUENO = 1,
-    EXCELENTE = 3,
-    NO_CONCRETADO = 0 // Specialized case
+export interface Bid {
+  id: string;
+  card_id: string;
+  user_id: string;
+  amount: number;
+  created_at: string;
 }
 
 export interface TradeInteraction {
-    id: string;
-    buyerId: string;
-    sellerId: string;
-    sellerName: string; 
-    buyerName: string; // Added for dual feedback
-    cardName?: string; 
-    timestamp: number;
-    status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED';
-    
-    // DUAL FEEDBACK TRACKING
-    buyerFeedback?: FeedbackValue;
-    sellerFeedback?: FeedbackValue;
-    buyerConfirmedAt?: number;
-    sellerConfirmedAt?: number;
-}
-
-export interface ScryfallCard {
   id: string;
-  oracle_id: string;
-  name: string;
-  set_name: string;
-  set: string;
-  collector_number: string;
-  image_uris?: {
-    normal: string;
-    small: string;
-  };
-  card_faces?: Array<{
-    image_uris?: {
-      normal: string;
-    };
-  }>;
-  rarity: string;
-  prices: {
-    usd: string | null;
-    usd_foil: string | null;
-  };
-  purchase_uris?: {
-    tcgplayer?: string;
-    cardmarket?: string;
-    cardhoarder?: string;
-    card_kingdom?: string;
-  };
-  last_updated?: number; // Field for global cache library logic
+  buyer_id: string;
+  seller_id: string;
+  buyer_name: string;
+  seller_name: string;
+  card_name: string;
+  status: TradeStatus;
+  buyer_feedback: FeedbackValue | null;
+  seller_feedback: FeedbackValue | null;
+  buyer_confirmed_at: string | null;
+  seller_confirmed_at: string | null;
+  created_at: string;
 }
 
-// NEW INTERFACES FOR HOME PAGE
-export interface NewsItem {
-    id: string;
-    title: string;
-    imageUrl: string;
-    linkUrl: string;
-    game: GameType;
-    date: number;
-    sourceName: string;
-}
-
-export interface StoreProfile {
-    id: string;
-    name: string;
-    logoUrl: string; // URL to logo image
-    websiteUrl: string;
-    mapsUrl: string;
-    location: string;
-    games: GameType[];
-    linkedUserId?: string; // OPTIONAL: ID of the UserProfile within the app to link directly
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_user_id: string;
+  reason: ReportReason;
+  description: string | null;
+  related_card_id: string | null;
+  related_interaction_id: string | null;
+  status: ReportStatus;
+  admin_notes: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
 }
 
 export interface AppNotification {
-    id: string;
-    userId: string;
-    type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM';
-    title: string;
-    message: string;
-    linkUrl?: string;
-    imageUrl?: string;
-    read: boolean;
-    createdAt: number;
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  link_url: string | null;
+  image_url: string | null;
+  read: boolean;
+  created_at: string;
 }
 
 export interface CardAlert {
-    userId: string;
-    cardName: string;
-    createdAt: number;
+  id: string;
+  user_id: string;
+  card_name: string;
+  created_at: string;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  website_url: string | null;
+  maps_url: string | null;
+  location: string | null;
+  games: GameType[];
+  default_multiplier: number | null;
+  linked_user_id: string | null;
+  created_at: string;
+}
+
+export interface NewsItem {
+  id: string;
+  title: string;
+  image_url: string | null;
+  link_url: string | null;
+  game: GameType;
+  source_name: string | null;
+  published_at: string;
+}
+
+// Config shapes (stored as JSONB in settings table)
+export interface TierConfig {
+  maxTradeBinders: number;
+  maxCardsPerTradeBinder: number;
+  maxWishlistBinders: number;
+  maxCardsPerWishlistBinder: number;
+  maxAuctionBinders: number;
+  maxAuctionCardsPerBinder: number;
+  maxShowcaseItems: number;
+  maxCardAlerts: number;
+  pricePerMonth: number;
+  currency: string;
+}
+
+export interface GlobalConfig {
+  COMMON: TierConfig;
+  UNCOMMON: TierConfig;
+  RARE: TierConfig;
+  MYTHIC: TierConfig;
+}
+
+export interface SystemConfig {
+  minTradeConfirmHours: number;
+  maxTradeConfirmHours: number;
+  defaultMultiplier: number;
+}
+
+// View types (v_tradeable_cards, v_active_auctions, v_showcase_items)
+export interface TradeableCard extends Card {
+  ck_price_usd: number | null;
+  ck_name: string | null;
+  ck_edition: string | null;
+  multiplier: number;
+  display_price_pen: number | null;
+  seller_name: string;
+  trader_score: number;
+  searcher_score: number;
+  whatsapp: string | null;
+  subscription_tier: SubscriptionTier;
+  seller_photo: string | null;
+  seller_last_active: string | null;
+}
+
+export interface AuctionCard extends Card {
+  ck_price_usd: number | null;
+  seller_name: string;
+  trader_score: number;
+  seller_photo: string | null;
+  binder_multiplier: number | null;
+}
+
+export interface ShowcaseItem {
+  id: string;
+  name: string;
+  set_name: string | null;
+  scryfall_id: string;
+  condition: CardCondition;
+  is_foil: boolean;
+  image_url: string | null;
+  rarity: string | null;
+  user_id: string;
+  binder_id: string;
+  custom_price: number | null;
+  added_at: string;
+  ck_price_usd: number | null;
+  display_price_pen: number | null;
+  seller_name: string;
+  trader_score: number;
+  subscription_tier: SubscriptionTier;
+}
+
+// Card with joined prices (returned by cardService.getBinderCards)
+export interface CardWithPrice extends Card {
+  prices: {
+    price_sell_usd: number | null;
+    ck_name: string | null;
+    ck_edition: string | null;
+  } | null;
 }
