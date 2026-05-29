@@ -1,5 +1,5 @@
-// Native OneSignal Integration — preserved as-is from pre-migration codebase.
-// TODO: move APP_ID and REST_API_KEY to env vars before going to production.
+
+// Native OneSignal Integration
 declare global {
     interface Window {
         OneSignal: any;
@@ -13,13 +13,14 @@ export const oneSignalService = {
     isInitialized: false,
     init: async () => {
         window.OneSignal = window.OneSignal || [];
-
+        
+        // Check if we are on the allowed domain or localhost
         const allowedDomain = "frantic-search.vercel.app";
         const isAllowedDomain = window.location.hostname === allowedDomain;
         const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-
+        
         if (!isAllowedDomain && !isLocalhost) {
-            console.warn(`OneSignal: skipped on ${window.location.hostname}`);
+            console.warn(`OneSignal: Initialization skipped. Current domain (${window.location.hostname}) is not the authorized domain (${allowedDomain}).`);
             return false;
         }
 
@@ -30,11 +31,14 @@ export const oneSignalService = {
                     allowLocalhostAsSecureOrigin: true,
                     serviceWorkerParam: { scope: "/" },
                     serviceWorkerPath: "OneSignalSDKWorker.js",
-                    notifyButton: { enable: false },
+                    notifyButton: {
+                        enable: false,
+                    },
                 }).then(() => {
+                    console.log("OneSignal Initialized Success");
                     oneSignalService.isInitialized = true;
                     resolve(true);
-                }).catch((e: unknown) => {
+                }).catch((e: any) => {
                     console.error("OneSignal Init Error:", e);
                     resolve(false);
                 });
@@ -48,7 +52,8 @@ export const oneSignalService = {
         window.OneSignal.push(async () => {
             try {
                 await window.OneSignal.login(userId);
-                await window.OneSignal.User.addTag("user_id", userId);
+                await window.OneSignal.User.addTag("firebase_uid", userId);
+                console.log("OneSignal: User logged in and tagged:", userId);
             } catch (e) {
                 console.error("OneSignal Login Error:", e);
             }
@@ -58,10 +63,12 @@ export const oneSignalService = {
     logout: async () => {
         if (!oneSignalService.isInitialized) return;
         window.OneSignal = window.OneSignal || [];
-        window.OneSignal.push(() => { window.OneSignal.logout(); });
+        window.OneSignal.push(() => {
+            window.OneSignal.logout();
+        });
     },
 
-    checkStatus: async (): Promise<{ permission: string; optedIn: boolean; subscriptionId: string | null }> => {
+    checkStatus: async (): Promise<{ permission: string, optedIn: boolean, subscriptionId: string | null }> => {
         if (!oneSignalService.isInitialized) {
             return { permission: "default", optedIn: false, subscriptionId: null };
         }
@@ -70,7 +77,11 @@ export const oneSignalService = {
             window.OneSignal.push(() => {
                 const permission = Notification.permission;
                 const pushSubscription = window.OneSignal.User.PushSubscription;
-                resolve({ permission, optedIn: pushSubscription?.optedIn || false, subscriptionId: pushSubscription?.id || null });
+                resolve({ 
+                    permission, 
+                    optedIn: pushSubscription?.optedIn || false, 
+                    subscriptionId: pushSubscription?.id || null 
+                });
             });
         });
     },
@@ -81,8 +92,10 @@ export const oneSignalService = {
             window.OneSignal = window.OneSignal || [];
             window.OneSignal.push(async () => {
                 try {
+                    // Intentar primero con el prompt nativo que es más fiable
                     await window.OneSignal.Notifications.requestPermission();
-                    resolve(window.OneSignal.User.PushSubscription.optedIn);
+                    const isSubscribed = window.OneSignal.User.PushSubscription.optedIn;
+                    resolve(isSubscribed);
                 } catch (e) {
                     console.error("Permission Request Error:", e);
                     resolve(false);
@@ -91,30 +104,53 @@ export const oneSignalService = {
         });
     },
 
-    sendNotification: async (title: string, message: string, targetUserIds?: string[], url?: string) => {
-        const body: Record<string, unknown> = {
+    sendNotification: async (
+        title: string, 
+        message: string, 
+        targetUserIds?: string[], 
+        url?: string
+    ) => {
+        const body: any = {
             app_id: APP_ID,
             headings: { en: title },
             contents: { en: message },
             url: url || window.location.origin,
             priority: 10,
+            android_visibility: 1,
         };
 
-        if (targetUserIds?.length) {
+        if (targetUserIds && targetUserIds.length > 0) {
             body.include_aliases = { external_id: targetUserIds };
             body.target_channel = "push";
         } else {
             body.included_segments = ["Total Subscriptions"];
         }
 
-        const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://onesignal.com/api/v1/notifications");
-        const response = await fetch(proxyUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Basic ${REST_API_KEY}` },
-            body: JSON.stringify(body),
-        });
+        try {
+            // Usamos un proxy más robusto para evitar CORS y Failed to fetch
+            const targetUrl = "https://onesignal.com/api/v1/notifications";
+            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl);
+            
+            const response = await fetch(proxyUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Basic ${REST_API_KEY}`
+                },
+                body: JSON.stringify(body)
+            });
 
-        if (!response.ok) throw new Error(`OneSignal ${response.status}`);
-        return response.json();
-    },
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`OneSignal Error ${response.status}: ${JSON.stringify(errorData)}`);
+            }
+
+            const data = await response.json();
+            console.log("Notification Success:", data);
+            return data;
+        } catch (error) {
+            console.error("Failed to send notification:", error);
+            throw error;
+        }
+    }
 };
