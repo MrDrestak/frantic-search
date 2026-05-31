@@ -1,871 +1,1214 @@
-
-import firebase from 'firebase/compat/app';
-import { auth as firebaseAuth, googleProvider, db } from './firebase';
-import { Binder, BinderType, Card, CardCondition, GameType, MatchResult, UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus, TierLimits, SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification, CardAlert, FeedbackValue } from '../types';
+import { supabase } from './supabase';
 import { oneSignalService } from './onesignalService';
-import { auditAndRefreshPrices } from './scryfallService';
+import {
+  Binder, BinderType, Card, CardCondition, GameType, MatchResult,
+  UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus,
+  SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification,
+  CardAlert, FeedbackValue,
+} from '../types';
 
-// CONVERSION UTILS
-const mapDoc = (doc: any): any => ({ id: doc.id, ...doc.data() });
+// ─── DEFAULTS ────────────────────────────────────────────────────────────────
 
-// DEFAULTS
 const DEFAULT_CONFIG: GlobalConfig = {
-    [SubscriptionTier.COMMON]: { 
-        maxTradeBinders: 1, 
-        maxCardsPerTradeBinder: 20,
-        maxWishlistBinders: 1,
-        maxCardsPerWishlistBinder: 20,
-        maxAuctionBinders: 1, 
-        maxAuctionCardsPerBinder: 1, 
-        maxShowcaseItems: 3, 
-        maxCardAlerts: 1,
-        pricePerMonth: 0,
-        currency: 'USD',
-        paymentLink: ''
-    },
-    [SubscriptionTier.UNCOMMON]: { 
-        maxTradeBinders: 3, 
-        maxCardsPerTradeBinder: 50,
-        maxWishlistBinders: 3,
-        maxCardsPerWishlistBinder: 50,
-        maxAuctionBinders: 2, 
-        maxAuctionCardsPerBinder: 10, 
-        maxShowcaseItems: 10, 
-        maxCardAlerts: 5,
-        pricePerMonth: 5,
-        currency: 'USD',
-        paymentLink: ''
-    },
-    [SubscriptionTier.RARE]: { 
-        maxTradeBinders: 10, 
-        maxCardsPerTradeBinder: 100,
-        maxWishlistBinders: 10,
-        maxCardsPerWishlistBinder: 100,
-        maxAuctionBinders: 3, 
-        maxAuctionCardsPerBinder: 15, 
-        maxShowcaseItems: 50, 
-        maxCardAlerts: 20,
-        pricePerMonth: 15,
-        currency: 'USD',
-        paymentLink: ''
-    },
-    [SubscriptionTier.MYTHIC]: { 
-        maxTradeBinders: 100, 
-        maxCardsPerTradeBinder: 500,
-        maxWishlistBinders: 0, 
-        maxCardsPerWishlistBinder: 0,
-        maxAuctionBinders: 10, 
-        maxAuctionCardsPerBinder: 50, 
-        maxShowcaseItems: 500, 
-        maxCardAlerts: 100,
-        pricePerMonth: 0, 
-        currency: 'USD',
-        paymentLink: ''
-    },
+  [SubscriptionTier.COMMON]: {
+    maxTradeBinders: 1, maxCardsPerTradeBinder: 20,
+    maxWishlistBinders: 1, maxCardsPerWishlistBinder: 20,
+    maxAuctionBinders: 1, maxAuctionCardsPerBinder: 1,
+    maxShowcaseItems: 3, maxCardAlerts: 1,
+    pricePerMonth: 0, currency: 'USD', paymentLink: '',
+  },
+  [SubscriptionTier.UNCOMMON]: {
+    maxTradeBinders: 3, maxCardsPerTradeBinder: 50,
+    maxWishlistBinders: 3, maxCardsPerWishlistBinder: 50,
+    maxAuctionBinders: 2, maxAuctionCardsPerBinder: 10,
+    maxShowcaseItems: 10, maxCardAlerts: 5,
+    pricePerMonth: 5, currency: 'USD', paymentLink: '',
+  },
+  [SubscriptionTier.RARE]: {
+    maxTradeBinders: 10, maxCardsPerTradeBinder: 100,
+    maxWishlistBinders: 10, maxCardsPerWishlistBinder: 100,
+    maxAuctionBinders: 3, maxAuctionCardsPerBinder: 15,
+    maxShowcaseItems: 50, maxCardAlerts: 20,
+    pricePerMonth: 15, currency: 'USD', paymentLink: '',
+  },
+  [SubscriptionTier.MYTHIC]: {
+    maxTradeBinders: 100, maxCardsPerTradeBinder: 500,
+    maxWishlistBinders: 0, maxCardsPerWishlistBinder: 0,
+    maxAuctionBinders: 10, maxAuctionCardsPerBinder: 50,
+    maxShowcaseItems: 500, maxCardAlerts: 100,
+    pricePerMonth: 0, currency: 'USD', paymentLink: '',
+  },
 };
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-    minTradeConfirmHours: 24,
-    maxTradeConfirmHours: 72
+  minTradeConfirmHours: 24,
+  maxTradeConfirmHours: 72,
 };
 
-// AUTH SERVICE
+// ─── STATE ───────────────────────────────────────────────────────────────────
+
 let currentUserProfile: UserProfile | null = null;
 let currentConfig: GlobalConfig = DEFAULT_CONFIG;
 let currentSystemConfig: SystemConfig = DEFAULT_SYSTEM_CONFIG;
 
+// ─── MAPPERS ─────────────────────────────────────────────────────────────────
+
+function mapBinderTypeToDb(type: BinderType | string): string {
+  const map: Record<string, string> = {
+    'For Trade/Sell': 'FOR_TRADE',
+    'Wishlist': 'WISHLIST',
+    'Personal Collection': 'FOR_TRADE', // DB has no COLLECTION, treated as FOR_TRADE
+    'Auction': 'AUCTION',
+  };
+  return map[type as string] ?? (type as string);
+}
+
+function mapDbToBinderType(dbType: string): BinderType {
+  const map: Record<string, BinderType> = {
+    FOR_TRADE: BinderType.FOR_TRADE,
+    WISHLIST: BinderType.WISHLIST,
+    COLLECTION: BinderType.COLLECTION,
+    AUCTION: BinderType.AUCTION,
+  };
+  return map[dbType] ?? (dbType as BinderType);
+}
+
+function mapConditionToDb(condition: CardCondition | string): string {
+  const map: Record<string, string> = {
+    'Near Mint': 'NM',
+    'Lightly Played': 'LP',
+    'Moderately Played': 'MP',
+    'Heavily Played': 'HP',
+    'Damaged': 'DMG',
+  };
+  return map[condition as string] ?? condition as string;
+}
+
+function mapDbToCondition(dbCondition: string): CardCondition {
+  const map: Record<string, CardCondition> = {
+    NM: CardCondition.NM,
+    LP: CardCondition.LP,
+    MP: CardCondition.MP,
+    HP: CardCondition.HP,
+    DMG: CardCondition.DMG,
+  };
+  return map[dbCondition] ?? CardCondition.NM;
+}
+
+function mapFeedbackToDb(feedback: FeedbackValue): string {
+  const map: Record<number, string> = {
+    [FeedbackValue.EXCELENTE]: 'EXCELENTE',
+    [FeedbackValue.BUENO]: 'BUENO',
+    [FeedbackValue.MALO]: 'MALO',
+    [FeedbackValue.NO_CONCRETADO]: 'NO_CONCRETADO',
+  };
+  return map[feedback as number] ?? 'NO_CONCRETADO';
+}
+
+function mapDbToFeedback(dbFeedback: string): FeedbackValue {
+  const map: Record<string, FeedbackValue> = {
+    EXCELENTE: FeedbackValue.EXCELENTE,
+    BUENO: FeedbackValue.BUENO,
+    MALO: FeedbackValue.MALO,
+    NO_CONCRETADO: FeedbackValue.NO_CONCRETADO,
+  };
+  return map[dbFeedback] ?? FeedbackValue.NO_CONCRETADO;
+}
+
+function mapSubscriptionTierToDb(tier: SubscriptionTier): string {
+  const map: Record<SubscriptionTier, string> = {
+    [SubscriptionTier.COMMON]: 'COMMON',
+    [SubscriptionTier.UNCOMMON]: 'UNCOMMON',
+    [SubscriptionTier.RARE]: 'RARE',
+    [SubscriptionTier.MYTHIC]: 'MYTHIC',
+  };
+  return map[tier] ?? 'COMMON';
+}
+
+function mapDbToSubscriptionTier(dbTier: string): SubscriptionTier {
+  const map: Record<string, SubscriptionTier> = {
+    COMMON: SubscriptionTier.COMMON,
+    UNCOMMON: SubscriptionTier.UNCOMMON,
+    RARE: SubscriptionTier.RARE,
+    MYTHIC: SubscriptionTier.MYTHIC,
+  };
+  return map[dbTier] ?? SubscriptionTier.COMMON;
+}
+
+function mapGameTypeToDb(game: GameType | string): string {
+  const map: Record<string, string> = {
+    'Magic: The Gathering': 'MTG',
+    'Pokémon': 'POKEMON',
+    'Yu-Gi-Oh!': 'YUGIOH',
+  };
+  return map[game as string] ?? 'MTG';
+}
+
+function mapDbToGameType(dbGame: string): GameType {
+  const map: Record<string, GameType> = {
+    MTG: GameType.MTG,
+    POKEMON: GameType.POKEMON,
+    YUGIOH: GameType.YUGIOH,
+  };
+  return map[dbGame] ?? GameType.MTG;
+}
+
+function mapToUserProfile(row: any): UserProfile {
+  return {
+    id: row.id,
+    email: row.email || '',
+    displayName: row.display_name || 'Unnamed Trader',
+    photoURL: row.photo_url || undefined,
+    whatsapp: row.whatsapp || undefined,
+    preferredStore: row.preferred_store || undefined,
+    preferredGame: row.preferred_game ? mapDbToGameType(row.preferred_game) : '',
+    storeAnnouncement: row.store_announcement || undefined,
+    isOnline: true,
+    subscriptionTier: mapDbToSubscriptionTier(row.subscription_tier),
+    isAdmin: !!row.is_admin,
+    traderScore: row.trader_score || 0,
+    searcherScore: row.searcher_score || 0,
+  };
+}
+
+function mapToBinder(row: any): Binder {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    game: mapDbToGameType(row.game),
+    type: mapDbToBinderType(row.type),
+    name: row.name,
+    coverImage: row.cover_image || undefined,
+    cardCount: row.card_count || 0,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function mapToCard(row: any): Card {
+  return {
+    id: row.id,
+    binderId: row.binder_id,
+    userId: row.user_id,
+    scryfallId: row.scryfall_id,
+    name: row.name,
+    setName: row.set_name,
+    collectorNumber: row.collector_number || '',
+    imageUrl: row.image_url,
+    condition: mapDbToCondition(row.condition),
+    isFoil: row.is_foil || false,
+    rarity: row.rarity || '',
+    price: row.prices?.price_sell_usd ?? row.custom_price ?? undefined,
+    customPrice: row.custom_price ?? undefined,
+    currency: row.currency ?? undefined,
+    purchaseUrl: row.purchase_url ?? undefined,
+    addedAt: row.added_at ? new Date(row.added_at).getTime() : Date.now(),
+    binderType: row.binder_type ? mapDbToBinderType(row.binder_type) : undefined,
+    isShowcase: row.is_showcase || false,
+    game: mapDbToGameType(row.game),
+    quantity: row.quantity || 1,
+    auctionEndDate: row.auction_end_date ? new Date(row.auction_end_date).getTime() : undefined,
+    basePrice: row.base_price ?? undefined,
+    buyItNowPrice: row.buy_it_now_price ?? undefined,
+    currentBid: row.current_bid ?? undefined,
+    topBidderId: row.top_bidder_id ?? undefined,
+    auctionStatus: (row.auction_status as AuctionStatus) ?? undefined,
+    winnerId: row.winner_id ?? undefined,
+  };
+}
+
+function mapToTradeInteraction(row: any): TradeInteraction {
+  return {
+    id: row.id,
+    buyerId: row.buyer_id,
+    sellerId: row.seller_id,
+    sellerName: row.seller_name,
+    buyerName: row.buyer_name,
+    cardName: row.card_name,
+    timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    status: row.status,
+    buyerFeedback: row.buyer_feedback != null ? mapDbToFeedback(row.buyer_feedback) : undefined,
+    sellerFeedback: row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : undefined,
+    buyerConfirmedAt: row.buyer_confirmed_at ? new Date(row.buyer_confirmed_at).getTime() : undefined,
+    sellerConfirmedAt: row.seller_confirmed_at ? new Date(row.seller_confirmed_at).getTime() : undefined,
+  };
+}
+
+function mapToNewsItem(row: any): NewsItem {
+  return {
+    id: row.id,
+    title: row.title,
+    imageUrl: row.image_url,
+    linkUrl: row.link_url,
+    game: mapDbToGameType(row.game),
+    date: row.published_at ? new Date(row.published_at).getTime() : (row.date || Date.now()),
+    sourceName: row.source_name,
+  };
+}
+
+function mapToStoreProfile(row: any): StoreProfile {
+  return {
+    id: row.id,
+    name: row.name,
+    logoUrl: row.logo_url,
+    websiteUrl: row.website_url,
+    mapsUrl: row.maps_url,
+    location: row.location,
+    games: (row.games || ['MTG']).map(mapDbToGameType),
+    linkedUserId: row.linked_user_id ?? undefined,
+  };
+}
+
+function mapToNotification(row: any): AppNotification {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    linkUrl: row.link_url ?? undefined,
+    imageUrl: row.image_url ?? undefined,
+    read: row.read || false,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  };
+}
+
+// ─── INTERNAL HELPERS ────────────────────────────────────────────────────────
+
+function isGuestId(userId: string): boolean {
+  return userId.startsWith('guest_') || localStorage.getItem('lotus_is_guest') === 'true';
+}
+
+function assertAuthenticated(userId?: string): void {
+  if (!userId || isGuestId(userId)) {
+    throw new Error('Necesitás iniciar sesión para realizar esta acción.');
+  }
+}
+
+function buildGuestProfile(guestId: string): UserProfile {
+  return {
+    id: guestId,
+    email: 'guest@lotus.test',
+    displayName: 'Guest Trader',
+    photoURL: undefined,
+    isOnline: true,
+    subscriptionTier: SubscriptionTier.COMMON,
+    isAdmin: false,
+    traderScore: 0,
+    searcherScore: 0,
+    preferredGame: '',
+  };
+}
+
+async function getOrCreateProfile(authUser: any): Promise<UserProfile> {
+  const { data } = await supabase.from('users').select('*').eq('id', authUser.id).single();
+  if (data) {
+    await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', authUser.id);
+    return mapToUserProfile(data);
+  }
+  // Trigger may not have fired yet — wait and retry once
+  await new Promise(r => setTimeout(r, 1000));
+  const { data: retryData } = await supabase.from('users').select('*').eq('id', authUser.id).single();
+  if (retryData) return mapToUserProfile(retryData);
+  // Last resort: insert manually
+  const fallback = {
+    id: authUser.id,
+    email: authUser.email || '',
+    display_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Unnamed Trader',
+    photo_url: authUser.user_metadata?.avatar_url || null,
+    subscription_tier: mapSubscriptionTierToDb(SubscriptionTier.COMMON),
+    is_admin: false,
+    trader_score: 0,
+    searcher_score: 0,
+  };
+  await supabase.from('users').insert(fallback);
+  return mapToUserProfile(fallback);
+}
+
+// ─── AUTH SERVICE ─────────────────────────────────────────────────────────────
+
 export const auth = {
   login: async (): Promise<UserProfile> => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) throw error;
+    // Page redirects to Google; return value is never used
+    return {} as UserProfile;
+  },
+
+  loginAsGuest: async (): Promise<UserProfile> => {
+    const guestId = localStorage.getItem('lotus_guest_id') || 'guest_' + Math.floor(Math.random() * 10000);
+    localStorage.setItem('lotus_guest_id', guestId);
+    localStorage.setItem('lotus_is_guest', 'true');
+    const guestProfile = buildGuestProfile(guestId);
+    currentUserProfile = guestProfile;
+    await configService.loadConfig();
+    return guestProfile;
+  },
+
+  getCurrentUser: () => currentUserProfile,
+
+  getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
     try {
-      await firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-      const result = await firebaseAuth.signInWithPopup(googleProvider);
-      const user = result.user;
-      
-      if (!user) throw new Error("Authentication failed");
-
-      const userRef = db.collection("users").doc(user.uid);
-      const userDoc = await userRef.get();
-      
-      let customData: any = {};
-      if (userDoc.exists) {
-          customData = userDoc.data() || {};
-      }
-
-      // CORRECCIÓN: Eliminada validación por correo electrónico. 
-      // Se utiliza estrictamente el campo isAdmin de Firestore.
-      const isAdmin = !!customData.isAdmin;
-
-      const profile: UserProfile = {
-        id: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || 'Unnamed Trader',
-        photoURL: user.photoURL || undefined,
-        isOnline: true,
-        subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
-        isAdmin: isAdmin,
-        traderScore: customData.traderScore || customData.successfulTrades || 0,
-        searcherScore: customData.searcherScore || 0,
-        preferredGame: customData.preferredGame || '',
-        ...customData
-      };
-
-      await userRef.set({
-          displayName: profile.displayName,
-          email: profile.email,
-          photoURL: profile.photoURL,
-          lastLogin: Date.now(),
-          subscriptionTier: customData.subscriptionTier || profile.subscriptionTier,
-          isAdmin: profile.isAdmin,
-          traderScore: profile.traderScore,
-          searcherScore: profile.searcherScore,
-          preferredGame: profile.preferredGame || null
-      }, { merge: true });
-
-      currentUserProfile = profile;
-      localStorage.removeItem('lotus_is_guest');
-      await configService.loadConfig();
-      return profile;
-    } catch (error: any) {
-      console.error("Login failed", error);
-      throw error;
+      console.log('[getUserPublicProfile] start', userId);
+      const result = await Promise.race([
+        supabase.from('users').select('*').eq('id', userId).single(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('[getUserPublicProfile] timed out')), 8000)
+        ),
+      ]);
+      console.log('[getUserPublicProfile] done', result.data?.id ?? null);
+      return result.data ? mapToUserProfile(result.data) : null;
+    } catch (e) {
+      console.error('[getUserPublicProfile] error:', e);
+      return null;
     }
   },
-  loginAsGuest: async (): Promise<UserProfile> => {
-      const guestId = localStorage.getItem('lotus_guest_id') || 'guest_' + Math.floor(Math.random() * 10000);
-      localStorage.setItem('lotus_guest_id', guestId);
-      localStorage.setItem('lotus_is_guest', 'true');
-      
-      const guestProfile: UserProfile = {
-          id: guestId,
-          email: 'guest@lotus.test',
-          displayName: 'Guest Trader',
-          photoURL: undefined,
-          isOnline: true,
-          subscriptionTier: SubscriptionTier.COMMON,
-          isAdmin: false,
-          traderScore: 0,
-          searcherScore: 0,
-          preferredGame: ''
-      };
-      
-      currentUserProfile = guestProfile;
-      await configService.loadConfig();
-      return guestProfile;
-  },
-  getCurrentUser: () => currentUserProfile,
-  getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
-      try {
-          const doc = await db.collection("users").doc(userId).get();
-          if (doc.exists) {
-              const data = doc.data() as any;
-              return { 
-                  id: doc.id, 
-                  ...data,
-                  subscriptionTier: data.subscriptionTier || SubscriptionTier.COMMON,
-                  traderScore: data.traderScore || data.successfulTrades || 0,
-                  searcherScore: data.searcherScore || 0
-              } as UserProfile;
-          }
-          return null;
-      } catch (e: any) {
-          console.error("Error fetching public profile", e);
-          return null;
-      }
-  },
+
   updateProfile: async (updates: Partial<UserProfile>): Promise<void> => {
-      const user = firebaseAuth.currentUser;
-      const current = currentUserProfile;
-      if (!current) throw new Error("No user logged in");
+    const current = currentUserProfile;
+    if (!current) throw new Error('No user logged in');
+    if (localStorage.getItem('lotus_is_guest') === 'true') {
+      currentUserProfile = { ...current, ...updates };
+      return;
+    }
 
-      try {
-          if (localStorage.getItem('lotus_is_guest') === 'true') {
-             currentUserProfile = { ...current, ...updates };
-             return;
-          }
-
-          if (!user) throw new Error("No Firebase user found");
-
-          if (updates.displayName || updates.photoURL) {
-              await user.updateProfile({
-                  displayName: updates.displayName || user.displayName,
-                  photoURL: updates.photoURL || user.photoURL
-              });
-          }
-
-          const firestoreUpdates = {
-              displayName: updates.displayName || current.displayName,
-              email: current.email,
-              whatsapp: updates.whatsapp || null,
-              preferredStore: updates.preferredStore || null,
-              preferredGame: updates.preferredGame || null,
-              storeAnnouncement: updates.storeAnnouncement || null,
-              updatedAt: Date.now()
-          };
-          
-          await db.collection("users").doc(user.uid).set(firestoreUpdates, { merge: true });
-          currentUserProfile = { ...current, ...updates };
-
-      } catch (error: any) {
-          console.error("Error updating profile:", error);
-          throw error;
+    // Bypass supabase-js entirely — it queues requests behind initializePromise
+    // which can hang when the session refresh request never completes.
+    // Read the JWT directly from localStorage (where supabase-js v2 persists it).
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+    const storageKey = `sb-${projectRef}-auth-token`;
+    let accessToken = anonKey;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        accessToken = parsed?.access_token ?? anonKey;
       }
+    } catch { /* fall back to anon key */ }
+
+    console.log('[updateProfile] direct fetch — user:', current.id);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 9000);
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(current.id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({
+            display_name: updates.displayName ?? current.displayName,
+            whatsapp: updates.whatsapp || null,
+            preferred_store: updates.preferredStore || null,
+            preferred_game: updates.preferredGame ? mapGameTypeToDb(updates.preferredGame) : null,
+            store_announcement: updates.storeAnnouncement || null,
+          }),
+          signal: controller.signal,
+        }
+      );
+      console.log('[updateProfile] response status:', res.status);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('[updateProfile] error body:', JSON.stringify(body));
+        throw new Error((body as any).message || (body as any).hint || `HTTP ${res.status}`);
+      }
+    } finally {
+      clearTimeout(tid);
+    }
+
+    currentUserProfile = { ...current, ...updates };
   },
+
   logout: async () => {
-      localStorage.removeItem('lotus_is_guest');
-      await firebaseAuth.signOut();
-      currentUserProfile = null;
+    localStorage.removeItem('lotus_is_guest');
+    await supabase.auth.signOut();
+    currentUserProfile = null;
   },
+
   subscribe: (callback: (user: UserProfile | null) => void) => {
-    return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = db.collection("users").doc(firebaseUser.uid);
-        let customData: any = {};
-        try {
-            const userDoc = await userRef.get();
-            if (userDoc.exists) customData = userDoc.data() || {};
-        } catch(e) { console.warn("Offline or error fetching profile", e); }
-
-        // CORRECCIÓN: Validación estricta por campo isAdmin de Firestore.
-        const isAdmin = !!customData.isAdmin;
-
-        const profile: UserProfile = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || 'Unnamed Trader',
-            photoURL: firebaseUser.photoURL || undefined,
-            isOnline: true,
-            subscriptionTier: customData.subscriptionTier || SubscriptionTier.COMMON,
-            isAdmin: isAdmin,
-            traderScore: customData.traderScore || customData.successfulTrades || 0,
-            searcherScore: customData.searcherScore || 0,
-            preferredGame: customData.preferredGame || '',
-            ...customData
-        };
+    // Check existing session on startup
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await getOrCreateProfile(session.user);
         currentUserProfile = profile;
         await configService.loadConfig();
         callback(profile);
       } else {
-        const isGuest = localStorage.getItem('lotus_is_guest');
-        if (isGuest === 'true') {
-             const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
-             const guestProfile: UserProfile = {
-                id: guestId,
-                email: 'guest@lotus.test',
-                displayName: 'Guest Trader',
-                photoURL: undefined,
-                isOnline: true,
-                subscriptionTier: SubscriptionTier.COMMON,
-                isAdmin: false,
-                traderScore: 0,
-                searcherScore: 0,
-                preferredGame: ''
-             };
-             currentUserProfile = guestProfile;
-             await configService.loadConfig();
-             callback(guestProfile);
+        if (localStorage.getItem('lotus_is_guest') === 'true') {
+          const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
+          const guestProfile = buildGuestProfile(guestId);
+          currentUserProfile = guestProfile;
+          await configService.loadConfig();
+          callback(guestProfile);
         } else {
-             currentUserProfile = null;
-             callback(null);
+          currentUserProfile = null;
+          callback(null);
         }
       }
     });
-  }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // INITIAL_SESSION already handled via getSession() above
+      if (event === 'INITIAL_SESSION') return;
+
+      if (session?.user) {
+        const profile = await getOrCreateProfile(session.user);
+        currentUserProfile = profile;
+        await configService.loadConfig();
+        callback(profile);
+      } else {
+        if (event === 'SIGNED_OUT') {
+          if (localStorage.getItem('lotus_is_guest') === 'true') {
+            callback(currentUserProfile);
+          } else {
+            currentUserProfile = null;
+            callback(null);
+          }
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  },
 };
 
-// CONFIG SERVICE
+// ─── CONFIG SERVICE ───────────────────────────────────────────────────────────
+
 export const configService = {
-    loadConfig: async () => {
-        try {
-            const doc = await db.collection("settings").doc("global").get();
-            if (doc.exists) {
-                const data = doc.data() as GlobalConfig;
-                const mergeTier = (tier: SubscriptionTier) => ({
-                    ...DEFAULT_CONFIG[tier],
-                    ...(data[tier] || {})
-                });
-                currentConfig = {
-                    [SubscriptionTier.COMMON]: mergeTier(SubscriptionTier.COMMON),
-                    [SubscriptionTier.UNCOMMON]: mergeTier(SubscriptionTier.UNCOMMON),
-                    [SubscriptionTier.RARE]: mergeTier(SubscriptionTier.RARE),
-                    [SubscriptionTier.MYTHIC]: mergeTier(SubscriptionTier.MYTHIC),
-                };
-            } else {
-                await db.collection("settings").doc("global").set(DEFAULT_CONFIG);
-                currentConfig = DEFAULT_CONFIG;
-            }
-
-            const sysDoc = await db.collection("settings").doc("system").get();
-            if (sysDoc.exists) {
-                currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysDoc.data() as SystemConfig) };
-            } else {
-                await db.collection("settings").doc("system").set(DEFAULT_SYSTEM_CONFIG);
-                currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
-            }
-
-        } catch (e) {
-            console.warn("Using default config (offline)", e);
-            currentConfig = DEFAULT_CONFIG;
-            currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
-        }
-        return currentConfig;
-    },
-    getConfig: () => currentConfig,
-    getSystemConfig: () => currentSystemConfig,
-    updateConfig: async (newConfig: GlobalConfig) => {
-        await db.collection("settings").doc("global").set(newConfig);
-        currentConfig = newConfig;
-    },
-    updateSystemConfig: async (newSysConfig: SystemConfig) => {
-        await db.collection("settings").doc("system").set(newSysConfig);
-        currentSystemConfig = newSysConfig;
-    }
-};
-
-// NOTIFICATION SERVICE
-export const notificationService = {
-    send: async (userId: string, type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM', title: string, message: string, linkUrl?: string, imageUrl?: string) => {
-        try {
-            const notification: Omit<AppNotification, 'id'> = {
-                userId, type, title, message, linkUrl, imageUrl, read: false, createdAt: Date.now()
-            };
-            await db.collection("notifications").add(notification);
-        } catch (e) {
-            console.error("Failed to send notification", e);
-        }
-    },
-    markAsRead: async (notificationId: string) => {
-        await db.collection("notifications").doc(notificationId).update({ read: true });
-    },
-    markAllAsRead: async (userId: string) => {
-        const snap = await db.collection("notifications").where("userId", "==", userId).where("read", "==", false).get();
-        const batch = db.batch();
-        snap.docs.forEach(doc => batch.update(doc.ref, { read: true }));
-        await batch.commit();
-    },
-    cleanup: async (userId: string) => {
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        const snap = await db.collection("notifications").where("userId", "==", userId).where("createdAt", "<", thirtyDaysAgo).get();
-        const batch = db.batch();
-        snap.docs.forEach(doc => batch.delete(doc.ref));
-        if (!snap.empty) await batch.commit();
-    }
-};
-
-// ALERT SERVICE
-export const alertService = {
-    isWatching: async (userId: string, cardName: string): Promise<boolean> => {
-        const id = `${userId}_${cardName.replace(/\//g, '_')}`;
-        const doc = await db.collection("active_alerts").doc(id).get();
-        return doc.exists;
-    },
-    toggleAlert: async (userId: string, cardName: string): Promise<boolean> => {
-        const id = `${userId}_${cardName.replace(/\//g, '_')}`;
-        const ref = db.collection("active_alerts").doc(id);
-        const doc = await ref.get();
-        if (doc.exists) {
-            await ref.delete();
-            return false;
-        } else {
-            const limits = await subscriptionService.checkLimit('CARD_ALERT');
-            if (!limits.allowed) throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
-            await ref.set({ userId, cardName, createdAt: Date.now() });
-            return true;
-        }
-    },
-    findWatchers: async (cardName: string): Promise<string[]> => {
-        const snap = await db.collection("active_alerts").where("cardName", "==", cardName).get();
-        return snap.docs.map(d => (d.data() as CardAlert).userId);
-    }
-};
-
-// TRADE & REPUTATION SERVICE
-export const tradeService = {
-    logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
-        if (!currentUserProfile) return;
-        if (currentUserProfile.id === sellerId) return; 
-
-        try {
-            const recentSnap = await db.collection('trade_interactions')
-                .where('buyerId', '==', currentUserProfile.id)
-                .where('sellerId', '==', sellerId)
-                .where('status', '==', 'PENDING')
-                .get();
-
-            if (!recentSnap.empty) {
-                const interactions = recentSnap.docs.map(d => d.data());
-                interactions.sort((a, b) => b.timestamp - a.timestamp);
-                const last = interactions[0];
-                if (Date.now() - last.timestamp < 24 * 60 * 60 * 1000) return; 
-            }
-
-            const interaction: Omit<TradeInteraction, 'id'> = {
-                buyerId: currentUserProfile.id,
-                buyerName: currentUserProfile.displayName,
-                sellerId,
-                sellerName,
-                cardName,
-                timestamp: Date.now(),
-                status: 'PENDING'
-            };
-
-            await db.collection('trade_interactions').add(interaction);
-            
-            // Notify Seller
-            oneSignalService.sendNotification(
-                "¡Atención!",
-                `Un Searcher te ha contactado por tu ${cardName}.`,
-                [sellerId]
-            ).catch(err => console.error("Push Notification Failed", err));
-
-        } catch (e) {
-            console.error("Failed to log trade interaction", e);
-        }
-    },
-
-    getPendingFeedback: async (): Promise<TradeInteraction[]> => {
-        if (!currentUserProfile) return [];
-        const uid = currentUserProfile.id;
-        try {
-            const buyerSnap = await db.collection('trade_interactions')
-                .where('buyerId', '==', uid)
-                .where('status', '==', 'PENDING')
-                .get();
-            
-            const sellerSnap = await db.collection('trade_interactions')
-                .where('sellerId', '==', uid)
-                .where('status', '==', 'PENDING')
-                .get();
-
-            const all = [...buyerSnap.docs, ...sellerSnap.docs].map(doc => mapDoc(doc) as TradeInteraction);
-            const now = Date.now();
-            const minTime = currentSystemConfig.minTradeConfirmHours * 60 * 60 * 1000;
-
-            return all.filter(i => {
-                const isBuyer = i.buyerId === uid;
-                const isSeller = i.sellerId === uid;
-                if (isBuyer && i.buyerFeedback !== undefined) return false;
-                if (isSeller && i.sellerFeedback !== undefined) return false;
-                return (now - i.timestamp) >= minTime;
-            });
-        } catch (e) {
-            console.error("Failed to get pending feedback", e);
-            return [];
-        }
-    },
-
-    submitFeedback: async (interactionId: string, feedback: FeedbackValue) => {
-        if (!currentUserProfile) return;
-        const uid = currentUserProfile.id;
-        const interactionRef = db.collection('trade_interactions').doc(interactionId);
-
-        await db.runTransaction(async (t) => {
-            const doc = await t.get(interactionRef);
-            if (!doc.exists) throw new Error("Interaction not found");
-            const data = doc.data() as TradeInteraction;
-
-            const isBuyer = data.buyerId === uid;
-            const updates: Partial<TradeInteraction> = isBuyer 
-                ? { buyerFeedback: feedback, buyerConfirmedAt: Date.now() }
-                : { sellerFeedback: feedback, sellerConfirmedAt: Date.now() };
-
-            const nextData = { ...data, ...updates };
-            const bothAnswered = (nextData.buyerFeedback !== undefined && nextData.sellerFeedback !== undefined);
-
-            if (bothAnswered) {
-                let buyerAward = 0;
-                let sellerAward = 0;
-                const buyerVal = nextData.buyerFeedback!;
-                const sellerVal = nextData.sellerFeedback!;
-
-                if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal === FeedbackValue.NO_CONCRETADO) {
-                    buyerAward = 1;
-                    sellerAward = 1;
-                } else if (buyerVal !== FeedbackValue.NO_CONCRETADO && sellerVal !== FeedbackValue.NO_CONCRETADO) {
-                    buyerAward = sellerVal as number;
-                    sellerAward = buyerVal as number;
-                }
-
-                if (buyerAward !== 0) {
-                    t.update(db.collection('users').doc(data.buyerId), {
-                        searcherScore: firebase.firestore.FieldValue.increment(buyerAward)
-                    });
-                }
-                if (sellerAward !== 0) {
-                    t.update(db.collection('users').doc(data.sellerId), {
-                        traderScore: firebase.firestore.FieldValue.increment(sellerAward)
-                    });
-                }
-                updates.status = 'COMPLETED';
-            }
-            t.update(interactionRef, updates);
+  loadConfig: async () => {
+    try {
+      const { data: globalRow } = await supabase
+        .from('settings').select('value').eq('key', 'global_config').single();
+      if (globalRow?.value) {
+        const data = globalRow.value as GlobalConfig;
+        const mergeTier = (tier: SubscriptionTier) => ({
+          ...DEFAULT_CONFIG[tier],
+          ...(data[tier] || {}),
         });
-    },
-
-    dismissFeedback: async (interactionId: string) => {
-         await db.collection('trade_interactions').doc(interactionId).update({ status: 'IGNORED' });
-    }
-}
-
-// SUBSCRIPTION SERVICE
-export const subscriptionService = {
-    upgradeUser: async (tier: SubscriptionTier) => {
-        const user = currentUserProfile;
-        if (!user) return;
-        if (localStorage.getItem('lotus_is_guest') !== 'true') {
-            await db.collection("users").doc(user.id).update({ subscriptionTier: tier });
-        }
-        currentUserProfile = { ...user, subscriptionTier: tier };
-    },
-    checkLimit: async (type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD' | 'CARD_ALERT', binderId?: string): Promise<{ allowed: boolean; limit: number; current: number }> => {
-        if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
-        const tier = currentUserProfile.subscriptionTier;
-        const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        if (type === 'TRADE_BINDER') {
-            const binders = await binderService.getUserBinders(currentUserProfile.id);
-            const tradeBinders = binders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
-            return { allowed: tradeBinders.length < limits.maxTradeBinders, limit: limits.maxTradeBinders, current: tradeBinders.length };
-        }
-        if (type === 'WISHLIST_BINDER') {
-            const binders = await binderService.getUserBinders(currentUserProfile.id);
-            const wishBinders = binders.filter(b => b.type === BinderType.WISHLIST);
-            return { allowed: wishBinders.length < limits.maxWishlistBinders, limit: limits.maxWishlistBinders, current: wishBinders.length };
-        }
-        if (type === 'AUCTION_BINDER') {
-            const binders = await binderService.getUserBinders(currentUserProfile.id);
-            const auctionBinders = binders.filter(b => b.type === BinderType.AUCTION);
-            return { allowed: auctionBinders.length < limits.maxAuctionBinders, limit: limits.maxAuctionBinders, current: auctionBinders.length };
-        }
-        if ((type === 'AUCTION_CARD' || type === 'TRADE_CARD' || type === 'WISHLIST_CARD') && binderId) {
-            const cards = await cardService.getCardsInBinder(binderId);
-            let limit = 0;
-            if (type === 'AUCTION_CARD') limit = limits.maxAuctionCardsPerBinder;
-            if (type === 'TRADE_CARD') limit = limits.maxCardsPerTradeBinder;
-            if (type === 'WISHLIST_CARD') limit = limits.maxCardsPerWishlistBinder;
-            return { allowed: cards.length < limit, limit: limit, current: cards.length };
-        }
-        if (type === 'SHOWCASE_ITEM') {
-            const snapshot = await db.collection("cards").where("userId", "==", currentUserProfile.id).where("isShowcase", "==", true).get();
-            return { allowed: snapshot.size < limits.maxShowcaseItems, limit: limits.maxShowcaseItems, current: snapshot.size };
-        }
-        if (type === 'CARD_ALERT') {
-            const snapshot = await db.collection("active_alerts").where("userId", "==", currentUserProfile.id).get();
-            return { allowed: snapshot.size < limits.maxCardAlerts, limit: limits.maxCardAlerts, current: snapshot.size };
-        }
-        return { allowed: true, limit: 999, current: 0 };
-    },
-    isBinderLocked: async (binder: Binder): Promise<boolean> => {
-        if (!currentUserProfile) return false;
-        if (binder.userId !== currentUserProfile.id) return false;
-        const allBinders = await binderService.getUserBinders(currentUserProfile.id);
-        let categoryBinders: Binder[] = [];
-        let limit = 0;
-        const tier = currentUserProfile.subscriptionTier;
-        const config = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        if (binder.type === BinderType.AUCTION) {
-            categoryBinders = allBinders.filter(b => b.type === BinderType.AUCTION);
-            limit = config.maxAuctionBinders;
-        } else if (binder.type === BinderType.WISHLIST) {
-            categoryBinders = allBinders.filter(b => b.type === BinderType.WISHLIST);
-            limit = config.maxWishlistBinders;
-        } else {
-            categoryBinders = allBinders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
-            limit = config.maxTradeBinders;
-        }
-        categoryBinders.sort((a, b) => a.createdAt - b.createdAt);
-        const index = categoryBinders.findIndex(b => b.id === binder.id);
-        return index >= limit;
-    }
-};
-
-// ADMIN SERVICE
-export const adminService = {
-    assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
-        const snapshot = await db.collection("users").where("email", "==", email).get();
-        if (snapshot.empty) throw new Error(`User with email ${email} not found.`);
-        await snapshot.docs[0].ref.update({ subscriptionTier: tier });
-        return true;
-    },
-    wipeDatabase: async () => {
-        const deleteCollection = async (path: string) => {
-            const ref = db.collection(path);
-            while (true) {
-                const snap = await ref.limit(100).get();
-                if (snap.empty) break;
-                const batch = db.batch();
-                snap.docs.forEach(d => batch.delete(d.ref));
-                await batch.commit();
-            }
+        currentConfig = {
+          [SubscriptionTier.COMMON]: mergeTier(SubscriptionTier.COMMON),
+          [SubscriptionTier.UNCOMMON]: mergeTier(SubscriptionTier.UNCOMMON),
+          [SubscriptionTier.RARE]: mergeTier(SubscriptionTier.RARE),
+          [SubscriptionTier.MYTHIC]: mergeTier(SubscriptionTier.MYTHIC),
         };
-        try {
-            await deleteCollection('users');
-            await deleteCollection('binders');
-            await deleteCollection('cards');
-            await deleteCollection('trade_interactions');
-            await deleteCollection('news');
-            await deleteCollection('stores');
-            await deleteCollection('notifications');
-            await deleteCollection('active_alerts');
-            return true;
-        } catch (e) { console.error("DB Wipe Failed", e); throw e; }
+      } else {
+        await supabase.from('settings').upsert({ key: 'global_config', value: DEFAULT_CONFIG });
+        currentConfig = DEFAULT_CONFIG;
+      }
+
+      const { data: sysRow } = await supabase
+        .from('settings').select('value').eq('key', 'system_config').single();
+      if (sysRow?.value) {
+        currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysRow.value as SystemConfig) };
+      } else {
+        await supabase.from('settings').upsert({ key: 'system_config', value: DEFAULT_SYSTEM_CONFIG });
+        currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
+      }
+    } catch (e) {
+      console.warn('Using default config (offline)', e);
+      currentConfig = DEFAULT_CONFIG;
+      currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
     }
+    return currentConfig;
+  },
+
+  getConfig: () => currentConfig,
+  getSystemConfig: () => currentSystemConfig,
+
+  updateConfig: async (newConfig: GlobalConfig) => {
+    await supabase.from('settings').upsert({ key: 'global_config', value: newConfig });
+    currentConfig = newConfig;
+  },
+
+  updateSystemConfig: async (newSysConfig: SystemConfig) => {
+    await supabase.from('settings').upsert({ key: 'system_config', value: newSysConfig });
+    currentSystemConfig = newSysConfig;
+  },
 };
 
-// BINDER SERVICE
+// ─── NOTIFICATION SERVICE ─────────────────────────────────────────────────────
+
+export const notificationService = {
+  send: async (
+    userId: string,
+    type: 'OUTBID' | 'WISH_ALERT' | 'SYSTEM',
+    title: string,
+    message: string,
+    linkUrl?: string,
+    imageUrl?: string,
+  ) => {
+    try {
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        type,
+        title,
+        message,
+        link_url: linkUrl ?? null,
+        image_url: imageUrl ?? null,
+        read: false,
+      });
+    } catch (e) {
+      console.error('Failed to send notification', e);
+    }
+  },
+
+  markAsRead: async (notificationId: string) => {
+    await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+  },
+
+  markAllAsRead: async (userId: string) => {
+    await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+  },
+
+  cleanup: async (userId: string) => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('notifications').delete().eq('user_id', userId).lt('created_at', thirtyDaysAgo);
+  },
+};
+
+// ─── ALERT SERVICE ────────────────────────────────────────────────────────────
+
+export const alertService = {
+  isWatching: async (userId: string, cardName: string): Promise<boolean> => {
+    const { count } = await supabase
+      .from('card_alerts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('card_name', cardName);
+    return (count || 0) > 0;
+  },
+
+  toggleAlert: async (userId: string, cardName: string): Promise<boolean> => {
+    assertAuthenticated(userId);
+    const watching = await alertService.isWatching(userId, cardName);
+    if (watching) {
+      await supabase.from('card_alerts').delete().eq('user_id', userId).eq('card_name', cardName);
+      return false;
+    }
+    const limits = await subscriptionService.checkLimit('CARD_ALERT');
+    if (!limits.allowed) throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
+    await supabase.from('card_alerts').insert({ user_id: userId, card_name: cardName });
+    return true;
+  },
+
+  findWatchers: async (cardName: string): Promise<string[]> => {
+    const { data } = await supabase
+      .from('card_alerts')
+      .select('user_id')
+      .eq('card_name', cardName);
+    return (data || []).map((r: any) => r.user_id);
+  },
+};
+
+// ─── TRADE SERVICE ────────────────────────────────────────────────────────────
+
+export const tradeService = {
+  logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
+    if (!currentUserProfile) return;
+    if (isGuestId(currentUserProfile.id)) return;
+    if (currentUserProfile.id === sellerId) return;
+
+    try {
+      const minTime = 24 * 60 * 60 * 1000;
+      const since = new Date(Date.now() - minTime).toISOString();
+      const { data: recent } = await supabase
+        .from('trade_interactions')
+        .select('id')
+        .eq('buyer_id', currentUserProfile.id)
+        .eq('seller_id', sellerId)
+        .eq('status', 'PENDING')
+        .gte('created_at', since)
+        .limit(1);
+
+      if (recent && recent.length > 0) return;
+
+      await supabase.from('trade_interactions').insert({
+        buyer_id: currentUserProfile.id,
+        buyer_name: currentUserProfile.displayName,
+        seller_id: sellerId,
+        seller_name: sellerName,
+        card_name: cardName,
+        status: 'PENDING',
+      });
+
+      oneSignalService.sendNotification(
+        '¡Atención!',
+        `Un Searcher te ha contactado por tu ${cardName}.`,
+        [sellerId],
+      ).catch(err => console.error('Push Notification Failed', err));
+    } catch (e) {
+      console.error('Failed to log trade interaction', e);
+    }
+  },
+
+  getPendingFeedback: async (): Promise<TradeInteraction[]> => {
+    if (!currentUserProfile) return [];
+    const uid = currentUserProfile.id;
+    try {
+      const { data } = await supabase
+        .from('trade_interactions')
+        .select('*')
+        .or(`buyer_id.eq.${uid},seller_id.eq.${uid}`)
+        .eq('status', 'PENDING');
+
+      const all = (data || []).map(mapToTradeInteraction);
+      const now = Date.now();
+      const minTime = currentSystemConfig.minTradeConfirmHours * 60 * 60 * 1000;
+
+      return all.filter(i => {
+        const isBuyer = i.buyerId === uid;
+        const isSeller = i.sellerId === uid;
+        if (isBuyer && i.buyerFeedback !== undefined) return false;
+        if (isSeller && i.sellerFeedback !== undefined) return false;
+        return (now - i.timestamp) >= minTime;
+      });
+    } catch (e) {
+      console.error('Failed to get pending feedback', e);
+      return [];
+    }
+  },
+
+  submitFeedback: async (interactionId: string, feedback: FeedbackValue) => {
+    if (!currentUserProfile) return;
+    const uid = currentUserProfile.id;
+
+    const { data: row } = await supabase
+      .from('trade_interactions')
+      .select('*')
+      .eq('id', interactionId)
+      .single();
+    if (!row) throw new Error('Interaction not found');
+
+    const isBuyer = row.buyer_id === uid;
+    const updates: any = isBuyer
+      ? { buyer_feedback: mapFeedbackToDb(feedback), buyer_confirmed_at: new Date().toISOString() }
+      : { seller_feedback: mapFeedbackToDb(feedback), seller_confirmed_at: new Date().toISOString() };
+
+    const nextBuyerFeedback = isBuyer ? feedback : row.buyer_feedback;
+    const nextSellerFeedback = !isBuyer ? feedback : row.seller_feedback;
+    const bothAnswered = nextBuyerFeedback != null && nextSellerFeedback != null;
+
+    if (bothAnswered) {
+      const bv = nextBuyerFeedback as FeedbackValue;
+      const sv = nextSellerFeedback as FeedbackValue;
+      let buyerAward = 0;
+      let sellerAward = 0;
+      if (bv !== FeedbackValue.NO_CONCRETADO && sv === FeedbackValue.NO_CONCRETADO) {
+        buyerAward = 1;
+        sellerAward = 1;
+      } else if (bv !== FeedbackValue.NO_CONCRETADO && sv !== FeedbackValue.NO_CONCRETADO) {
+        buyerAward = sv as number;
+        sellerAward = bv as number;
+      }
+      if (buyerAward !== 0) {
+        const { data: buyerData } = await supabase.from('users').select('searcher_score').eq('id', row.buyer_id).single();
+        await supabase.from('users').update({ searcher_score: (buyerData?.searcher_score || 0) + buyerAward }).eq('id', row.buyer_id);
+      }
+      if (sellerAward !== 0) {
+        const { data: sellerData } = await supabase.from('users').select('trader_score').eq('id', row.seller_id).single();
+        await supabase.from('users').update({ trader_score: (sellerData?.trader_score || 0) + sellerAward }).eq('id', row.seller_id);
+      }
+      updates.status = 'COMPLETED';
+    }
+
+    await supabase.from('trade_interactions').update(updates).eq('id', interactionId);
+  },
+
+  dismissFeedback: async (interactionId: string) => {
+    await supabase.from('trade_interactions').update({ status: 'IGNORED' }).eq('id', interactionId);
+  },
+};
+
+// ─── SUBSCRIPTION SERVICE ─────────────────────────────────────────────────────
+
+export const subscriptionService = {
+  upgradeUser: async (tier: SubscriptionTier) => {
+    const user = currentUserProfile;
+    if (!user) return;
+    if (localStorage.getItem('lotus_is_guest') !== 'true') {
+      await supabase.from('users').update({ subscription_tier: mapSubscriptionTierToDb(tier) }).eq('id', user.id);
+    }
+    currentUserProfile = { ...user, subscriptionTier: tier };
+  },
+
+  checkLimit: async (
+    type: 'TRADE_BINDER' | 'WISHLIST_BINDER' | 'SHOWCASE_ITEM' | 'AUCTION_BINDER' | 'AUCTION_CARD' | 'TRADE_CARD' | 'WISHLIST_CARD' | 'CARD_ALERT',
+    binderId?: string,
+  ): Promise<{ allowed: boolean; limit: number; current: number }> => {
+    if (!currentUserProfile) return { allowed: false, limit: 0, current: 0 };
+    const tier = currentUserProfile.subscriptionTier;
+    const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
+
+    if (type === 'TRADE_BINDER') {
+      const binders = await binderService.getUserBinders(currentUserProfile.id);
+      const count = binders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION).length;
+      return { allowed: count < limits.maxTradeBinders, limit: limits.maxTradeBinders, current: count };
+    }
+    if (type === 'WISHLIST_BINDER') {
+      const binders = await binderService.getUserBinders(currentUserProfile.id);
+      const count = binders.filter(b => b.type === BinderType.WISHLIST).length;
+      return { allowed: count < limits.maxWishlistBinders, limit: limits.maxWishlistBinders, current: count };
+    }
+    if (type === 'AUCTION_BINDER') {
+      const binders = await binderService.getUserBinders(currentUserProfile.id);
+      const count = binders.filter(b => b.type === BinderType.AUCTION).length;
+      return { allowed: count < limits.maxAuctionBinders, limit: limits.maxAuctionBinders, current: count };
+    }
+    if ((type === 'AUCTION_CARD' || type === 'TRADE_CARD' || type === 'WISHLIST_CARD') && binderId) {
+      const cards = await cardService.getCardsInBinder(binderId);
+      let limit = 0;
+      if (type === 'AUCTION_CARD') limit = limits.maxAuctionCardsPerBinder;
+      if (type === 'TRADE_CARD') limit = limits.maxCardsPerTradeBinder;
+      if (type === 'WISHLIST_CARD') limit = limits.maxCardsPerWishlistBinder;
+      return { allowed: cards.length < limit, limit, current: cards.length };
+    }
+    if (type === 'SHOWCASE_ITEM') {
+      const { count } = await supabase
+        .from('cards')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserProfile.id)
+        .eq('is_showcase', true);
+      const current = count || 0;
+      return { allowed: current < limits.maxShowcaseItems, limit: limits.maxShowcaseItems, current };
+    }
+    if (type === 'CARD_ALERT') {
+      const { count } = await supabase
+        .from('card_alerts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserProfile.id);
+      const current = count || 0;
+      return { allowed: current < limits.maxCardAlerts, limit: limits.maxCardAlerts, current };
+    }
+    return { allowed: true, limit: 999, current: 0 };
+  },
+
+  isBinderLocked: async (binder: Binder): Promise<boolean> => {
+    if (!currentUserProfile) return false;
+    if (binder.userId !== currentUserProfile.id) return false;
+    const allBinders = await binderService.getUserBinders(currentUserProfile.id);
+    const tier = currentUserProfile.subscriptionTier;
+    const config = currentConfig[tier] || DEFAULT_CONFIG[tier];
+    let categoryBinders: Binder[];
+    let limit: number;
+    if (binder.type === BinderType.AUCTION) {
+      categoryBinders = allBinders.filter(b => b.type === BinderType.AUCTION);
+      limit = config.maxAuctionBinders;
+    } else if (binder.type === BinderType.WISHLIST) {
+      categoryBinders = allBinders.filter(b => b.type === BinderType.WISHLIST);
+      limit = config.maxWishlistBinders;
+    } else {
+      categoryBinders = allBinders.filter(b => b.type === BinderType.FOR_TRADE || b.type === BinderType.COLLECTION);
+      limit = config.maxTradeBinders;
+    }
+    categoryBinders.sort((a, b) => a.createdAt - b.createdAt);
+    const index = categoryBinders.findIndex(b => b.id === binder.id);
+    return index >= limit;
+  },
+};
+
+// ─── ADMIN SERVICE ────────────────────────────────────────────────────────────
+
+export const adminService = {
+  assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
+    const { error } = await supabase.from('users').update({ subscription_tier: mapSubscriptionTierToDb(tier) }).eq('email', email);
+    if (error) throw new Error(`User with email ${email} not found or update failed.`);
+    return true;
+  },
+
+  wipeDatabase: async () => {
+    // Requires service_role — execute from server-side or Edge Function
+    console.warn('wipeDatabase: not available from client. Use Supabase dashboard or Edge Function.');
+  },
+};
+
+// ─── BINDER SERVICE ───────────────────────────────────────────────────────────
+
 export const binderService = {
   getUserBinders: async (userId: string): Promise<Binder[]> => {
+    if (isGuestId(userId)) return [];
     try {
-        const snapshot = await db.collection("binders").where("userId", "==", userId).get();
-        return snapshot.docs.map(doc => mapDoc(doc) as Binder);
-    } catch (e: any) { return []; }
-  },
-  getBinder: async (binderId: string): Promise<Binder | null> => {
-      try {
-          const doc = await db.collection("binders").doc(binderId).get();
-          if (doc.exists) return mapDoc(doc) as Binder;
-          return null;
-      } catch (e) { return null; }
-  },
-  createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
-    try {
-        const newBinder = { ...binderData, createdAt: Date.now(), cardCount: 0 };
-        const docRef = await db.collection("binders").add(newBinder);
-        return { id: docRef.id, ...newBinder } as Binder;
-    } catch (e: any) { throw e; }
-  },
-  deleteBinder: async (binderId: string) => {
-    await db.collection("binders").doc(binderId).delete();
-    const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
-    const CHUNK_SIZE = 450;
-    const docs = snapshot.docs;
-    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
-        const chunk = docs.slice(i, i + CHUNK_SIZE);
-        const batch = db.batch();
-        chunk.forEach((doc) => batch.delete(doc.ref));
-        await batch.commit();
+      const { data } = await supabase
+        .from('binders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+      return (data || []).map(mapToBinder);
+    } catch {
+      return [];
     }
-  }
+  },
+
+  getBinder: async (binderId: string): Promise<Binder | null> => {
+    try {
+      const { data } = await supabase.from('binders').select('*').eq('id', binderId).single();
+      return data ? mapToBinder(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
+    assertAuthenticated(binderData.userId);
+    const { data, error } = await supabase
+      .from('binders')
+      .insert({
+        user_id: binderData.userId,
+        game: mapGameTypeToDb(binderData.game || GameType.MTG),
+        type: mapBinderTypeToDb(binderData.type),
+        name: binderData.name,
+        cover_image: binderData.coverImage ?? null,
+        card_count: 0,
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapToBinder(data);
+  },
+
+  deleteBinder: async (binderId: string) => {
+    // CASCADE delete of cards handled by FK in Postgres
+    await supabase.from('binders').delete().eq('id', binderId);
+  },
 };
 
-// CARD SERVICE
+// ─── CARD SERVICE ─────────────────────────────────────────────────────────────
+
 export const cardService = {
   getCardsInBinder: async (binderId: string): Promise<Card[]> => {
-    const snapshot = await db.collection("cards").where("binderId", "==", binderId).get();
-    return snapshot.docs.map(doc => mapDoc(doc) as Card);
+    const { data } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('binder_id', binderId)
+      .order('added_at', { ascending: false });
+    return (data || []).map(mapToCard);
   },
+
   getTraderInventory: async (userId: string): Promise<Card[]> => {
-    try {
-        const userProfile = await auth.getUserPublicProfile(userId);
+    const run = async (): Promise<Card[]> => {
+      try {
+        console.log('[getTraderInventory] start — user:', userId);
+        // Use cached profile for own user to avoid a redundant users-table SELECT
+        const isOwnProfile = currentUserProfile?.id === userId;
+        const userProfile = isOwnProfile && currentUserProfile
+          ? currentUserProfile
+          : await auth.getUserPublicProfile(userId);
         if (!userProfile) return [];
         const tier = userProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        const binderSnap = await db.collection("binders").where("userId", "==", userId).get();
-        const tradeBinders: Binder[] = [];
-        binderSnap.docs.forEach(doc => {
-            const data = doc.data() as Binder;
-            if (data.type === BinderType.FOR_TRADE || data.type === BinderType.COLLECTION) tradeBinders.push({ id: doc.id, ...data });
-        });
-        tradeBinders.sort((a, b) => a.createdAt - b.createdAt);
-        const activeBinders = tradeBinders.slice(0, limits.maxTradeBinders);
-        const activeBinderIds = new Set(activeBinders.map(b => b.id));
-        if (activeBinderIds.size === 0) return [];
-        const cardSnap = await db.collection("cards").where("userId", "==", userId).get();
-        const allCards = cardSnap.docs.map(doc => mapDoc(doc) as Card);
-        return allCards.filter(card => activeBinderIds.has(card.binderId));
-    } catch (e) { return []; }
+
+        const { data: bindersData } = await supabase
+          .from('binders')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('type', 'FOR_TRADE')
+          .order('created_at', { ascending: true });
+
+        const activeBinders = (bindersData || []).slice(0, limits.maxTradeBinders);
+        if (activeBinders.length === 0) return [];
+        const activeBinderIds = activeBinders.map((b: any) => b.id);
+
+        const { data: cards } = await supabase
+          .from('cards')
+          .select('*')
+          .in('binder_id', activeBinderIds);
+        console.log('[getTraderInventory] done — cards:', cards?.length ?? 0);
+        return (cards || []).map(mapToCard);
+      } catch (e) {
+        console.error('[getTraderInventory] error:', e);
+        return [];
+      }
+    };
+    const timeout = new Promise<Card[]>(resolve =>
+      setTimeout(() => { console.warn('[getTraderInventory] timed out'); resolve([]); }, 10000)
+    );
+    return Promise.race([run(), timeout]);
   },
+
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
-    const binderRef = db.collection("binders").doc(cardData.binderId);
-    const binderSnap = await binderRef.get();
-    let isAuction = false;
-    if (binderSnap.exists) {
-        const binder = binderSnap.data() as Binder;
-        isAuction = binder.type === BinderType.AUCTION;
-        if (!currentUserProfile) throw new Error("User session not found");
+    assertAuthenticated(cardData.userId);
+    // Check binder limits
+    if (currentUserProfile) {
+      const binder = await binderService.getBinder(cardData.binderId);
+      if (binder) {
         const tier = currentUserProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
-        let maxCards = (binder.type === BinderType.FOR_TRADE || binder.type === BinderType.COLLECTION) ? limits.maxCardsPerTradeBinder : (binder.type === BinderType.WISHLIST ? limits.maxCardsPerWishlistBinder : (isAuction ? limits.maxAuctionCardsPerBinder : 20));
-        const countSnap = await db.collection("cards").where("binderId", "==", cardData.binderId).get();
-        if (countSnap.size >= maxCards) throw new Error(`Limit reached for this binder type. Max ${maxCards} cards.`);
+        const isAuction = binder.type === BinderType.AUCTION;
+        const isWishlist = binder.type === BinderType.WISHLIST;
+        const maxCards = isAuction
+          ? limits.maxAuctionCardsPerBinder
+          : isWishlist
+          ? limits.maxCardsPerWishlistBinder
+          : limits.maxCardsPerTradeBinder;
+        const currentCards = await cardService.getCardsInBinder(cardData.binderId);
+        if (currentCards.length >= maxCards) throw new Error(`Limit reached for this binder type. Max ${maxCards} cards.`);
+      }
     }
-    const newCard = {
-      ...cardData, 
-      addedAt: Date.now(), 
-      isShowcase: false, 
-      game: cardData.game || GameType.MTG, 
-      purchaseUrl: cardData.purchaseUrl ?? null, 
-      customPrice: cardData.customPrice ?? null, 
-      currency: cardData.currency ?? null, 
-      price: cardData.price ?? 0, 
-      currentBid: cardData.basePrice || 0,
-      quantity: isAuction ? 1 : (cardData.quantity || 1),
-      ...((cardData.auctionStatus || cardData.binderType === BinderType.AUCTION) && { auctionStatus: cardData.auctionStatus || AuctionStatus.ACTIVE })
-    };
-    const docRef = await db.collection("cards").add(newCard);
-    await db.collection("binders").doc(cardData.binderId).update({ cardCount: firebase.firestore.FieldValue.increment(1) });
-    const isTradeable = !cardData.binderType || cardData.binderType === BinderType.FOR_TRADE || cardData.binderType === BinderType.AUCTION;
+
+    const binderTypeDb = cardData.binderType ? mapBinderTypeToDb(cardData.binderType) : null;
+    const isAuction = binderTypeDb === 'AUCTION';
+
+    const { data, error } = await supabase
+      .from('cards')
+      .insert({
+        binder_id: cardData.binderId,
+        user_id: cardData.userId,
+        scryfall_id: cardData.scryfallId,
+        name: cardData.name,
+        set_name: cardData.setName,
+        collector_number: cardData.collectorNumber,
+        image_url: cardData.imageUrl,
+        rarity: cardData.rarity,
+        condition: mapConditionToDb(cardData.condition || CardCondition.NM),
+        is_foil: cardData.isFoil || false,
+        quantity: isAuction ? 1 : (cardData.quantity || 1),
+        custom_price: cardData.customPrice ?? null,
+        currency: cardData.currency ?? null,
+        binder_type: binderTypeDb,
+        purchase_url: cardData.purchaseUrl ?? null,
+        game: mapGameTypeToDb(cardData.game || GameType.MTG),
+        is_showcase: false,
+        base_price: cardData.basePrice ?? null,
+        buy_it_now_price: cardData.buyItNowPrice ?? null,
+        current_bid: cardData.basePrice ?? 0,
+        auction_status: isAuction ? (cardData.auctionStatus || AuctionStatus.ACTIVE).toString() : null,
+        auction_end_date: cardData.auctionEndDate ? new Date(cardData.auctionEndDate).toISOString() : null,
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    // Trigger alerts for watchers
+    const isTradeable = !binderTypeDb || binderTypeDb === 'FOR_TRADE' || binderTypeDb === 'AUCTION';
     if (isTradeable) {
-        alertService.findWatchers(newCard.name).then(watcherIds => {
-            watcherIds.forEach(userId => {
-                if (userId !== newCard.userId) {
-                    notificationService.send(userId, 'WISH_ALERT', `Found: ${newCard.name}`, `${currentUserProfile?.displayName} just listed a card on your wishlist!`, `/?binder=${newCard.binderId}`, newCard.imageUrl);
-                }
-            });
-        }).catch(e => console.error("Error triggering alerts", e));
-    }
-    return { id: docRef.id, ...newCard } as Card;
-  },
-  updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
-      await db.collection("cards").doc(cardId).update({ customPrice, currency });
-  },
-  syncBinderPrices: async (binderId: string, cards: Card[]) => {
-      // 1. Identify cards that haven't been synced in library or are old
-      const scryfallIds = Array.from(new Set(cards.map(c => c.scryfallId)));
-      const freshPrices = await auditAndRefreshPrices(scryfallIds);
-
-      // 2. Batch update card documents if price has changed significantly or is out of sync
-      const batch = db.batch();
-      let hasUpdates = false;
-
-      for (const card of cards) {
-          const newPrice = freshPrices[card.scryfallId];
-          if (newPrice !== undefined && newPrice !== card.price) {
-              const ref = db.collection("cards").doc(card.id);
-              batch.update(ref, { price: newPrice });
-              hasUpdates = true;
+      alertService.findWatchers(cardData.name).then(watcherIds => {
+        watcherIds.forEach(uid => {
+          if (uid !== cardData.userId) {
+            notificationService.send(uid, 'WISH_ALERT', `Found: ${cardData.name}`, `${currentUserProfile?.displayName} just listed a card on your wishlist!`, `/?binder=${cardData.binderId}`, cardData.imageUrl);
           }
-      }
+        });
+      }).catch(e => console.error('Error triggering alerts', e));
+    }
 
-      if (hasUpdates) {
-          await batch.commit();
-      }
+    return mapToCard(data);
   },
+
+  updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
+    await supabase.from('cards').update({ custom_price: customPrice, currency }).eq('id', cardId);
+  },
+
+  syncBinderPrices: async (_binderId: string, cards: Card[]) => {
+    const scryfallIds = cards.map(c => c.scryfallId);
+    if (scryfallIds.length === 0) return;
+    const { data: prices } = await supabase
+      .from('prices')
+      .select('scryfall_id, price_sell_usd')
+      .in('scryfall_id', scryfallIds);
+    if (!prices?.length) return;
+    const priceMap = new Map(prices.map((p: any) => [p.scryfall_id, p.price_sell_usd]));
+    for (const card of cards) {
+      const newPrice = priceMap.get(card.scryfallId);
+      if (newPrice !== undefined && newPrice !== card.price) {
+        await supabase.from('cards').update({ custom_price: newPrice }).eq('id', card.id);
+      }
+    }
+  },
+
   removeCard: async (cardId: string) => {
-    const cardRef = db.collection("cards").doc(cardId);
-    const cardSnap = await cardRef.get();
-    if (!cardSnap.exists) return;
-    const cardData = cardSnap.data();
-    await cardRef.delete();
-    if (cardData && cardData.binderId) await db.collection("binders").doc(cardData.binderId).update({ cardCount: firebase.firestore.FieldValue.increment(-1) });
+    // card_count decremented automatically by trigger tr_cards_count
+    await supabase.from('cards').delete().eq('id', cardId);
   },
+
   toggleShowcase: async (cardId: string, isShowcase: boolean) => {
-      await db.collection("cards").doc(cardId).update({ isShowcase });
-  }
+    await supabase.from('cards').update({ is_showcase: isShowcase }).eq('id', cardId);
+  },
 };
 
-// SHOWCASE SERVICE
+// ─── SHOWCASE SERVICE ─────────────────────────────────────────────────────────
+
 export const showcaseService = {
-    getShowcaseItems: async (game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
-        try {
-            const snapshot = await db.collection("cards").where("isShowcase", "==", true).limit(50).get();
-            let cards = snapshot.docs.map(doc => mapDoc(doc) as Card);
-            cards = cards.sort((a, b) => b.addedAt - a.addedAt);
-            const userIds: string[] = Array.from(new Set(cards.map(c => c.userId)));
-            const userMap = new Map<string, string>(); 
-            await Promise.all(userIds.map(async (uid: string) => {
-                try {
-                    const userDoc = await db.collection("users").doc(uid).get();
-                    userMap.set(uid, (userDoc.data() as any)?.displayName || 'Unknown Trader');
-                } catch (e: any) { userMap.set(uid, 'Unknown Trader'); }
-            }));
-            return cards.map(card => ({ ...card, sellerId: card.userId, sellerName: userMap.get(card.userId) || 'Unknown Trader' }));
-        } catch (e: any) { return []; }
-    },
-    getNewestShowcase: async (): Promise<ShowcaseItem[]> => {
-        try {
-            const items = await showcaseService.getShowcaseItems();
-            return items.slice(0, 10);
-        } catch(e) { return []; }
+  getShowcaseItems: async (_game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
+    try {
+      const { data } = await supabase
+        .from('cards')
+        .select('*, users!cards_user_id_fkey(id, display_name, trader_score, subscription_tier)')
+        .eq('is_showcase', true)
+        .order('added_at', { ascending: false })
+        .limit(50);
+      return (data || []).map((row: any) => ({
+        ...mapToCard(row),
+        sellerId: row.user_id,
+        sellerName: row.users?.display_name || 'Unknown Trader',
+      }));
+    } catch {
+      return [];
     }
-}
+  },
 
-// AUCTION SERVICE
-export const auctionService = {
-    getAllAuctions: async (): Promise<Card[]> => {
-        try {
-            const snapshot = await db.collection("cards").where("binderType", "==", BinderType.AUCTION).where("auctionStatus", "==", AuctionStatus.ACTIVE).get();
-            return snapshot.docs.map(doc => mapDoc(doc) as Card);
-        } catch (e) { return []; }
-    },
-    placeBid: async (card: Card, userId: string): Promise<void> => {
-        if (!card.id) return;
-        if (card.userId === userId) throw new Error("You cannot bid on your own auction.");
-        const newBid = (card.currentBid || card.basePrice || 0) + 1;
-        const prevBidderId = card.topBidderId;
-        const updates: any = { currentBid: newBid, topBidderId: userId };
-        if (card.auctionEndDate) {
-            const now = Date.now();
-            const timeLeft = card.auctionEndDate - now;
-            if (timeLeft < 5 * 60 * 1000 && timeLeft > 0) updates.auctionEndDate = now + 5 * 60 * 1000;
-        }
-        await db.collection("cards").doc(card.id).update(updates);
-        if (prevBidderId && prevBidderId !== userId) {
-            notificationService.send(prevBidderId, 'OUTBID', 'You have been outbid!', `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`, '/auctions', card.imageUrl);
-            oneSignalService.sendNotification("You have been outbid!", `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Tap to reclaim your glory!`, [prevBidderId], `${window.location.origin}/?binder=${card.binderId}`).catch(err => console.error("Push Notification Failed", err));
-        }
-    },
-    directBuy: async (card: Card, userId: string): Promise<void> => {
-        if (!card.id) return;
-        if (card.userId === userId) throw new Error("You cannot buy your own auction.");
-        await db.collection("cards").doc(card.id).update({ auctionStatus: AuctionStatus.SOLD, winnerId: userId, currentBid: card.buyItNowPrice });
-        notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
-        oneSignalService.sendNotification("Auction Sold!", `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error("Push Notification Failed", err));
-    }
+  getNewestShowcase: async (): Promise<ShowcaseItem[]> => {
+    const items = await showcaseService.getShowcaseItems();
+    return items.slice(0, 10);
+  },
 };
 
-// MATCHING SERVICE
+// ─── AUCTION SERVICE ──────────────────────────────────────────────────────────
+
+export const auctionService = {
+  getAllAuctions: async (): Promise<Card[]> => {
+    try {
+      const { data } = await supabase
+        .from('cards')
+        .select('*, users!cards_user_id_fkey(display_name, trader_score, photo_url)')
+        .eq('binder_type', 'AUCTION')
+        .eq('auction_status', AuctionStatus.ACTIVE)
+        .order('auction_end_date', { ascending: true });
+      return (data || []).map(mapToCard);
+    } catch {
+      return [];
+    }
+  },
+
+  placeBid: async (card: Card, userId: string): Promise<void> => {
+    if (!card.id) return;
+    if (card.userId === userId) throw new Error('You cannot bid on your own auction.');
+    const newBid = (card.currentBid || card.basePrice || 0) + 1;
+    const prevBidderId = card.topBidderId;
+
+    const updates: any = { current_bid: newBid, top_bidder_id: userId };
+    if (card.auctionEndDate) {
+      const now = Date.now();
+      const timeLeft = card.auctionEndDate - now;
+      if (timeLeft < 5 * 60 * 1000 && timeLeft > 0) {
+        updates.auction_end_date = new Date(now + 5 * 60 * 1000).toISOString();
+      }
+    }
+    await supabase.from('cards').update(updates).eq('id', card.id);
+
+    if (prevBidderId && prevBidderId !== userId) {
+      notificationService.send(prevBidderId, 'OUTBID', 'You have been outbid!', `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`, '/auctions', card.imageUrl);
+      oneSignalService.sendNotification('You have been outbid!', `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Tap to reclaim your glory!`, [prevBidderId], `${window.location.origin}/?binder=${card.binderId}`).catch(err => console.error('Push Notification Failed', err));
+    }
+  },
+
+  directBuy: async (card: Card, userId: string): Promise<void> => {
+    if (!card.id) return;
+    if (card.userId === userId) throw new Error('You cannot buy your own auction.');
+    await supabase.from('cards').update({
+      auction_status: AuctionStatus.SOLD.toString(),
+      winner_id: userId,
+      current_bid: card.buyItNowPrice,
+    }).eq('id', card.id);
+    notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
+    oneSignalService.sendNotification('Auction Sold!', `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error('Push Notification Failed', err));
+  },
+};
+
+// ─── MATCHING SERVICE ─────────────────────────────────────────────────────────
+
 export const matchingService = {
   findMatches: async (currentUserId: string): Promise<MatchResult[]> => {
-    const myBinderSnap = await db.collection("binders").where("userId", "==", currentUserId).where("type", "==", BinderType.WISHLIST).get();
-    const myBinderIds = myBinderSnap.docs.map(d => d.id);
-    if (myBinderIds.length === 0) return [];
-    const myWantsSnap = await db.collection("cards").where("userId", "==", currentUserId).get();
-    const allMyCards = myWantsSnap.docs.map(d => mapDoc(d) as Card);
-    const myWants = allMyCards.filter(c => myBinderIds.includes(c.binderId));
-    if (myWants.length === 0) return [];
-    const matches: MatchResult[] = [];
-    const uniqueWantNames: string[] = Array.from(new Set(myWants.map(w => w.name)));
-    const namesToSearch: string[] = uniqueWantNames.slice(0, 10); 
-    if (namesToSearch.length > 0) {
-        const marketSnap = await db.collection("cards").where("name", "in", namesToSearch).get();
-        const candidates = marketSnap.docs.map(d => mapDoc(d) as Card);
-        for (const candidate of candidates) {
-            const candidateUserId = String(candidate.userId);
-            if (candidateUserId === currentUserId) continue; 
-            const exactWant = myWants.find(w => w.name === candidate.name && w.scryfallId === candidate.scryfallId);
-            const looseWant = myWants.find(w => w.name === candidate.name);
-            const wantCard = exactWant || looseWant;
-            if (wantCard) {
-                let sellerProfile: UserProfile = { id: candidateUserId, displayName: 'Remote User', email: '', isOnline: false, subscriptionTier: SubscriptionTier.COMMON, traderScore: 0, searcherScore: 0, preferredGame: '' };
-                try {
-                    const userDoc = await db.collection("users").doc(candidateUserId).get();
-                    if (userDoc.exists) sellerProfile = { ...sellerProfile, ...(userDoc.data() as any) };
-                } catch (e: any) {}
-                matches.push({ card: wantCard, matchCard: candidate, seller: sellerProfile, matchType: exactWant ? 'EXACT' : 'LOOSE' });
-            }
-        }
+    const { data: wishlistCards } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .eq('binder_type', 'WISHLIST');
+
+    if (!wishlistCards?.length) return [];
+
+    const uniqueNames = Array.from(new Set(wishlistCards.map((c: any) => c.name)));
+    const namesToSearch = uniqueNames.slice(0, 10) as string[];
+
+    const { data: matches } = await supabase
+      .from('cards')
+      .select('*, users!cards_user_id_fkey(id, display_name, trader_score, searcher_score, whatsapp, subscription_tier, photo_url)')
+      .in('name', namesToSearch)
+      .in('binder_type', ['FOR_TRADE', 'COLLECTION'])
+      .neq('user_id', currentUserId);
+
+    const results: MatchResult[] = [];
+    for (const m of (matches || [])) {
+      const exactWant = wishlistCards.find((w: any) => w.name === m.name && w.scryfall_id === m.scryfall_id);
+      const looseWant = wishlistCards.find((w: any) => w.name === m.name);
+      const wantRow = exactWant || looseWant;
+      if (wantRow) {
+        const seller: UserProfile = m.users
+          ? mapToUserProfile(m.users)
+          : { id: m.user_id, displayName: 'Remote User', email: '', isOnline: false, subscriptionTier: SubscriptionTier.COMMON, traderScore: 0, searcherScore: 0, preferredGame: '' };
+        results.push({
+          card: mapToCard(wantRow),
+          matchCard: mapToCard(m),
+          seller,
+          matchType: exactWant ? 'EXACT' : 'LOOSE',
+        });
+      }
     }
-    return matches;
-  }
+    return results;
+  },
 };
 
-// NEWS & STORE SERVICES
+// ─── NEWS SERVICE ─────────────────────────────────────────────────────────────
+
 export const newsService = {
-    getNews: async (): Promise<NewsItem[]> => {
-        try {
-            const snap = await db.collection("news").orderBy('date', 'desc').limit(20).get();
-            return snap.docs.map(d => mapDoc(d) as NewsItem);
-        } catch (e) { return []; }
-    },
-    addNews: async (news: Omit<NewsItem, 'id'>) => { await db.collection("news").add(news); },
-    deleteNews: async (id: string) => { await db.collection("news").doc(id).delete(); }
+  getNews: async (): Promise<NewsItem[]> => {
+    try {
+      const { data } = await supabase
+        .from('news')
+        .select('*')
+        .order('published_at', { ascending: false })
+        .limit(20);
+      return (data || []).map(mapToNewsItem);
+    } catch {
+      return [];
+    }
+  },
+
+  addNews: async (news: Omit<NewsItem, 'id'>) => {
+    await supabase.from('news').insert({
+      title: news.title,
+      image_url: news.imageUrl,
+      link_url: news.linkUrl,
+      game: mapGameTypeToDb(news.game),
+      published_at: new Date(news.date).toISOString(),
+      source_name: news.sourceName,
+    });
+  },
+
+  deleteNews: async (id: string) => {
+    await supabase.from('news').delete().eq('id', id);
+  },
 };
+
+// ─── STORE DIRECTORY SERVICE ──────────────────────────────────────────────────
+
 export const storeDirectoryService = {
-    getStores: async (): Promise<StoreProfile[]> => {
-        try {
-            const snap = await db.collection("stores").get();
-            return snap.docs.map(d => mapDoc(d) as StoreProfile);
-        } catch (e) { return []; }
-    },
-    addStore: async (store: Omit<StoreProfile, 'id'>) => { await db.collection("stores").add(store); },
-    deleteStore: async (id: string) => { await db.collection("stores").doc(id).delete(); }
+  getStores: async (): Promise<StoreProfile[]> => {
+    try {
+      const { data } = await supabase.from('stores').select('*');
+      return (data || []).map(mapToStoreProfile);
+    } catch {
+      return [];
+    }
+  },
+
+  addStore: async (store: Omit<StoreProfile, 'id'>) => {
+    await supabase.from('stores').insert({
+      name: store.name,
+      logo_url: store.logoUrl,
+      website_url: store.websiteUrl,
+      maps_url: store.mapsUrl,
+      location: store.location,
+      games: (store.games || [GameType.MTG]).map(mapGameTypeToDb),
+    });
+  },
+
+  deleteStore: async (id: string) => {
+    await supabase.from('stores').delete().eq('id', id);
+  },
 };

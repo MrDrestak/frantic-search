@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth, cardService, tradeService } from '../services/store';
+import { auth, cardService, tradeService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
-import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue } from '../types';
+import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue, StoreProfile } from '../types';
 // Added AlertTriangle to imports
 import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown, BellOff } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
@@ -27,29 +27,6 @@ const COUNTRY_CODES = [
     { code: '55', label: 'Brazil (+55)', flag: '🇧🇷' },
 ];
 
-interface StoreData {
-    name: string;
-    location: string;
-    mapUrl: string;
-}
-
-const STORES: StoreData[] = [
-    { 
-        name: 'La Mazmorra', 
-        location: 'Santiago de Surco, Lima', 
-        mapUrl: 'https://maps.app.goo.gl/YNTq2rYXo7ce8sSH7' 
-    },
-    { 
-        name: 'Reinos Olvidados', 
-        location: 'San Borja, Lima', 
-        mapUrl: 'https://maps.app.goo.gl/FjGCR5FshDcbaRXNA' 
-    },
-    {
-        name: 'TCG House | C.C. Arenales',
-        location: 'Lince, Lima',
-        mapUrl: 'https://maps.app.goo.gl/LkoGT51aMEmEs7mp9'
-    }
-];
 
 const ITEMS_PER_PAGE = 9;
 
@@ -74,6 +51,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Interaction State
   const [showContact, setShowContact] = useState(false);
   const [pendingFeedbacks, setPendingFeedbacks] = useState<TradeInteraction[]>([]);
+  const [stores, setStores] = useState<StoreProfile[]>([]);
 
   // Notification State
   const [notifStatus, setNotifStatus] = useState<{ permission: string, optedIn: boolean, subscriptionId: string | null }>({ permission: 'default', optedIn: false, subscriptionId: null });
@@ -99,6 +77,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   useEffect(() => {
     loadProfile();
+    storeDirectoryService.getStores().then(setStores);
   }, [viewingUserId]);
 
   useEffect(() => {
@@ -347,7 +326,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
       );
   };
   
-  const currentStoreData = STORES.find(s => s.name === user?.preferredStore);
+  const currentStoreData = stores.find(s => s.name === user?.preferredStore);
   const filteredStorefront = storefrontCards
     .filter(c => {
         if (!c.name.toLowerCase().includes(storefrontSearch.toLowerCase())) return false;
@@ -551,7 +530,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                          <div><span className="font-bold text-lg block leading-tight">{user.preferredStore || "None selected"}</span>{currentStoreData && ( <span className="text-sm text-slate-400 flex items-center gap-1 mt-1"><Navigation size={12} /> {currentStoreData.location}</span> )}</div>
                                      </div>
                                  </div>
-                                 {currentStoreData && ( <a href={currentStoreData.mapUrl} target="_blank" rel="noreferrer" className="mt-3 text-xs bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 border border-blue-900/50 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"><ExternalLink size={14} /> Open in Google Maps</a> )}
+                                 {currentStoreData && ( <a href={currentStoreData.mapsUrl} target="_blank" rel="noreferrer" className="mt-3 text-xs bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 border border-blue-900/50 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"><ExternalLink size={14} /> Open in Google Maps</a> )}
                              </div>
                         </div>
 
@@ -634,7 +613,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Tienda Preferida</label>
-                                <div className="relative"><MapPin className="absolute left-3 top-3 text-slate-500" size={18} /><select value={storeName} onChange={(e) => setStoreName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none appearance-none"><option value="">-- Select a Store --</option>{STORES.map((s) => ( <option key={s.name} value={s.name}>{s.name}</option> ))}</select></div>
+                                <div className="relative"><MapPin className="absolute left-3 top-3 text-slate-500" size={18} /><select value={storeName} onChange={(e) => setStoreName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none appearance-none"><option value="">-- Select a Store --</option>{stores.map((s) => ( <option key={s.name} value={s.name}>{s.name}</option> ))}<option value="Otros">Otros</option></select></div>
                             </div>
                         </div>
                         <div className="flex gap-3 pt-4 border-t border-slate-800">

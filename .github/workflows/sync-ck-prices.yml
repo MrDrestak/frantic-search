@@ -1,0 +1,20 @@
+name: Sync CK Prices
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # 4:00 AM PET = 9:00 AM UTC
+  workflow_dispatch:       # manual trigger desde GitHub Actions UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: node scripts/sync-ck-prices.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
