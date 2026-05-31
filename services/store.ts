@@ -695,7 +695,9 @@ export const tradeService = {
 
       const all = (data || []).map(mapToTradeInteraction);
       const now = Date.now();
-      const minTime = currentSystemConfig.minTradeConfirmHours * 60 * 60 * 1000;
+      // Re-read from DB in case config loaded after this component mounted
+      const minHours = currentSystemConfig?.minTradeConfirmHours ?? 0;
+      const minTime = minHours * 60 * 60 * 1000;
 
       return all.filter(i => {
         const isBuyer = i.buyerId === uid;
@@ -726,8 +728,8 @@ export const tradeService = {
       ? { buyer_feedback: mapFeedbackToDb(feedback), buyer_confirmed_at: new Date().toISOString() }
       : { seller_feedback: mapFeedbackToDb(feedback), seller_confirmed_at: new Date().toISOString() };
 
-    const nextBuyerFeedback = isBuyer ? feedback : row.buyer_feedback;
-    const nextSellerFeedback = !isBuyer ? feedback : row.seller_feedback;
+    const nextBuyerFeedback = isBuyer ? feedback : (row.buyer_feedback != null ? mapDbToFeedback(row.buyer_feedback) : null);
+    const nextSellerFeedback = !isBuyer ? feedback : (row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : null);
     const bothAnswered = nextBuyerFeedback != null && nextSellerFeedback != null;
 
     if (bothAnswered) {
@@ -1147,6 +1149,7 @@ export const auctionService = {
     }).eq('id', card.id);
     notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
     oneSignalService.sendNotification('Auction Sold!', `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error('Push Notification Failed', err));
+    tradeService.logInteraction(card.userId, card.name, card.name);
   },
 };
 
