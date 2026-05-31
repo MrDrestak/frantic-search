@@ -434,6 +434,40 @@ export const auth = {
   },
 
   subscribe: (callback: (user: UserProfile | null) => void) => {
+    // Synchronously bootstrap currentUserProfile from localStorage so that
+    // getCurrentUser() returns non-null immediately on hard refresh, before
+    // the async getSession() resolves. Without this, components that call
+    // getCurrentUser() on mount (e.g. Binders.tsx) get null and their
+    // loading state never resolves.
+    if (!currentUserProfile && localStorage.getItem('lotus_is_guest') !== 'true') {
+      try {
+        const projectRef = (import.meta.env.VITE_SUPABASE_URL as string)
+          .replace('https://', '').replace('.supabase.co', '');
+        const raw = localStorage.getItem(`sb-${projectRef}-auth-token`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const u = parsed?.user;
+          if (u?.id) {
+            currentUserProfile = {
+              id: u.id,
+              email: u.email || '',
+              displayName: u.user_metadata?.full_name || u.email?.split('@')[0] || 'User',
+              photoURL: u.user_metadata?.avatar_url || undefined,
+              whatsapp: undefined,
+              preferredStore: undefined,
+              preferredGame: '',
+              storeAnnouncement: undefined,
+              isOnline: true,
+              subscriptionTier: SubscriptionTier.COMMON,
+              isAdmin: false,
+              traderScore: 0,
+              searcherScore: 0,
+            };
+          }
+        }
+      } catch { /* ignore — full profile loads async below */ }
+    }
+
     // Check existing session on startup
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
@@ -952,7 +986,13 @@ export const cardService = {
       }
     }
 
-    const binderTypeDb = cardData.binderType ? mapBinderTypeToDb(cardData.binderType) : null;
+    // Infer binderType from the binder if not explicitly provided
+    let resolvedBinderType = cardData.binderType;
+    if (!resolvedBinderType && cardData.binderId) {
+      const b = await binderService.getBinder(cardData.binderId);
+      if (b) resolvedBinderType = b.type;
+    }
+    const binderTypeDb = resolvedBinderType ? mapBinderTypeToDb(resolvedBinderType) : null;
     const isAuction = binderTypeDb === 'AUCTION';
 
     const { data, error } = await supabase
@@ -1114,33 +1154,49 @@ export const auctionService = {
 
 export const matchingService = {
   findMatches: async (currentUserId: string): Promise<MatchResult[]> => {
-    const { data: wishlistCards } = await supabase
+    const { data: wishlistCards, error: wErr } = await supabase
       .from('cards')
       .select('*')
       .eq('user_id', currentUserId)
       .eq('binder_type', 'WISHLIST');
 
+    if (wErr) console.error('[findMatches] wishlist query error:', wErr);
     if (!wishlistCards?.length) return [];
 
     const uniqueNames = Array.from(new Set(wishlistCards.map((c: any) => c.name)));
     const namesToSearch = uniqueNames.slice(0, 10) as string[];
 
-    const { data: matches } = await supabase
+    console.log('[findMatches] searching for:', namesToSearch);
+
+    const { data: matches, error: mErr } = await supabase
       .from('cards')
-      .select('*, users!cards_user_id_fkey(id, display_name, trader_score, searcher_score, whatsapp, subscription_tier, photo_url)')
+      .select('*')
       .in('name', namesToSearch)
-      .in('binder_type', ['FOR_TRADE', 'COLLECTION'])
+      .in('binder_type', ['FOR_TRADE'])
       .neq('user_id', currentUserId);
 
+    if (mErr) console.error('[findMatches] matches query error:', mErr);
+    console.log('[findMatches] raw matches:', matches?.length ?? 0);
+
+    if (!matches?.length) return [];
+
+    // Fetch seller profiles separately to avoid RLS issues with JOIN
+    const sellerIds = [...new Set(matches.map((m: any) => m.user_id))] as string[];
+    const { data: sellers } = await supabase
+      .from('users')
+      .select('id, display_name, trader_score, searcher_score, whatsapp, subscription_tier, photo_url, preferred_store, preferred_game')
+      .in('id', sellerIds);
+
+    const sellerMap = Object.fromEntries((sellers || []).map((s: any) => [s.id, mapToUserProfile(s)]));
+
     const results: MatchResult[] = [];
-    for (const m of (matches || [])) {
+    for (const m of matches) {
       const exactWant = wishlistCards.find((w: any) => w.name === m.name && w.scryfall_id === m.scryfall_id);
       const looseWant = wishlistCards.find((w: any) => w.name === m.name);
       const wantRow = exactWant || looseWant;
       if (wantRow) {
-        const seller: UserProfile = m.users
-          ? mapToUserProfile(m.users)
-          : { id: m.user_id, displayName: 'Remote User', email: '', isOnline: false, subscriptionTier: SubscriptionTier.COMMON, traderScore: 0, searcherScore: 0, preferredGame: '' };
+        const seller: UserProfile = sellerMap[m.user_id]
+          ?? { id: m.user_id, displayName: 'Remote User', email: '', isOnline: false, subscriptionTier: SubscriptionTier.COMMON, traderScore: 0, searcherScore: 0, preferredGame: '' };
         results.push({
           card: mapToCard(wantRow),
           matchCard: mapToCard(m),

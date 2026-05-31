@@ -63,12 +63,12 @@ class DocRef {
 }
 
 class CollectionRef {
-  private filters: Array<{ field: string; value: any }> = [];
+  private filters: Array<{ field: string; op: string; value: any }> = [];
 
   constructor(private table: string) {}
 
-  where(field: string, _op: string, value: any): this {
-    this.filters.push({ field: toSnakeField(field), value: toDbValue(value) });
+  where(field: string, op: string, value: any): this {
+    this.filters.push({ field: toSnakeField(field), op, value: toDbValue(value) });
     return this;
   }
 
