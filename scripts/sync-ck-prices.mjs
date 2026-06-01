@@ -51,6 +51,11 @@ async function sync() {
     last_updated: now,
   }));
 
+  // Log first item with a scryfall_id to verify field names
+  const sample = data.data.find(i => i.scryfall_id);
+  if (sample) console.log('CK API sample item keys:', Object.keys(sample));
+  if (sample) console.log('CK API sample item:', JSON.stringify(sample));
+
   console.log(`Unique scryfall_ids: ${allRows.length} | Skipped (no scryfall_id): ${skipped}`);
 
   for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {

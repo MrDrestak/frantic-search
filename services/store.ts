@@ -984,6 +984,27 @@ export const binderService = {
   },
 };
 
+// Fetches prices for a set of card rows and merges them in.
+// Used instead of a JOIN because prices has no FK to cards.
+async function attachPrices(rows: any[]): Promise<any[]> {
+  const ids = [...new Set(rows.map((r: any) => r.scryfall_id).filter(Boolean))];
+  if (ids.length === 0) return rows;
+  try {
+    const prices = await directGet<any>(
+      'prices',
+      `select=scryfall_id,price_sell_usd,price_buy_usd&scryfall_id=in.(${ids.join(',')})`
+    );
+    const map = new Map(prices.map((p: any) => [p.scryfall_id, {
+      price_sell_usd: p.price_sell_usd,
+      price_buy_usd: p.price_buy_usd,
+    }]));
+    return rows.map((r: any) => ({ ...r, prices: map.get(r.scryfall_id) ?? null }));
+  } catch (e) {
+    console.warn('[attachPrices] failed:', e);
+    return rows;
+  }
+}
+
 // ─── CARD SERVICE ─────────────────────────────────────────────────────────────
 
 export const cardService = {
@@ -993,7 +1014,8 @@ export const cardService = {
       .select('*')
       .eq('binder_id', binderId)
       .order('added_at', { ascending: false });
-    return (data || []).map(mapToCard);
+    const rows = await attachPrices(data || []);
+    return rows.map(mapToCard);
   },
 
   getTraderInventory: async (userId: string): Promise<Card[]> => {
@@ -1025,7 +1047,8 @@ export const cardService = {
           .select('*')
           .in('binder_id', activeBinderIds);
         console.log('[getTraderInventory] done — cards:', cards?.length ?? 0);
-        return (cards || []).map(mapToCard);
+        const rows = await attachPrices(cards || []);
+        return rows.map(mapToCard);
       } catch (e) {
         console.error('[getTraderInventory] error:', e);
         return [];
@@ -1153,7 +1176,8 @@ export const showcaseService = {
         .eq('is_showcase', true)
         .order('added_at', { ascending: false })
         .limit(50);
-      return (data || []).map((row: any) => ({
+      const rows = await attachPrices(data || []);
+      return rows.map((row: any) => ({
         ...mapToCard(row),
         sellerId: row.user_id,
         sellerName: row.users?.display_name || 'Unknown Trader',
@@ -1180,7 +1204,8 @@ export const auctionService = {
         .eq('binder_type', 'AUCTION')
         .eq('auction_status', AuctionStatus.ACTIVE)
         .order('auction_end_date', { ascending: true });
-      return (data || []).map(mapToCard);
+      const rows = await attachPrices(data || []);
+      return rows.map(mapToCard);
     } catch {
       return [];
     }
