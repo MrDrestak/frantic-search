@@ -36,8 +36,8 @@ async function sync() {
   for (const item of data.data) {
     if (!item.scryfall_id) { skipped++; continue; }
     const existing = deduped.get(item.scryfall_id);
-    const newSell = item.price_sell ?? Infinity;
-    const oldSell = existing?.price_sell ?? Infinity;
+    const newSell = parseFloat(item.price_retail) || Infinity;
+    const oldSell = parseFloat(existing?.price_retail) || Infinity;
     if (!existing || newSell < oldSell) deduped.set(item.scryfall_id, item);
   }
 
@@ -45,16 +45,11 @@ async function sync() {
     scryfall_id: item.scryfall_id,
     ck_name: item.name,
     ck_edition: item.edition,
-    price_buy_usd: item.price_buy ?? null,
-    price_sell_usd: item.price_sell ?? null,
+    price_buy_usd: parseFloat(item.price_buy) || null,
+    price_sell_usd: parseFloat(item.price_retail) || null,
     qty_retail: item.qty_retail ?? 0,
     last_updated: now,
   }));
-
-  // Log first item with a scryfall_id to verify field names
-  const sample = data.data.find(i => i.scryfall_id);
-  if (sample) console.log('CK API sample item keys:', Object.keys(sample));
-  if (sample) console.log('CK API sample item:', JSON.stringify(sample));
 
   console.log(`Unique scryfall_ids: ${allRows.length} | Skipped (no scryfall_id): ${skipped}`);
 
