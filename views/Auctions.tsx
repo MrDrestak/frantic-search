@@ -66,7 +66,7 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
             await auctionService.placeBid(card, currentUser.id);
             setAuctions(prev => prev.map(a => {
                 if (a.id === card.id) {
-                    return { ...a, currentBid: (a.currentBid || 0) + 1, topBidderId: currentUser.id };
+                    return { ...a, currentBid: (a.currentBid || a.basePrice || 0) + 1, topBidderId: currentUser.id };
                 }
                 return a;
             }));

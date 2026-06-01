@@ -359,8 +359,8 @@ const UserManagementTab = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [isWiping, setIsWiping] = useState(false);
 
-    const handleUpdateTier = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleUpdateTier = async () => {
+        if (!targetEmail.trim()) { alert('Please enter an email.'); return; }
         setIsAssigning(true);
         try {
             await adminService.assignTierByEmail(targetEmail, selectedTier);
@@ -385,19 +385,18 @@ const UserManagementTab = () => {
                 <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                     <UserPlus size={20} className="text-indigo-400" /> User Tier Management
                 </h3>
-                <form onSubmit={handleUpdateTier} className="space-y-4">
+                <div className="space-y-4">
                     <div className="flex flex-col gap-3">
-                        <input 
-                            type="email" 
-                            placeholder="User Google Email" 
-                            value={targetEmail} 
-                            onChange={(e) => setTargetEmail(e.target.value)} 
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-violet-500" 
-                            required 
+                        <input
+                            type="text"
+                            placeholder="User Google Email"
+                            value={targetEmail}
+                            onChange={(e) => setTargetEmail(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-violet-500"
                         />
                         <div className="flex gap-2">
-                            <select 
-                                value={selectedTier} 
+                            <select
+                                value={selectedTier}
                                 onChange={(e) => setSelectedTier(e.target.value as SubscriptionTier)}
                                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-violet-500"
                             >
@@ -405,9 +404,10 @@ const UserManagementTab = () => {
                                     <option key={tier} value={tier}>{tier}</option>
                                 ))}
                             </select>
-                            <button 
-                                type="submit" 
-                                disabled={isAssigning} 
+                            <button
+                                type="button"
+                                onClick={handleUpdateTier}
+                                disabled={isAssigning}
                                 className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-2 rounded-lg font-bold transition-all shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2"
                             >
                                 {isAssigning ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
@@ -419,7 +419,7 @@ const UserManagementTab = () => {
                         <AlertCircle size={10} className="mt-0.5 shrink-0" />
                         Warning: Downgrading a user may lock their existing binders if they exceed the new tier limits.
                     </p>
-                </form>
+                </div>
             </div>
             <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-6">
                 <h3 className="text-red-500 font-bold mb-2 flex items-center gap-2"><Trash2 size={20} /> Danger Zone</h3>
@@ -450,16 +450,22 @@ const NewsManagerTab = () => {
         setLoading(false);
     }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await newsService.addNews({
-            title, imageUrl, linkUrl, sourceName, game,
-            date: Date.now()
-        });
-        setIsFormOpen(false);
-        // Reset form
-        setTitle(''); setImageUrl(''); setLinkUrl(''); setSourceName('');
-        load();
+    const handleSubmit = async () => {
+        if (!title.trim() || !sourceName.trim() || !imageUrl.trim() || !linkUrl.trim()) {
+            alert('Please fill in all required fields (*).');
+            return;
+        }
+        try {
+            await newsService.addNews({
+                title, imageUrl, linkUrl, sourceName, game,
+                date: Date.now()
+            });
+            setIsFormOpen(false);
+            setTitle(''); setImageUrl(''); setLinkUrl(''); setSourceName('');
+            load();
+        } catch (err: any) {
+            alert('Error publishing news: ' + err.message);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -478,21 +484,21 @@ const NewsManagerTab = () => {
 
             {isFormOpen && (
                 <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl mb-6">
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-4">
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <input placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Source Name (e.g. IGN)" value={sourceName} onChange={e=>setSourceName(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Image URL" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Link URL" value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Title *" value={title} onChange={e=>setTitle(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Source Name *" value={sourceName} onChange={e=>setSourceName(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Image URL *" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Link URL *" value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <select value={game} onChange={(e: any)=>setGame(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white">
                                  {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
                              </select>
                          </div>
                          <div className="flex gap-2">
                              <button type="button" onClick={()=>setIsFormOpen(false)} className="bg-slate-800 text-white px-4 py-2 rounded">Cancel</button>
-                             <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Publish</button>
+                             <button type="button" onClick={handleSubmit} className="bg-green-600 text-white px-4 py-2 rounded">Publish</button>
                          </div>
-                    </form>
+                    </div>
                 </div>
             )}
 
@@ -541,34 +547,29 @@ const StoreManagerTab = () => {
         else setSelectedGames(prev => [...prev, g]);
     }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
+    const handleSubmit = async () => {
+        if (!name.trim() || !location.trim() || !logoUrl.trim() || !websiteUrl.trim() || !mapsUrl.trim()) {
+            alert('Please fill in all required fields (Store Name, Location, Logo URL, Website URL, Maps URL).');
+            return;
+        }
+
         let linkedUserId: string | undefined = undefined;
         if (linkedProfileInput.trim()) {
-            // Smart Parser: Check if it's a URL with query param 'trader'
             const urlMatch = linkedProfileInput.match(/[?&]trader=([^&]+)/);
-            if (urlMatch) {
-                linkedUserId = urlMatch[1];
-            } else {
-                // Otherwise assume it's the raw ID
-                linkedUserId = linkedProfileInput.trim();
-            }
+            linkedUserId = urlMatch ? urlMatch[1] : linkedProfileInput.trim();
         }
 
-        // Construct payload safely. If linkedUserId is undefined, do not include it or ensure type safety
-        const payload: any = {
-            name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames
-        };
-        if (linkedUserId) {
-            payload.linkedUserId = linkedUserId;
-        }
+        const payload: any = { name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames };
+        if (linkedUserId) payload.linkedUserId = linkedUserId;
 
-        await storeDirectoryService.addStore(payload);
-        setIsFormOpen(false);
-        // Reset
-        setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
-        load();
+        try {
+            await storeDirectoryService.addStore(payload);
+            setIsFormOpen(false);
+            setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
+            load();
+        } catch (err: any) {
+            alert('Error adding store: ' + err.message);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -587,19 +588,19 @@ const StoreManagerTab = () => {
 
             {isFormOpen && (
                 <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl mb-6">
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-4">
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <input placeholder="Store Name" value={name} onChange={e=>setName(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Location (e.g. Lima, Peru)" value={location} onChange={e=>setLocation(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Logo Image URL" value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Website URL" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Google Maps URL" value={mapsUrl} onChange={e=>setMapsUrl(e.target.value)} required className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Store Name *" value={name} onChange={e=>setName(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Location (e.g. Lima, Peru) *" value={location} onChange={e=>setLocation(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Logo Image URL *" value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Website URL *" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
+                             <input placeholder="Google Maps URL *" value={mapsUrl} onChange={e=>setMapsUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
                              <div className="relative">
                                 <Link size={16} className="absolute left-3 top-3 text-slate-500" />
-                                <input 
-                                    placeholder="Linked Profile (Paste Share Link) - Optional" 
-                                    value={linkedProfileInput} 
-                                    onChange={e=>setLinkedProfileInput(e.target.value)} 
+                                <input
+                                    placeholder="Linked Profile (Paste Share Link) - Optional"
+                                    value={linkedProfileInput}
+                                    onChange={e=>setLinkedProfileInput(e.target.value)}
                                     className="bg-slate-950 border border-slate-700 rounded p-2 pl-9 text-white w-full"
                                     title="Paste a full share profile URL or a User ID to link this store to an app account"
                                 />
@@ -608,22 +609,20 @@ const StoreManagerTab = () => {
                          <div>
                              <label className="text-sm text-slate-400 mb-2 block">Games Sold:</label>
                              <div className="flex gap-2">
-                                 {Object.values(GameType).map(g => (
-                                     <button 
-                                        key={g} type="button" 
-                                        onClick={() => toggleGame(g)}
-                                        className={`px-3 py-1 rounded text-sm border ${selectedGames.includes(g) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
-                                     >
-                                         {g}
-                                     </button>
-                                 ))}
+                                 <button
+                                    type="button"
+                                    onClick={() => toggleGame(GameType.MTG)}
+                                    className={`px-3 py-1 rounded text-sm border ${selectedGames.includes(GameType.MTG) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                                 >
+                                     MTG
+                                 </button>
                              </div>
                          </div>
                          <div className="flex gap-2">
                              <button type="button" onClick={()=>setIsFormOpen(false)} className="bg-slate-800 text-white px-4 py-2 rounded">Cancel</button>
-                             <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Add Store</button>
+                             <button type="button" onClick={handleSubmit} className="bg-green-600 text-white px-4 py-2 rounded">Add Store</button>
                          </div>
-                    </form>
+                    </div>
                 </div>
             )}
 

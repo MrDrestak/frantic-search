@@ -299,10 +299,80 @@ function buildGuestProfile(guestId: string): UserProfile {
   };
 }
 
+// Direct REST fetch that bypasses supabase-js initializePromise queue.
+// Use for any operation that hangs in the admin panel (same root cause as updateProfile).
+function getDirectFetchHeaders() {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+  let accessToken = anonKey;
+  try {
+    const raw = localStorage.getItem(`sb-${projectRef}-auth-token`);
+    if (raw) { const p = JSON.parse(raw); accessToken = p?.access_token ?? anonKey; }
+  } catch { /* fall back to anon key */ }
+  return { supabaseUrl, anonKey, accessToken };
+}
+
+async function directGet<T>(table: string, query: string): Promise<T[]> {
+  const { supabaseUrl, anonKey, accessToken } = getDirectFetchHeaders();
+  const url = `${supabaseUrl}/rest/v1/${table}?${query}`;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error((errBody as any).message || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+async function directFetch(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  table: string,
+  body: Record<string, any> | null,
+  filter?: string
+): Promise<void> {
+  const { supabaseUrl, anonKey, accessToken } = getDirectFetchHeaders();
+  const url = `${supabaseUrl}/rest/v1/${table}${filter ? `?${filter}` : ''}`;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        Prefer: 'return=minimal',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error((errBody as any).message || (errBody as any).hint || `HTTP ${res.status}`);
+    }
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 async function getOrCreateProfile(authUser: any): Promise<UserProfile> {
   const { data } = await supabase.from('users').select('*').eq('id', authUser.id).single();
   if (data) {
-    await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', authUser.id);
+    const updates: Record<string, any> = { last_login: new Date().toISOString() };
+    const freshPhoto = authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture;
+    if (!data.photo_url && freshPhoto) updates.photo_url = freshPhoto;
+    await supabase.from('users').update(updates).eq('id', authUser.id);
+    if (!data.photo_url && freshPhoto) data.photo_url = freshPhoto;
     return mapToUserProfile(data);
   }
   // Trigger may not have fired yet — wait and retry once
@@ -854,8 +924,7 @@ export const subscriptionService = {
 
 export const adminService = {
   assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
-    const { error } = await supabase.from('users').update({ subscription_tier: mapSubscriptionTierToDb(tier) }).eq('email', email);
-    if (error) throw new Error(`User with email ${email} not found or update failed.`);
+    await directFetch('PATCH', 'users', { subscription_tier: mapSubscriptionTierToDb(tier) }, `email=eq.${encodeURIComponent(email)}`);
     return true;
   },
 
@@ -1123,7 +1192,7 @@ export const auctionService = {
     const newBid = (card.currentBid || card.basePrice || 0) + 1;
     const prevBidderId = card.topBidderId;
 
-    const updates: any = { current_bid: newBid, top_bidder_id: userId };
+    const updates: Record<string, any> = { current_bid: newBid, top_bidder_id: userId };
     if (card.auctionEndDate) {
       const now = Date.now();
       const timeLeft = card.auctionEndDate - now;
@@ -1131,7 +1200,7 @@ export const auctionService = {
         updates.auction_end_date = new Date(now + 5 * 60 * 1000).toISOString();
       }
     }
-    await supabase.from('cards').update(updates).eq('id', card.id);
+    await directFetch('PATCH', 'cards', updates, `id=eq.${card.id}`);
 
     if (prevBidderId && prevBidderId !== userId) {
       notificationService.send(prevBidderId, 'OUTBID', 'You have been outbid!', `Someone bid ${card.currency === 'PEN' ? 'S/' : '$'} ${newBid} on ${card.name}. Bid again!`, '/auctions', card.imageUrl);
@@ -1217,19 +1286,15 @@ export const matchingService = {
 export const newsService = {
   getNews: async (): Promise<NewsItem[]> => {
     try {
-      const { data } = await supabase
-        .from('news')
-        .select('*')
-        .order('published_at', { ascending: false })
-        .limit(20);
-      return (data || []).map(mapToNewsItem);
+      const data = await directGet<any>('news', 'select=*&order=published_at.desc&limit=20');
+      return data.map(mapToNewsItem);
     } catch {
       return [];
     }
   },
 
   addNews: async (news: Omit<NewsItem, 'id'>) => {
-    await supabase.from('news').insert({
+    await directFetch('POST', 'news', {
       title: news.title,
       image_url: news.imageUrl,
       link_url: news.linkUrl,
@@ -1240,7 +1305,7 @@ export const newsService = {
   },
 
   deleteNews: async (id: string) => {
-    await supabase.from('news').delete().eq('id', id);
+    await directFetch('DELETE', 'news', null, `id=eq.${id}`);
   },
 };
 
@@ -1249,25 +1314,28 @@ export const newsService = {
 export const storeDirectoryService = {
   getStores: async (): Promise<StoreProfile[]> => {
     try {
-      const { data } = await supabase.from('stores').select('*');
-      return (data || []).map(mapToStoreProfile);
+      const data = await directGet<any>('stores', 'select=*');
+      return data.map(mapToStoreProfile);
     } catch {
       return [];
     }
   },
 
   addStore: async (store: Omit<StoreProfile, 'id'>) => {
-    await supabase.from('stores').insert({
+    const validGames = (store.games || [GameType.MTG])
+      .map(mapGameTypeToDb)
+      .filter(g => g === 'MTG');
+    await directFetch('POST', 'stores', {
       name: store.name,
       logo_url: store.logoUrl,
       website_url: store.websiteUrl,
       maps_url: store.mapsUrl,
       location: store.location,
-      games: (store.games || [GameType.MTG]).map(mapGameTypeToDb),
+      games: validGames.length ? validGames : ['MTG'],
     });
   },
 
   deleteStore: async (id: string) => {
-    await supabase.from('stores').delete().eq('id', id);
+    await directFetch('DELETE', 'stores', null, `id=eq.${id}`);
   },
 };
