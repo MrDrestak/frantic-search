@@ -30,21 +30,31 @@ async function sync() {
   let upserted = 0;
   let skipped = 0;
 
-  for (let i = 0; i < data.data.length; i += CHUNK_SIZE) {
-    const chunk = data.data.slice(i, i + CHUNK_SIZE);
-    const rows = chunk
-      .filter(item => item.scryfall_id)
-      .map(item => ({
-        scryfall_id: item.scryfall_id,
-        ck_name: item.name,
-        ck_edition: item.edition,
-        price_buy_usd: item.price_buy ?? null,
-        price_sell_usd: item.price_sell ?? null,
-        qty_retail: item.qty_retail ?? 0,
-        last_updated: now,
-      }));
+  // Deduplicate by scryfall_id — CK lists the same card multiple times across
+  // editions. Keep the entry with the lowest sell price for each scryfall_id.
+  const deduped = new Map();
+  for (const item of data.data) {
+    if (!item.scryfall_id) { skipped++; continue; }
+    const existing = deduped.get(item.scryfall_id);
+    const newSell = item.price_sell ?? Infinity;
+    const oldSell = existing?.price_sell ?? Infinity;
+    if (!existing || newSell < oldSell) deduped.set(item.scryfall_id, item);
+  }
 
-    skipped += chunk.length - rows.length;
+  const allRows = Array.from(deduped.values()).map(item => ({
+    scryfall_id: item.scryfall_id,
+    ck_name: item.name,
+    ck_edition: item.edition,
+    price_buy_usd: item.price_buy ?? null,
+    price_sell_usd: item.price_sell ?? null,
+    qty_retail: item.qty_retail ?? 0,
+    last_updated: now,
+  }));
+
+  console.log(`Unique scryfall_ids: ${allRows.length} | Skipped (no scryfall_id): ${skipped}`);
+
+  for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
+    const rows = allRows.slice(i, i + CHUNK_SIZE);
 
     if (rows.length === 0) continue;
 
@@ -53,13 +63,13 @@ async function sync() {
       .upsert(rows, { onConflict: 'scryfall_id' });
 
     if (error) {
-      console.error(`Chunk ${i / CHUNK_SIZE + 1} failed:`, error.message);
+      console.error(`Chunk ${Math.floor(i / CHUNK_SIZE) + 1} failed:`, error.message);
     } else {
       upserted += rows.length;
     }
   }
 
-  console.log(`Done. Upserted: ${upserted} | Skipped (no scryfall_id): ${skipped}`);
+  console.log(`Done. Upserted: ${upserted} | Skipped (no scryfall_id): ${skipped} | Duplicates removed: ${data.data.length - skipped - allRows.length}`);
 }
 
 sync().catch(err => {
