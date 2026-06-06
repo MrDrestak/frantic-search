@@ -538,9 +538,16 @@ export const auth = {
       } catch { /* ignore — full profile loads async below */ }
     }
 
-    // Safety valve: if the entire init chain hangs, unblock the app after 10s
+    // Safety valve: if the entire init chain hangs, unblock the app after 10s.
+    // Also clears the stale Supabase session from localStorage so the NEXT
+    // page load doesn't try to refresh an invalid token and hang again.
     const _authSafety = setTimeout(() => {
-      console.warn('[auth] initialization timed out — showing login screen');
+      console.warn('[auth] initialization timed out — clearing stale session');
+      try {
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('sb-') && k.endsWith('-auth-token')) localStorage.removeItem(k);
+        });
+      } catch { /* ignore */ }
       callback(null);
     }, 10000);
 

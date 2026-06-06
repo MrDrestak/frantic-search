@@ -3,12 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Abort any request that takes longer than 9 seconds.
-// This prevents supabase-js from hanging when the auth session-refresh
-// request never completes (which blocks all subsequent DB requests).
+// Auth token refresh uses a short 4s timeout so a stale/expired token fails fast
+// and getSession() resolves quickly instead of hanging the app on load.
+// All other DB/storage requests use 9s.
 const fetchWithTimeout = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = typeof input === 'string' ? input : (input as Request).url ?? '';
+  const ms = url.includes('/auth/v1/token') ? 4000 : 9000;
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), 9000);
+  const tid = setTimeout(() => controller.abort(), ms);
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
 };
 
