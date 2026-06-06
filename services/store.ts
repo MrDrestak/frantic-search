@@ -644,10 +644,9 @@ export const auth = {
 export const configService = {
   loadConfig: async () => {
     try {
-      const { data: globalRow } = await supabase
-        .from('settings').select('value').eq('key', 'global_config').single();
-      if (globalRow?.value) {
-        const data = globalRow.value as GlobalConfig;
+      const globalRows = await directGet<any>('settings', 'key=eq.global_config&select=value&limit=1');
+      if (globalRows[0]?.value) {
+        const data = globalRows[0].value as GlobalConfig;
         const mergeTier = (tier: SubscriptionTier) => ({
           ...DEFAULT_CONFIG[tier],
           ...(data[tier] || {}),
@@ -659,16 +658,13 @@ export const configService = {
           [SubscriptionTier.MYTHIC]: mergeTier(SubscriptionTier.MYTHIC),
         };
       } else {
-        await supabase.from('settings').upsert({ key: 'global_config', value: DEFAULT_CONFIG });
         currentConfig = DEFAULT_CONFIG;
       }
 
-      const { data: sysRow } = await supabase
-        .from('settings').select('value').eq('key', 'system_config').single();
-      if (sysRow?.value) {
-        currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysRow.value as SystemConfig) };
+      const sysRows = await directGet<any>('settings', 'key=eq.system_config&select=value&limit=1');
+      if (sysRows[0]?.value) {
+        currentSystemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(sysRows[0].value as SystemConfig) };
       } else {
-        await supabase.from('settings').upsert({ key: 'system_config', value: DEFAULT_SYSTEM_CONFIG });
         currentSystemConfig = DEFAULT_SYSTEM_CONFIG;
       }
     } catch (e) {
@@ -978,12 +974,8 @@ export const binderService = {
   getUserBinders: async (userId: string): Promise<Binder[]> => {
     if (isGuestId(userId)) return [];
     try {
-      const { data } = await supabase
-        .from('binders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
-      return (data || []).map(mapToBinder);
+      const data = await directGet<any>('binders', `user_id=eq.${userId}&order=created_at.asc`);
+      return data.map(mapToBinder);
     } catch {
       return [];
     }
@@ -991,8 +983,8 @@ export const binderService = {
 
   getBinder: async (binderId: string): Promise<Binder | null> => {
     try {
-      const { data } = await supabase.from('binders').select('*').eq('id', binderId).single();
-      return data ? mapToBinder(data) : null;
+      const rows = await directGet<any>('binders', `id=eq.${binderId}&limit=1`);
+      return rows[0] ? mapToBinder(rows[0]) : null;
     } catch {
       return null;
     }
@@ -1047,13 +1039,13 @@ async function attachPrices(rows: any[]): Promise<any[]> {
 
 export const cardService = {
   getCardsInBinder: async (binderId: string): Promise<Card[]> => {
-    const { data } = await supabase
-      .from('cards')
-      .select('*')
-      .eq('binder_id', binderId)
-      .order('added_at', { ascending: false });
-    const rows = await attachPrices(data || []);
-    return rows.map(mapToCard);
+    try {
+      const data = await directGet<any>('cards', `binder_id=eq.${binderId}&order=added_at.desc`);
+      const rows = await attachPrices(data);
+      return rows.map(mapToCard);
+    } catch {
+      return [];
+    }
   },
 
   getTraderInventory: async (userId: string): Promise<Card[]> => {
