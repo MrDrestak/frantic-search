@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { auth } from '../services/store';
-import { AlertTriangle, User } from 'lucide-react';
+import { AlertTriangle, User, Loader2 } from 'lucide-react';
 
 interface LoginProps {
   onLogin: () => void;
@@ -9,14 +9,19 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const handleLogin = async () => {
     setError(null);
+    setIsRedirecting(true);
     try {
         await auth.login();
-        onLogin();
+        // Do NOT call onLogin() here. signInWithOAuth redirects the browser —
+        // calling onLogin() would flash the Home page before the redirect.
+        // The SIGNED_IN event fires when we return from Google and handles auth.
     } catch (e: any) {
         console.error(e);
+        setIsRedirecting(false);
         let msg = "Login failed. Please try again.";
         if (e.code === 'auth/operation-not-supported-in-this-environment') {
             msg = "Login not supported in this preview environment. Please ensure you are running on a secure HTTPS connection or localhost.";
@@ -26,6 +31,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError(msg);
     }
   };
+
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="w-16 h-16 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl mb-6 flex items-center justify-center shadow-lg shadow-violet-500/30 animate-pulse">
+          <span className="text-3xl font-bold text-white">FS</span>
+        </div>
+        <Loader2 className="text-violet-500 animate-spin mb-3" size={32} />
+        <p className="text-slate-400 text-sm">Conectando con Google...</p>
+      </div>
+    );
+  }
 
   const handleGuestLogin = async () => {
       setError(null);
