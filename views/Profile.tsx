@@ -127,12 +127,12 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             setStoreName(currentUser.preferredStore || '');
             setPreferredGame(currentUser.preferredGame || '');
             setStoreAnnouncement(currentUser.storeAnnouncement || '');
-            
+
             const storedWhatsapp = currentUser.whatsapp || '';
             if (storedWhatsapp) {
                 const sortedCodes = [...COUNTRY_CODES].sort((a,b) => b.code.length - a.code.length);
                 const match = sortedCodes.find(c => storedWhatsapp.startsWith(c.code));
-                
+
                 if (match) {
                     setCountryCode(match.code);
                     setLocalPhone(storedWhatsapp.slice(match.code.length));
@@ -158,15 +158,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
         const publicProfile = await auth.getUserPublicProfile(viewingUserId);
         setUser(publicProfile);
     }
-    
+
+    // Profile info is ready — render immediately, load storefront in background
+    setIsLoading(false);
+
     if (targetId) {
         setIsLoadingStorefront(true);
         const inventory = await cardService.getTraderInventory(targetId);
         setStorefrontCards(inventory);
         setIsLoadingStorefront(false);
     }
-
-    setIsLoading(false);
   };
 
   const loadPendingFeedback = async () => {
