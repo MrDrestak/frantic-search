@@ -421,15 +421,8 @@ export const auth = {
 
   getUserPublicProfile: async (userId: string): Promise<UserProfile | null> => {
     try {
-      console.log('[getUserPublicProfile] start', userId);
-      const result = await Promise.race([
-        supabase.from('users').select('*').eq('id', userId).single(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('[getUserPublicProfile] timed out')), 8000)
-        ),
-      ]);
-      console.log('[getUserPublicProfile] done', result.data?.id ?? null);
-      return result.data ? mapToUserProfile(result.data) : null;
+      const rows = await directGet<any>('users', `id=eq.${userId}&limit=1`);
+      return rows[0] ? mapToUserProfile(rows[0]) : null;
     } catch (e) {
       console.error('[getUserPublicProfile] error:', e);
       return null;
@@ -1076,23 +1069,21 @@ export const cardService = {
         const tier = userProfile.subscriptionTier;
         const limits = currentConfig[tier] || DEFAULT_CONFIG[tier];
 
-        const { data: bindersData } = await supabase
-          .from('binders')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('type', 'FOR_TRADE')
-          .order('created_at', { ascending: true });
+        const bindersData = await directGet<{ id: string }>(
+          'binders',
+          `user_id=eq.${userId}&type=eq.FOR_TRADE&order=created_at.asc&select=id`
+        );
 
-        const activeBinders = (bindersData || []).slice(0, limits.maxTradeBinders);
+        const activeBinders = bindersData.slice(0, limits.maxTradeBinders);
         if (activeBinders.length === 0) return [];
         const activeBinderIds = activeBinders.map((b: any) => b.id);
 
-        const { data: cards } = await supabase
-          .from('cards')
-          .select('*')
-          .in('binder_id', activeBinderIds);
-        console.log('[getTraderInventory] done — cards:', cards?.length ?? 0);
-        const rows = await attachPrices(cards || []);
+        const cards = await directGet<any>(
+          'cards',
+          `binder_id=in.(${activeBinderIds.join(',')})`
+        );
+        console.log('[getTraderInventory] done — cards:', cards.length);
+        const rows = await attachPrices(cards);
         return rows.map(mapToCard);
       } catch (e) {
         console.error('[getTraderInventory] error:', e);
