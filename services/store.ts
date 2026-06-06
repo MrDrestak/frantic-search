@@ -624,7 +624,25 @@ export const auth = {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Refresh the token when the user returns to the tab after a long absence.
+    // With autoRefreshToken: false there is no background refresh — this handles
+    // the case where the access token expires while the tab is open but idle.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) return;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (session.expires_at && session.expires_at < nowSec + 300) {
+          supabase.auth.refreshSession({ refresh_token: session.refresh_token }).catch(() => {});
+        }
+      }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   },
 };
 
