@@ -148,12 +148,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   };
 
   const handleMarkContacted = async (match: MatchResult) => {
+      console.log('[DBG] handleMarkContacted fired, id:', match.matchCard.id);
       try {
           await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
       } catch (e) {
           console.error('[handleMarkContacted]', e);
       } finally {
           setMarkedMatchIds(prev => new Set([...prev, match.matchCard.id]));
+          console.log('[DBG] setMarkedMatchIds called');
       }
   };
 
