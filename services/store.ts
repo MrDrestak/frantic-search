@@ -760,14 +760,15 @@ export const alertService = {
 
 export const tradeService = {
   logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
-    if (!currentUserProfile) return;
-    if (isGuestId(currentUserProfile.id)) return;
-    if (currentUserProfile.id === sellerId) return;
+    console.log('[logInteraction] called', { sellerId, cardName, uid: currentUserProfile?.id });
+    if (!currentUserProfile) { console.warn('[logInteraction] blocked: no profile'); return; }
+    if (isGuestId(currentUserProfile.id)) { console.warn('[logInteraction] blocked: guest'); return; }
+    if (currentUserProfile.id === sellerId) { console.warn('[logInteraction] blocked: same user'); return; }
 
     try {
       const minTime = 24 * 60 * 60 * 1000;
       const since = new Date(Date.now() - minTime).toISOString();
-      const { data: recent } = await supabase
+      const { data: recent, error: selectError } = await supabase
         .from('trade_interactions')
         .select('id')
         .eq('buyer_id', currentUserProfile.id)
@@ -776,9 +777,10 @@ export const tradeService = {
         .gte('created_at', since)
         .limit(1);
 
-      if (recent && recent.length > 0) return;
+      console.log('[logInteraction] dedup check', { recent, selectError });
+      if (recent && recent.length > 0) { console.warn('[logInteraction] blocked: dedup'); return; }
 
-      await supabase.from('trade_interactions').insert({
+      const { error: insertError } = await supabase.from('trade_interactions').insert({
         buyer_id: currentUserProfile.id,
         buyer_name: currentUserProfile.displayName,
         seller_id: sellerId,
@@ -787,13 +789,18 @@ export const tradeService = {
         status: 'PENDING',
       });
 
-      oneSignalService.sendNotification(
-        '¡Atención!',
-        `Un Searcher te ha contactado por tu ${cardName}.`,
-        [sellerId],
-      ).catch(err => console.error('Push Notification Failed', err));
+      if (insertError) {
+        console.error('[logInteraction] insert failed', insertError);
+      } else {
+        console.log('[logInteraction] inserted OK');
+        oneSignalService.sendNotification(
+          '¡Atención!',
+          `Un Searcher te ha contactado por tu ${cardName}.`,
+          [sellerId],
+        ).catch(err => console.error('Push Notification Failed', err));
+      }
     } catch (e) {
-      console.error('Failed to log trade interaction', e);
+      console.error('[logInteraction] exception', e);
     }
   },
 
