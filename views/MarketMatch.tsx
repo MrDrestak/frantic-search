@@ -148,8 +148,13 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   };
 
   const handleMarkContacted = async (match: MatchResult) => {
-      await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
-      setMarkedMatchIds(prev => new Set([...prev, match.matchCard.id]));
+      try {
+          await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
+      } catch (e) {
+          console.error('[handleMarkContacted]', e);
+      } finally {
+          setMarkedMatchIds(prev => new Set([...prev, match.matchCard.id]));
+      }
   };
 
   const getContactState = (matchCardId: string): ContactState => {
