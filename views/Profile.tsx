@@ -51,6 +51,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   // Interaction State
   const [showContact, setShowContact] = useState(false);
   const [pendingFeedbacks, setPendingFeedbacks] = useState<TradeInteraction[]>([]);
+  const [submittingFeedbackId, setSubmittingFeedbackId] = useState<string | null>(null);
   const [stores, setStores] = useState<StoreProfile[]>([]);
 
   // Notification State
@@ -294,8 +295,23 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   }
 
   const handleFeedback = async (id: string, value: FeedbackValue) => {
-      await tradeService.submitFeedback(id, value);
-      loadPendingFeedback();
+      setSubmittingFeedbackId(id);
+      try {
+          await tradeService.submitFeedback(id, value);
+          loadPendingFeedback();
+      } finally {
+          setSubmittingFeedbackId(null);
+      }
+  };
+
+  const handleDismiss = async (id: string) => {
+      setSubmittingFeedbackId(id);
+      try {
+          await tradeService.dismissFeedback(id);
+          loadPendingFeedback();
+      } finally {
+          setSubmittingFeedbackId(null);
+      }
   };
 
   const getRank = (score: number) => {
@@ -536,40 +552,62 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
                         {isOwnProfile && pendingFeedbacks.length > 0 && (
                             <div className="mt-6 pt-6 border-t border-slate-800 animate-in slide-in-from-top-4">
-                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><CheckCircle className="text-violet-400" /> Pending Feedback</h3>
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <CheckCircle className="text-violet-400" />
+                                    Feedback Pendiente
+                                    <span className="ml-auto text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full font-bold">
+                                        {pendingFeedbacks.length}
+                                    </span>
+                                </h3>
                                 <div className="space-y-4">
                                     {pendingFeedbacks.map(item => {
                                         const isBuyer = item.buyerId === user.id;
                                         const partnerName = isBuyer ? item.sellerName : item.buyerName;
                                         const role = isBuyer ? 'Trader' : 'Searcher';
+                                        const isSubmitting = submittingFeedbackId === item.id;
 
                                         return (
                                             <div key={item.id} className="bg-slate-950/50 border border-slate-700 rounded-xl p-5 shadow-inner">
-                                                <p className="text-slate-200 text-sm mb-4">
-                                                    How was your experience with {role} <span className="text-white font-bold">{partnerName}</span> for <span className="text-indigo-400 font-medium">{item.cardName}</span>?
-                                                </p>
-                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                                    <button 
-                                                        onClick={() => handleFeedback(item.id, FeedbackValue.NO_CONCRETADO)}
-                                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all border border-slate-700"
+                                                <div className="flex items-start justify-between gap-2 mb-4">
+                                                    <p className="text-slate-200 text-sm">
+                                                        ¿Cómo fue tu experiencia con {role} <span className="text-white font-bold">{partnerName}</span> por <span className="text-indigo-400 font-medium">{item.cardName}</span>?
+                                                    </p>
+                                                    <button
+                                                        onClick={() => handleDismiss(item.id)}
+                                                        disabled={isSubmitting}
+                                                        title="Ignorar"
+                                                        className="text-slate-600 hover:text-slate-400 transition-colors shrink-0 disabled:opacity-40"
                                                     >
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                    <button
+                                                        onClick={() => handleFeedback(item.id, FeedbackValue.NO_CONCRETADO)}
+                                                        disabled={isSubmitting}
+                                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                                                    >
+                                                        {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : null}
                                                         No concretado
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleFeedback(item.id, FeedbackValue.MALO)}
-                                                        className="px-4 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg text-xs font-bold transition-all border border-red-900/30 flex items-center justify-center gap-2"
+                                                        disabled={isSubmitting}
+                                                        className="px-4 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg text-xs font-bold transition-all border border-red-900/30 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                                     >
                                                         <ThumbsDown size={14} /> Malo (-2)
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleFeedback(item.id, FeedbackValue.BUENO)}
-                                                        className="px-4 py-2 bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 rounded-lg text-xs font-bold transition-all border border-blue-900/30 flex items-center justify-center gap-2"
+                                                        disabled={isSubmitting}
+                                                        className="px-4 py-2 bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 rounded-lg text-xs font-bold transition-all border border-blue-900/30 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                                     >
                                                         <ThumbsUp size={14} /> Bueno (+1)
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleFeedback(item.id, FeedbackValue.EXCELENTE)}
-                                                        className="px-4 py-2 bg-green-900/20 hover:bg-green-900/40 text-green-400 rounded-lg text-xs font-bold transition-all border border-green-900/30 flex items-center justify-center gap-2"
+                                                        disabled={isSubmitting}
+                                                        className="px-4 py-2 bg-green-900/20 hover:bg-green-900/40 text-green-400 rounded-lg text-xs font-bold transition-all border border-green-900/30 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                                     >
                                                         <Zap size={14} fill="currentColor" /> Excelente (+3)
                                                     </button>

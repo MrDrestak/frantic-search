@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { matchingService, auth, tradeService } from '../services/store';
 import { MatchResult, Card } from '../types';
-import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star, CheckCircle, Clock } from 'lucide-react';
 import PremiumLoading from '../components/PremiumLoading';
 import { motion } from 'framer-motion';
 
@@ -10,14 +10,18 @@ interface MarketMatchProps {
     onViewProfile: (userId: string) => void;
 }
 
+type ContactState = 'none' | 'opened' | 'marked';
+
 interface RenderMatchCardProps {
     match: MatchResult;
     isExact: boolean;
     onViewProfile: (id: string) => void;
     onContact: (m: MatchResult) => void;
+    onMarkContacted: (m: MatchResult) => void;
+    contactState: ContactState;
 }
 
-const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onViewProfile, onContact }) => (
+const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onViewProfile, onContact, onMarkContacted, contactState }) => (
     <div className={`bg-slate-900 border rounded-xl p-4 flex flex-col md:flex-row gap-4 items-start md:items-center hover:border-violet-500/30 transition-colors ${isExact ? 'border-green-500/30 bg-green-950/10' : 'border-slate-800'}`}>
          {/* Card Info */}
          <div className="flex gap-4 items-center flex-1">
@@ -82,12 +86,27 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
                   </p>
               )}
 
-              <button 
-                  onClick={() => onContact(match)}
-                  className="w-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition-colors"
-              >
-                  <MessageCircle size={14} /> Contact
-              </button>
+              {contactState === 'none' && (
+                  <button
+                      onClick={() => onContact(match)}
+                      className="w-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition-colors"
+                  >
+                      <MessageCircle size={14} /> Contact
+                  </button>
+              )}
+              {contactState === 'opened' && (
+                  <button
+                      onClick={() => onMarkContacted(match)}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition-colors"
+                  >
+                      <CheckCircle size={14} /> Marcar como contactado
+                  </button>
+              )}
+              {contactState === 'marked' && (
+                  <div className="w-full bg-slate-800/60 text-slate-500 text-xs font-bold py-2 rounded flex items-center justify-center gap-2 border border-slate-700 cursor-default">
+                      <Clock size={14} /> Feedback pendiente
+                  </div>
+              )}
          </div>
     </div>
 );
@@ -96,6 +115,8 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [contactedMatchIds, setContactedMatchIds] = useState<Set<string>>(new Set());
+  const [markedMatchIds, setMarkedMatchIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadMatches();
@@ -116,14 +137,25 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
     }
   };
 
-  const handleContact = async (match: MatchResult) => {
-      await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
+  const handleContact = (match: MatchResult) => {
       if (match.seller.whatsapp) {
           const text = `Hi! I saw you have ${match.matchCard.name} for trade on Lotus Exchange. Is it still available?`;
           window.open(`https://wa.me/${match.seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank');
+          setContactedMatchIds(prev => new Set([...prev, match.matchCard.id]));
       } else {
           onViewProfile(match.seller.id);
       }
+  };
+
+  const handleMarkContacted = async (match: MatchResult) => {
+      await tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name);
+      setMarkedMatchIds(prev => new Set([...prev, match.matchCard.id]));
+  };
+
+  const getContactState = (matchCardId: string): ContactState => {
+      if (markedMatchIds.has(matchCardId)) return 'marked';
+      if (contactedMatchIds.has(matchCardId)) return 'opened';
+      return 'none';
   };
 
   const groupedMatches = useMemo(() => {
@@ -183,12 +215,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
                            {hasExact && (
                                <>
                                    {group.exact.map(m => (
-                                       <RenderMatchCard 
-                                            key={m.matchCard.id} 
-                                            match={m} 
-                                            isExact={true} 
+                                       <RenderMatchCard
+                                            key={m.matchCard.id}
+                                            match={m}
+                                            isExact={true}
                                             onViewProfile={onViewProfile}
                                             onContact={handleContact}
+                                            onMarkContacted={handleMarkContacted}
+                                            contactState={getContactState(m.matchCard.id)}
                                        />
                                    ))}
                                    {hasLoose && (
@@ -202,12 +236,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
                                    {isExpanded && hasLoose && (
                                         <div className="pl-4 md:pl-8 border-l-2 border-slate-800 space-y-3 mt-2">
                                             {group.loose.map(m => (
-                                                <RenderMatchCard 
-                                                    key={m.matchCard.id} 
-                                                    match={m} 
-                                                    isExact={false} 
+                                                <RenderMatchCard
+                                                    key={m.matchCard.id}
+                                                    match={m}
+                                                    isExact={false}
                                                     onViewProfile={onViewProfile}
                                                     onContact={handleContact}
+                                                    onMarkContacted={handleMarkContacted}
+                                                    contactState={getContactState(m.matchCard.id)}
                                                 />
                                             ))}
                                         </div>
@@ -223,12 +259,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
                                        </p>
                                    </div>
                                    {group.loose.map(m => (
-                                       <RenderMatchCard 
-                                            key={m.matchCard.id} 
-                                            match={m} 
-                                            isExact={false} 
+                                       <RenderMatchCard
+                                            key={m.matchCard.id}
+                                            match={m}
+                                            isExact={false}
                                             onViewProfile={onViewProfile}
                                             onContact={handleContact}
+                                            onMarkContacted={handleMarkContacted}
+                                            contactState={getContactState(m.matchCard.id)}
                                        />
                                    ))}
                                </div>
