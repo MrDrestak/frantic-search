@@ -41,7 +41,7 @@ const DEFAULT_CONFIG: GlobalConfig = {
 };
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-  minTradeConfirmHours: 24,
+  minTradeConfirmHours: 0,
   maxTradeConfirmHours: 72,
 };
 
