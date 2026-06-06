@@ -538,25 +538,39 @@ export const auth = {
       } catch { /* ignore — full profile loads async below */ }
     }
 
+    // Safety valve: if the entire init chain hangs, unblock the app after 10s
+    const _authSafety = setTimeout(() => {
+      console.warn('[auth] initialization timed out — showing login screen');
+      callback(null);
+    }, 10000);
+
     // Check existing session on startup
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await getOrCreateProfile(session.user);
-        currentUserProfile = profile;
-        await configService.loadConfig();
-        callback(profile);
-      } else {
-        if (localStorage.getItem('lotus_is_guest') === 'true') {
-          const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
-          const guestProfile = buildGuestProfile(guestId);
-          currentUserProfile = guestProfile;
+      try {
+        let profile: UserProfile | null = null;
+        if (session?.user) {
+          profile = await getOrCreateProfile(session.user);
+          currentUserProfile = profile;
           await configService.loadConfig();
-          callback(guestProfile);
+        } else if (localStorage.getItem('lotus_is_guest') === 'true') {
+          const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
+          profile = buildGuestProfile(guestId);
+          currentUserProfile = profile;
+          await configService.loadConfig();
         } else {
           currentUserProfile = null;
-          callback(null);
         }
+        clearTimeout(_authSafety);
+        callback(profile);
+      } catch (e) {
+        console.error('[auth] init error', e);
+        clearTimeout(_authSafety);
+        callback(null);
       }
+    }).catch((e) => {
+      console.error('[auth] getSession error', e);
+      clearTimeout(_authSafety);
+      callback(null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
