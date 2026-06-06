@@ -539,51 +539,74 @@ export const auth = {
     }
 
     // Safety valve: if the entire init chain hangs, unblock the app after 10s.
-    // Also clears the stale Supabase session from localStorage so the NEXT
-    // page load doesn't try to refresh an invalid token and hang again.
+    // Clears ALL supabase localStorage state (token + PKCE residue) so the
+    // next page load starts clean instead of hanging again.
     const _authSafety = setTimeout(() => {
       console.warn('[auth] initialization timed out — clearing stale session');
       try {
-        Object.keys(localStorage).forEach(k => {
-          if (k.startsWith('sb-') && k.endsWith('-auth-token')) localStorage.removeItem(k);
-        });
+        Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
       } catch { /* ignore */ }
       callback(null);
     }, 10000);
 
-    // Check existing session on startup
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      try {
-        let profile: UserProfile | null = null;
-        if (session?.user) {
-          profile = await getOrCreateProfile(session.user);
-          currentUserProfile = profile;
-          await configService.loadConfig();
-        } else if (localStorage.getItem('lotus_is_guest') === 'true') {
-          const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
-          profile = buildGuestProfile(guestId);
-          currentUserProfile = profile;
-          await configService.loadConfig();
-        } else {
-          currentUserProfile = null;
-        }
-        clearTimeout(_authSafety);
-        callback(profile);
-      } catch (e) {
-        console.error('[auth] init error', e);
-        clearTimeout(_authSafety);
-        callback(null);
-      }
-    }).catch((e) => {
-      console.error('[auth] getSession error', e);
-      clearTimeout(_authSafety);
-      callback(null);
-    });
-
+    // Single source of truth for auth state: onAuthStateChange with INITIAL_SESSION.
+    // We no longer call getSession() separately — that created a race condition where
+    // TOKEN_REFRESHED would fire callback(profile) and then getSession().then() could
+    // fire callback(null), causing a Home→Login flash.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // INITIAL_SESSION already handled via getSession() above
-      if (event === 'INITIAL_SESSION') return;
+      // TOKEN_REFRESHED is a silent internal update — not a user state change.
+      // Ignoring it here prevents a double-callback when we call refreshSession() below.
+      if (event === 'TOKEN_REFRESHED') return;
 
+      if (event === 'INITIAL_SESSION') {
+        try {
+          let profile: UserProfile | null = null;
+          if (session?.user) {
+            let activeSession = session;
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (session.expires_at && session.expires_at < nowSec + 30) {
+              try {
+                const result = await Promise.race([
+                  supabase.auth.refreshSession({ refresh_token: session.refresh_token }),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('refresh timeout')), 8000)
+                  ),
+                ]);
+                if (result.data?.session) {
+                  activeSession = result.data.session;
+                } else {
+                  clearTimeout(_authSafety);
+                  callback(null);
+                  return;
+                }
+              } catch {
+                clearTimeout(_authSafety);
+                callback(null);
+                return;
+              }
+            }
+            profile = await getOrCreateProfile(activeSession.user);
+            currentUserProfile = profile;
+            await configService.loadConfig();
+          } else if (localStorage.getItem('lotus_is_guest') === 'true') {
+            const guestId = localStorage.getItem('lotus_guest_id') || 'guest';
+            profile = buildGuestProfile(guestId);
+            currentUserProfile = profile;
+            await configService.loadConfig();
+          } else {
+            currentUserProfile = null;
+          }
+          clearTimeout(_authSafety);
+          callback(profile);
+        } catch (e) {
+          console.error('[auth] init error', e);
+          clearTimeout(_authSafety);
+          callback(null);
+        }
+        return;
+      }
+
+      // Post-init events: SIGNED_IN, SIGNED_OUT, USER_UPDATED
       if (session?.user) {
         const profile = await getOrCreateProfile(session.user);
         currentUserProfile = profile;
