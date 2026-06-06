@@ -760,27 +760,19 @@ export const alertService = {
 
 export const tradeService = {
   logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
-    console.log('[logInteraction] called', { sellerId, cardName, uid: currentUserProfile?.id });
-    if (!currentUserProfile) { console.warn('[logInteraction] blocked: no profile'); return; }
-    if (isGuestId(currentUserProfile.id)) { console.warn('[logInteraction] blocked: guest'); return; }
-    if (currentUserProfile.id === sellerId) { console.warn('[logInteraction] blocked: same user'); return; }
+    if (!currentUserProfile) return;
+    if (isGuestId(currentUserProfile.id)) return;
+    if (currentUserProfile.id === sellerId) return;
 
     try {
-      const minTime = 24 * 60 * 60 * 1000;
-      const since = new Date(Date.now() - minTime).toISOString();
-      const { data: recent, error: selectError } = await supabase
-        .from('trade_interactions')
-        .select('id')
-        .eq('buyer_id', currentUserProfile.id)
-        .eq('seller_id', sellerId)
-        .eq('status', 'PENDING')
-        .gte('created_at', since)
-        .limit(1);
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const recent = await directGet<{ id: string }>(
+        'trade_interactions',
+        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=eq.PENDING&created_at=gte.${encodeURIComponent(since)}&limit=1`
+      );
+      if (recent.length > 0) return;
 
-      console.log('[logInteraction] dedup check', { recent, selectError });
-      if (recent && recent.length > 0) { console.warn('[logInteraction] blocked: dedup'); return; }
-
-      const { error: insertError } = await supabase.from('trade_interactions').insert({
+      await directFetch('POST', 'trade_interactions', {
         buyer_id: currentUserProfile.id,
         buyer_name: currentUserProfile.displayName,
         seller_id: sellerId,
@@ -789,18 +781,13 @@ export const tradeService = {
         status: 'PENDING',
       });
 
-      if (insertError) {
-        console.error('[logInteraction] insert failed', insertError);
-      } else {
-        console.log('[logInteraction] inserted OK');
-        oneSignalService.sendNotification(
-          '¡Atención!',
-          `Un Searcher te ha contactado por tu ${cardName}.`,
-          [sellerId],
-        ).catch(err => console.error('Push Notification Failed', err));
-      }
+      oneSignalService.sendNotification(
+        '¡Atención!',
+        `Un Searcher te ha contactado por tu ${cardName}.`,
+        [sellerId],
+      ).catch(err => console.error('Push Notification Failed', err));
     } catch (e) {
-      console.error('[logInteraction] exception', e);
+      console.error('[logInteraction] failed', e);
     }
   },
 
@@ -808,23 +795,17 @@ export const tradeService = {
     if (!currentUserProfile) return [];
     const uid = currentUserProfile.id;
     try {
-      const { data } = await supabase
-        .from('trade_interactions')
-        .select('*')
-        .or(`buyer_id.eq.${uid},seller_id.eq.${uid}`)
-        .eq('status', 'PENDING');
-
-      const all = (data || []).map(mapToTradeInteraction);
+      const rows = await directGet<any>(
+        'trade_interactions',
+        `or=(buyer_id.eq.${uid},seller_id.eq.${uid})&status=eq.PENDING`
+      );
+      const all = rows.map(mapToTradeInteraction);
       const now = Date.now();
-      // Re-read from DB in case config loaded after this component mounted
       const minHours = currentSystemConfig?.minTradeConfirmHours ?? 0;
       const minTime = minHours * 60 * 60 * 1000;
-
       return all.filter(i => {
-        const isBuyer = i.buyerId === uid;
-        const isSeller = i.sellerId === uid;
-        if (isBuyer && i.buyerFeedback !== undefined) return false;
-        if (isSeller && i.sellerFeedback !== undefined) return false;
+        if (i.buyerId === uid && i.buyerFeedback !== undefined) return false;
+        if (i.sellerId === uid && i.sellerFeedback !== undefined) return false;
         return (now - i.timestamp) >= minTime;
       });
     } catch (e) {
@@ -837,11 +818,8 @@ export const tradeService = {
     if (!currentUserProfile) return;
     const uid = currentUserProfile.id;
 
-    const { data: row } = await supabase
-      .from('trade_interactions')
-      .select('*')
-      .eq('id', interactionId)
-      .single();
+    const rows = await directGet<any>('trade_interactions', `id=eq.${interactionId}&limit=1`);
+    const row = rows[0];
     if (!row) throw new Error('Interaction not found');
 
     const isBuyer = row.buyer_id === uid;
@@ -859,28 +837,26 @@ export const tradeService = {
       let buyerAward = 0;
       let sellerAward = 0;
       if (bv !== FeedbackValue.NO_CONCRETADO && sv === FeedbackValue.NO_CONCRETADO) {
-        buyerAward = 1;
-        sellerAward = 1;
+        buyerAward = 1; sellerAward = 1;
       } else if (bv !== FeedbackValue.NO_CONCRETADO && sv !== FeedbackValue.NO_CONCRETADO) {
-        buyerAward = sv as number;
-        sellerAward = bv as number;
+        buyerAward = sv as number; sellerAward = bv as number;
       }
       if (buyerAward !== 0) {
-        const { data: buyerData } = await supabase.from('users').select('searcher_score').eq('id', row.buyer_id).single();
-        await supabase.from('users').update({ searcher_score: (buyerData?.searcher_score || 0) + buyerAward }).eq('id', row.buyer_id);
+        const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${row.buyer_id}&select=searcher_score`);
+        await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + buyerAward }, `id=eq.${row.buyer_id}`);
       }
       if (sellerAward !== 0) {
-        const { data: sellerData } = await supabase.from('users').select('trader_score').eq('id', row.seller_id).single();
-        await supabase.from('users').update({ trader_score: (sellerData?.trader_score || 0) + sellerAward }).eq('id', row.seller_id);
+        const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${row.seller_id}&select=trader_score`);
+        await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + sellerAward }, `id=eq.${row.seller_id}`);
       }
       updates.status = 'COMPLETED';
     }
 
-    await supabase.from('trade_interactions').update(updates).eq('id', interactionId);
+    await directFetch('PATCH', 'trade_interactions', updates, `id=eq.${interactionId}`);
   },
 
   dismissFeedback: async (interactionId: string) => {
-    await supabase.from('trade_interactions').update({ status: 'IGNORED' }).eq('id', interactionId);
+    await directFetch('PATCH', 'trade_interactions', { status: 'IGNORED' }, `id=eq.${interactionId}`);
   },
 };
 
