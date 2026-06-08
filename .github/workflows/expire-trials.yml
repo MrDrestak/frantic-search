@@ -1,0 +1,18 @@
+name: Expire trials
+
+on:
+  schedule:
+    - cron: '0 11 * * *'  # 6 AM PET (UTC-5)
+  workflow_dispatch:
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call expire_trials()
+        run: |
+          curl --fail -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/expire_trials" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'

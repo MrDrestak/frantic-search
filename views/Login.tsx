@@ -88,7 +88,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         <div className="flex items-center w-full my-4">
             <div className="flex-1 border-t border-slate-700"></div>
-            <span className="px-3 text-slate-500 text-xs uppercase tracking-wider">Testing Options</span>
+            <span className="px-3 text-slate-400 text-xs uppercase tracking-wider">Testing Options</span>
             <div className="flex-1 border-t border-slate-700"></div>
         </div>
 
@@ -100,7 +100,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           Continue as Guest (Test Mode)
         </button>
 
-        <p className="text-xs text-slate-500 mt-6">
+        <p className="text-xs text-slate-400 mt-6">
           By signing in, you agree to our Terms of Service and Privacy Policy.
         </p>
       </div>

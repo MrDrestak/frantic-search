@@ -182,7 +182,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             .where("binderType", "==", BinderType.AUCTION)
             .get();
           
-          const auctionCards = snap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
+          const auctionCards: Card[] = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Card));
           
           const idsToFetch = new Set<string>();
           auctionCards.forEach(c => {
@@ -657,7 +657,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                         </div>
                         <div className="flex gap-3 pt-4 border-t border-slate-800">
                             <button type="button" onClick={handleCancel} disabled={isSaving} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"><X size={18} /> Cancel</button>
-                            <button type="submit" disabled={isSaving || (localPhone && verificationStatus !== 'VERIFIED')} className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition-colors shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}Save Changes</button>
+                            <button type="submit" disabled={isSaving || (!!localPhone && verificationStatus !== 'VERIFIED')} className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition-colors shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}Save Changes</button>
                         </div>
                     </form>
                 )}

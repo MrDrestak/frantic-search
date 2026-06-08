@@ -123,7 +123,7 @@ const HolographicCard: React.FC<HolographicCardProps> = ({ imageUrl, name, selle
               style={{
                 background: useTransform(
                   [shineX, shineY],
-                  ([sx, sy]) => 
+                  ([sx, sy]: number[]) =>
                     `radial-gradient(circle at ${sx}% ${sy}%, rgba(255,255,255,0.7) 0%, transparent 50%), 
                      linear-gradient(${sx + sy}deg, transparent 0%, rgba(139,92,246,0.4) 45%, rgba(236,72,153,0.4) 50%, rgba(139,92,246,0.4) 55%, transparent 100%)`
                 ),

@@ -101,7 +101,7 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
 
         if (!response.ok) {
             const local = await db.collection(CACHE_COLLECTION).where('oracle_id', '==', oracleId).get();
-            return local.docs.map(d => d.data() as ScryfallCard);
+            return local.docs.map((d: any) => d.data() as ScryfallCard);
         }
         const data = await response.json();
         const results: ScryfallCard[] = data.data || [];
@@ -110,7 +110,7 @@ export const getCardPrintings = async (oracleId: string): Promise<ScryfallCard[]
     } catch (error) {
         console.warn("Scryfall versions unreachable, checking local library.");
         const local = await db.collection(CACHE_COLLECTION).where('oracle_id', '==', oracleId).get();
-        return local.docs.map(d => d.data() as ScryfallCard);
+        return local.docs.map((d: any) => d.data() as ScryfallCard);
     }
 }
 

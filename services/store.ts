@@ -165,6 +165,7 @@ function mapToUserProfile(row: any): UserProfile {
     storeAnnouncement: row.store_announcement || undefined,
     isOnline: true,
     subscriptionTier: mapDbToSubscriptionTier(row.subscription_tier),
+    trialEndsAt: row.trial_ends_at || undefined,
     isAdmin: !!row.is_admin,
     traderScore: row.trader_score || 0,
     searcherScore: row.searcher_score || 0,
@@ -379,13 +380,15 @@ async function getOrCreateProfile(authUser: any): Promise<UserProfile> {
   await new Promise(r => setTimeout(r, 1000));
   const { data: retryData } = await supabase.from('users').select('*').eq('id', authUser.id).single();
   if (retryData) return mapToUserProfile(retryData);
-  // Last resort: insert manually
+  // Last resort: insert manually (trigger didn't fire)
+  const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const fallback = {
     id: authUser.id,
     email: authUser.email || '',
     display_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Unnamed Trader',
     photo_url: authUser.user_metadata?.avatar_url || null,
-    subscription_tier: mapSubscriptionTierToDb(SubscriptionTier.COMMON),
+    subscription_tier: 'UNCOMMON',
+    trial_ends_at: trialEndsAt,
     is_admin: false,
     trader_score: 0,
     searcher_score: 0,
@@ -765,26 +768,6 @@ export const alertService = {
 
 // ─── TRADE SERVICE ────────────────────────────────────────────────────────────
 
-async function applyFeedbackScores(buyerId: string, sellerId: string, bv: FeedbackValue, sv: FeedbackValue) {
-  const isPositive = (v: FeedbackValue) => v === FeedbackValue.BUENO || v === FeedbackValue.EXCELENTE;
-  const bothPositive = isPositive(bv) && isPositive(sv);
-  const bothMalo = bv === FeedbackValue.MALO && sv === FeedbackValue.MALO;
-
-  if (bothPositive) {
-    // Cada uno recibe el puntaje que el otro le dio (cross-feedback)
-    const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${buyerId}&select=searcher_score`);
-    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + (sv as number) }, `id=eq.${buyerId}`);
-    const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${sellerId}&select=trader_score`);
-    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + (bv as number) }, `id=eq.${sellerId}`);
-  } else if (bothMalo) {
-    // Ambos pierden 1 punto
-    const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${buyerId}&select=searcher_score`);
-    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) - 1 }, `id=eq.${buyerId}`);
-    const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${sellerId}&select=trader_score`);
-    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) - 1 }, `id=eq.${sellerId}`);
-  }
-  // Asimétrico o NO_CONCRETADO → sin cambio de puntaje
-}
 
 export const tradeService = {
   logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
@@ -853,27 +836,12 @@ export const tradeService = {
 
   submitFeedback: async (interactionId: string, feedback: FeedbackValue) => {
     if (!currentUserProfile) return;
-    const uid = currentUserProfile.id;
-
-    const rows = await directGet<any>('trade_interactions', `id=eq.${interactionId}&limit=1`);
-    const row = rows[0];
-    if (!row) throw new Error('Interaction not found');
-
-    const isBuyer = row.buyer_id === uid;
-    const updates: any = isBuyer
-      ? { buyer_feedback: mapFeedbackToDb(feedback), buyer_confirmed_at: new Date().toISOString() }
-      : { seller_feedback: mapFeedbackToDb(feedback), seller_confirmed_at: new Date().toISOString() };
-
-    const nextBuyerFeedback = isBuyer ? feedback : (row.buyer_feedback != null ? mapDbToFeedback(row.buyer_feedback) : null);
-    const nextSellerFeedback = !isBuyer ? feedback : (row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : null);
-    const bothAnswered = nextBuyerFeedback != null && nextSellerFeedback != null;
-
-    if (bothAnswered) {
-      await applyFeedbackScores(row.buyer_id, row.seller_id, nextBuyerFeedback as FeedbackValue, nextSellerFeedback as FeedbackValue);
-      updates.status = 'COMPLETED';
-    }
-
-    await directFetch('PATCH', 'trade_interactions', updates, `id=eq.${interactionId}`);
+    const { error } = await supabase.rpc('submit_feedback', {
+      p_interaction_id: interactionId,
+      p_user_id: currentUserProfile.id,
+      p_feedback: mapFeedbackToDb(feedback),
+    });
+    if (error) throw error;
   },
 
   dismissFeedback: async (interactionId: string) => {

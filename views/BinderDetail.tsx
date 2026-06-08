@@ -197,7 +197,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             isFoil: isFoil,
             rarity: selectedCard.rarity,
             price: price,
-            purchaseUrl: selectedCard.purchase_uris?.card_kingdom || null,
+            purchaseUrl: selectedCard.purchase_uris?.card_kingdom ?? undefined,
             game: binder.game,
             quantity: binder.type === BinderType.AUCTION ? 1 : quantity,
             ...auctionData
@@ -345,7 +345,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                       isFoil: isFoil,
                       rarity: match.rarity,
                       price: price,
-                      purchaseUrl: match.purchase_uris?.card_kingdom || null,
+                      purchaseUrl: match.purchase_uris?.card_kingdom ?? undefined,
                       game: binder.game,
                       quantity: qty
                   });

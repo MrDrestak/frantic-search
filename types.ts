@@ -81,8 +81,9 @@ export interface UserProfile {
   storeAnnouncement?: string; 
   isOnline?: boolean;
   subscriptionTier: SubscriptionTier;
+  trialEndsAt?: string;
   isAdmin?: boolean;
-  
+
   // REPUTATION SYSTEM
   traderScore: number;
   searcherScore: number;

@@ -100,7 +100,7 @@ const NotificationsTab = () => {
                 // Fetch all users who have at least one wishlist binder
                 const snap = await db.collection('binders').where('type', '==', BinderType.WISHLIST).get();
                 const ids = new Set<string>();
-                snap.docs.forEach(doc => ids.add(doc.data().userId));
+                snap.docs.forEach((doc: any) => ids.add(doc.data().userId));
                 userIds = Array.from(ids);
                 if (userIds.length === 0) {
                     alert("No users found with Wishlists.");
@@ -115,7 +115,7 @@ const NotificationsTab = () => {
                     .get();
                 
                 const ids = new Set<string>();
-                snap.docs.forEach(doc => {
+                snap.docs.forEach((doc: any) => {
                     const data = doc.data();
                     if (data.topBidderId) ids.add(data.topBidderId);
                 });
