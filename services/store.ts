@@ -780,11 +780,11 @@ export const tradeService = {
       );
       if (recentPending.length > 0) return;
 
-      // Cooldown: no feedback completado (POSITIVE/NEGATIVE) en últimos 7 días para este par
+      // Cooldown: no feedback completado (COMPLETED) en últimos 7 días para este par
       const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const recentCompleted = await directGet<{ id: string }>(
         'trade_interactions',
-        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=in.(POSITIVE,NEGATIVE)&created_at=gte.${encodeURIComponent(since7d)}&limit=1`
+        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=eq.COMPLETED&created_at=gte.${encodeURIComponent(since7d)}&limit=1`
       );
       if (recentCompleted.length > 0) return;
 
