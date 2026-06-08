@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserPlus, AlertCircle } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
-import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus } from '../types';
+import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus, TradeInteraction, FeedbackValue } from '../types';
 import { db } from '../services/firebase';
 
 interface AdminPanelProps {
@@ -12,7 +12,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
-    const [activeTab, setActiveTab] = useState<'SYSTEM' | 'USERS' | 'NEWS' | 'STORES' | 'NOTIFICATIONS'>('SYSTEM');
+    const [activeTab, setActiveTab] = useState<'SYSTEM' | 'USERS' | 'NEWS' | 'STORES' | 'NOTIFICATIONS' | 'DISPUTES'>('SYSTEM');
     const [user] = useState(auth.getCurrentUser());
     
     // Ensure admin access
@@ -50,7 +50,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     { id: 'USERS', label: 'User Management' },
                     { id: 'NEWS', label: 'News Manager' },
                     { id: 'STORES', label: 'Store Directory' },
-                    { id: 'NOTIFICATIONS', label: 'Push Notifications' }
+                    { id: 'NOTIFICATIONS', label: 'Push Notifications' },
+                    { id: 'DISPUTES', label: 'Disputas' }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -73,6 +74,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 {activeTab === 'NEWS' && <NewsManagerTab />}
                 {activeTab === 'STORES' && <StoreManagerTab />}
                 {activeTab === 'NOTIFICATIONS' && <NotificationsTab />}
+                {activeTab === 'DISPUTES' && <DisputesTab />}
             </div>
         </div>
     );
@@ -650,6 +652,108 @@ const StoreManagerTab = () => {
             )}
         </div>
     )
+};
+
+function feedbackLabel(v: FeedbackValue | undefined): string {
+    if (v == null) return '—';
+    if (v === FeedbackValue.EXCELENTE) return '⭐ Excelente';
+    if (v === FeedbackValue.BUENO) return '👍 Bueno';
+    if (v === FeedbackValue.MALO) return '👎 Malo';
+    if (v === FeedbackValue.NO_CONCRETADO) return '❌ No concretado';
+    return String(v);
+}
+
+const DisputesTab = () => {
+    const [disputes, setDisputes] = useState<TradeInteraction[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+    useEffect(() => { loadDisputes(); }, []);
+
+    const loadDisputes = async () => {
+        setLoading(true);
+        try {
+            const data = await adminService.getDisputedInteractions();
+            setDisputes(data);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResolve = async (id: string, decision: 'COMPLETE' | 'IGNORE') => {
+        const label = decision === 'COMPLETE' ? 'dar por válida' : 'ignorar';
+        if (!confirm(`¿Seguro que deseas ${label} esta disputa?`)) return;
+        setResolvingId(id);
+        try {
+            await adminService.resolveDispute(id, decision);
+            setDisputes(prev => prev.filter(d => d.id !== id));
+        } catch (e) {
+            alert('Error al resolver la disputa.');
+            console.error(e);
+        } finally {
+            setResolvingId(null);
+        }
+    };
+
+    if (loading) return <div className="text-slate-400 py-8 text-center">Cargando disputas...</div>;
+
+    if (disputes.length === 0) {
+        return (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
+                <AlertCircle size={40} className="text-green-500 mx-auto mb-3" />
+                <h3 className="text-white font-bold text-lg mb-1">Sin disputas activas</h3>
+                <p className="text-slate-400 text-sm">Todas las interacciones están resueltas.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <p className="text-slate-400 text-sm">{disputes.length} disputa{disputes.length !== 1 ? 's' : ''} pendiente{disputes.length !== 1 ? 's' : ''} de revisión.</p>
+            {disputes.map(d => (
+                <div key={d.id} className="bg-slate-900 border border-amber-500/30 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                            <AlertCircle size={14} /> Disputa
+                        </span>
+                        <span className="text-xs text-slate-500">{new Date(d.timestamp).toLocaleDateString('es-PE')}</span>
+                    </div>
+
+                    <p className="text-white font-medium">{d.cardName || 'Consulta general'}</p>
+
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-slate-800 rounded-lg p-3">
+                            <p className="text-slate-400 text-xs mb-1">Comprador</p>
+                            <p className="text-white font-medium truncate">{d.buyerName}</p>
+                            <p className="text-xs mt-1">{feedbackLabel(d.buyerFeedback)}</p>
+                        </div>
+                        <div className="bg-slate-800 rounded-lg p-3">
+                            <p className="text-slate-400 text-xs mb-1">Vendedor</p>
+                            <p className="text-white font-medium truncate">{d.sellerName}</p>
+                            <p className="text-xs mt-1">{feedbackLabel(d.sellerFeedback)}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                        <button
+                            onClick={() => handleResolve(d.id, 'COMPLETE')}
+                            disabled={resolvingId === d.id}
+                            className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm font-bold py-2 rounded-lg transition-colors"
+                        >
+                            {resolvingId === d.id ? '...' : '✓ Dar por válida'}
+                        </button>
+                        <button
+                            onClick={() => handleResolve(d.id, 'IGNORE')}
+                            disabled={resolvingId === d.id}
+                            className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-sm font-bold py-2 rounded-lg transition-colors"
+                        >
+                            {resolvingId === d.id ? '...' : '✕ Ignorar'}
+                        </button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 };
 
 export default AdminPanel;

@@ -159,7 +159,7 @@ export interface TradeInteraction {
     buyerName: string; // Added for dual feedback
     cardName?: string; 
     timestamp: number;
-    status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED';
+    status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED' | 'DISPUTED';
     
     // DUAL FEEDBACK TRACKING
     buyerFeedback?: FeedbackValue;

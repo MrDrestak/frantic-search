@@ -765,6 +765,24 @@ export const alertService = {
 
 // ─── TRADE SERVICE ────────────────────────────────────────────────────────────
 
+async function applyFeedbackScores(buyerId: string, sellerId: string, bv: FeedbackValue, sv: FeedbackValue) {
+  let buyerAward = 0;
+  let sellerAward = 0;
+  if (bv !== FeedbackValue.NO_CONCRETADO && sv === FeedbackValue.NO_CONCRETADO) {
+    buyerAward = 1; sellerAward = 1;
+  } else if (bv !== FeedbackValue.NO_CONCRETADO && sv !== FeedbackValue.NO_CONCRETADO) {
+    buyerAward = sv as number; sellerAward = bv as number;
+  }
+  if (buyerAward !== 0) {
+    const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${buyerId}&select=searcher_score`);
+    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + buyerAward }, `id=eq.${buyerId}`);
+  }
+  if (sellerAward !== 0) {
+    const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${sellerId}&select=trader_score`);
+    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + sellerAward }, `id=eq.${sellerId}`);
+  }
+}
+
 export const tradeService = {
   logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
     if (!currentUserProfile) return;
@@ -850,22 +868,18 @@ export const tradeService = {
     if (bothAnswered) {
       const bv = nextBuyerFeedback as FeedbackValue;
       const sv = nextSellerFeedback as FeedbackValue;
-      let buyerAward = 0;
-      let sellerAward = 0;
-      if (bv !== FeedbackValue.NO_CONCRETADO && sv === FeedbackValue.NO_CONCRETADO) {
-        buyerAward = 1; sellerAward = 1;
-      } else if (bv !== FeedbackValue.NO_CONCRETADO && sv !== FeedbackValue.NO_CONCRETADO) {
-        buyerAward = sv as number; sellerAward = bv as number;
+
+      // Disputa: un lado da MALO y el otro da BUENO/EXCELENTE → limbo para admin
+      const isDispute =
+        (bv === FeedbackValue.MALO && (sv === FeedbackValue.BUENO || sv === FeedbackValue.EXCELENTE)) ||
+        (sv === FeedbackValue.MALO && (bv === FeedbackValue.BUENO || bv === FeedbackValue.EXCELENTE));
+
+      if (isDispute) {
+        updates.status = 'DISPUTED';
+      } else {
+        await applyFeedbackScores(row.buyer_id, row.seller_id, bv, sv);
+        updates.status = 'COMPLETED';
       }
-      if (buyerAward !== 0) {
-        const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${row.buyer_id}&select=searcher_score`);
-        await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + buyerAward }, `id=eq.${row.buyer_id}`);
-      }
-      if (sellerAward !== 0) {
-        const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${row.seller_id}&select=trader_score`);
-        await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + sellerAward }, `id=eq.${row.seller_id}`);
-      }
-      updates.status = 'COMPLETED';
     }
 
     await directFetch('PATCH', 'trade_interactions', updates, `id=eq.${interactionId}`);
@@ -974,6 +988,31 @@ export const adminService = {
   wipeDatabase: async () => {
     // Requires service_role — execute from server-side or Edge Function
     console.warn('wipeDatabase: not available from client. Use Supabase dashboard or Edge Function.');
+  },
+
+  getDisputedInteractions: async (): Promise<TradeInteraction[]> => {
+    try {
+      const rows = await directGet<any>('trade_interactions', 'status=eq.DISPUTED&order=created_at.desc');
+      return rows.map(mapToTradeInteraction);
+    } catch (e) {
+      console.error('[getDisputedInteractions] error:', e);
+      return [];
+    }
+  },
+
+  resolveDispute: async (interactionId: string, decision: 'COMPLETE' | 'IGNORE'): Promise<void> => {
+    if (decision === 'IGNORE') {
+      await directFetch('PATCH', 'trade_interactions', { status: 'IGNORED' }, `id=eq.${interactionId}`);
+      return;
+    }
+    const rows = await directGet<any>('trade_interactions', `id=eq.${interactionId}&limit=1`);
+    const row = rows[0];
+    if (!row) throw new Error('Interaction not found');
+    const bv = row.buyer_feedback != null ? mapDbToFeedback(row.buyer_feedback) : null;
+    const sv = row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : null;
+    if (bv == null || sv == null) throw new Error('Missing feedback values');
+    await applyFeedbackScores(row.buyer_id, row.seller_id, bv, sv);
+    await directFetch('PATCH', 'trade_interactions', { status: 'COMPLETED' }, `id=eq.${interactionId}`);
   },
 };
 
