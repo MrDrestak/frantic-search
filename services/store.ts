@@ -772,12 +772,21 @@ export const tradeService = {
     if (currentUserProfile.id === sellerId) return;
 
     try {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const recent = await directGet<{ id: string }>(
+      // Dedup: no PENDING en últimas 24h para este par
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const recentPending = await directGet<{ id: string }>(
         'trade_interactions',
-        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=eq.PENDING&created_at=gte.${encodeURIComponent(since)}&limit=1`
+        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=eq.PENDING&created_at=gte.${encodeURIComponent(since24h)}&limit=1`
       );
-      if (recent.length > 0) return;
+      if (recentPending.length > 0) return;
+
+      // Cooldown: no feedback completado (POSITIVE/NEGATIVE) en últimos 7 días para este par
+      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const recentCompleted = await directGet<{ id: string }>(
+        'trade_interactions',
+        `buyer_id=eq.${currentUserProfile.id}&seller_id=eq.${sellerId}&status=in.(POSITIVE,NEGATIVE)&created_at=gte.${encodeURIComponent(since7d)}&limit=1`
+      );
+      if (recentCompleted.length > 0) return;
 
       await directFetch('POST', 'trade_interactions', {
         buyer_id: currentUserProfile.id,
