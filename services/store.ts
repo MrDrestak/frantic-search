@@ -766,21 +766,24 @@ export const alertService = {
 // ─── TRADE SERVICE ────────────────────────────────────────────────────────────
 
 async function applyFeedbackScores(buyerId: string, sellerId: string, bv: FeedbackValue, sv: FeedbackValue) {
-  let buyerAward = 0;
-  let sellerAward = 0;
-  if (bv !== FeedbackValue.NO_CONCRETADO && sv === FeedbackValue.NO_CONCRETADO) {
-    buyerAward = 1; sellerAward = 1;
-  } else if (bv !== FeedbackValue.NO_CONCRETADO && sv !== FeedbackValue.NO_CONCRETADO) {
-    buyerAward = sv as number; sellerAward = bv as number;
-  }
-  if (buyerAward !== 0) {
+  const isPositive = (v: FeedbackValue) => v === FeedbackValue.BUENO || v === FeedbackValue.EXCELENTE;
+  const bothPositive = isPositive(bv) && isPositive(sv);
+  const bothMalo = bv === FeedbackValue.MALO && sv === FeedbackValue.MALO;
+
+  if (bothPositive) {
+    // Cada uno recibe el puntaje que el otro le dio (cross-feedback)
     const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${buyerId}&select=searcher_score`);
-    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + buyerAward }, `id=eq.${buyerId}`);
-  }
-  if (sellerAward !== 0) {
+    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) + (sv as number) }, `id=eq.${buyerId}`);
     const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${sellerId}&select=trader_score`);
-    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + sellerAward }, `id=eq.${sellerId}`);
+    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) + (bv as number) }, `id=eq.${sellerId}`);
+  } else if (bothMalo) {
+    // Ambos pierden 1 punto
+    const buyerRows = await directGet<{ searcher_score: number }>('users', `id=eq.${buyerId}&select=searcher_score`);
+    await directFetch('PATCH', 'users', { searcher_score: (buyerRows[0]?.searcher_score || 0) - 1 }, `id=eq.${buyerId}`);
+    const sellerRows = await directGet<{ trader_score: number }>('users', `id=eq.${sellerId}&select=trader_score`);
+    await directFetch('PATCH', 'users', { trader_score: (sellerRows[0]?.trader_score || 0) - 1 }, `id=eq.${sellerId}`);
   }
+  // Asimétrico o NO_CONCRETADO → sin cambio de puntaje
 }
 
 export const tradeService = {
@@ -866,20 +869,8 @@ export const tradeService = {
     const bothAnswered = nextBuyerFeedback != null && nextSellerFeedback != null;
 
     if (bothAnswered) {
-      const bv = nextBuyerFeedback as FeedbackValue;
-      const sv = nextSellerFeedback as FeedbackValue;
-
-      // Disputa: un lado da MALO y el otro da BUENO/EXCELENTE → limbo para admin
-      const isDispute =
-        (bv === FeedbackValue.MALO && (sv === FeedbackValue.BUENO || sv === FeedbackValue.EXCELENTE)) ||
-        (sv === FeedbackValue.MALO && (bv === FeedbackValue.BUENO || bv === FeedbackValue.EXCELENTE));
-
-      if (isDispute) {
-        updates.status = 'DISPUTED';
-      } else {
-        await applyFeedbackScores(row.buyer_id, row.seller_id, bv, sv);
-        updates.status = 'COMPLETED';
-      }
+      await applyFeedbackScores(row.buyer_id, row.seller_id, nextBuyerFeedback as FeedbackValue, nextSellerFeedback as FeedbackValue);
+      updates.status = 'COMPLETED';
     }
 
     await directFetch('PATCH', 'trade_interactions', updates, `id=eq.${interactionId}`);
@@ -990,30 +981,6 @@ export const adminService = {
     console.warn('wipeDatabase: not available from client. Use Supabase dashboard or Edge Function.');
   },
 
-  getDisputedInteractions: async (): Promise<TradeInteraction[]> => {
-    try {
-      const rows = await directGet<any>('trade_interactions', 'status=eq.DISPUTED&order=created_at.desc');
-      return rows.map(mapToTradeInteraction);
-    } catch (e) {
-      console.error('[getDisputedInteractions] error:', e);
-      return [];
-    }
-  },
-
-  resolveDispute: async (interactionId: string, decision: 'COMPLETE' | 'IGNORE'): Promise<void> => {
-    if (decision === 'IGNORE') {
-      await directFetch('PATCH', 'trade_interactions', { status: 'IGNORED' }, `id=eq.${interactionId}`);
-      return;
-    }
-    const rows = await directGet<any>('trade_interactions', `id=eq.${interactionId}&limit=1`);
-    const row = rows[0];
-    if (!row) throw new Error('Interaction not found');
-    const bv = row.buyer_feedback != null ? mapDbToFeedback(row.buyer_feedback) : null;
-    const sv = row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : null;
-    if (bv == null || sv == null) throw new Error('Missing feedback values');
-    await applyFeedbackScores(row.buyer_id, row.seller_id, bv, sv);
-    await directFetch('PATCH', 'trade_interactions', { status: 'COMPLETED' }, `id=eq.${interactionId}`);
-  },
 };
 
 // ─── BINDER SERVICE ───────────────────────────────────────────────────────────
