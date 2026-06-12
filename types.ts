@@ -83,6 +83,7 @@ export interface UserProfile {
   subscriptionTier: SubscriptionTier;
   trialEndsAt?: string;
   isAdmin?: boolean;
+  onboardingComplete?: boolean;
 
   // REPUTATION SYSTEM
   traderScore: number;

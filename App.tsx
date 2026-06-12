@@ -10,6 +10,8 @@ import Showcase from './views/Showcase';
 import Auctions from './views/Auctions';
 import AdminPanel from './views/AdminPanel';
 import Home from './views/Home';
+import WelcomeWizard from './components/WelcomeWizard';
+import Landing from './views/Landing';
 import { auth } from './services/store';
 import { oneSignalService } from './services/onesignalService';
 import { Loader2 } from 'lucide-react';
@@ -17,6 +19,7 @@ import { Loader2 } from 'lucide-react';
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [wizardDismissed, setWizardDismissed] = useState(false);
   
   // Initialize page from localStorage or default to home
   const [currentPage, setCurrentPage] = useState(() => {
@@ -84,7 +87,7 @@ const App: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />;
+    return <Landing onLogin={() => setIsAuthenticated(true)} />;
   }
 
   const currentUser = auth.getCurrentUser();
@@ -162,8 +165,13 @@ const App: React.FC = () => {
     return <div>Page not found</div>;
   };
 
+  const showWizard = !wizardDismissed && currentUser && currentUser.onboardingComplete === false;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-violet-500 selection:text-white">
+      {showWizard && (
+        <WelcomeWizard user={currentUser} onComplete={() => setWizardDismissed(true)} />
+      )}
       <div className="max-w-7xl mx-auto md:pt-16 min-h-screen">
         <main>{renderContent()}</main>
       </div>
