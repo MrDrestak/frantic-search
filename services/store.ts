@@ -167,6 +167,7 @@ function mapToUserProfile(row: any): UserProfile {
     subscriptionTier: mapDbToSubscriptionTier(row.subscription_tier),
     trialEndsAt: row.trial_ends_at || undefined,
     isAdmin: !!row.is_admin,
+    onboardingComplete: row.onboarding_complete ?? false,
     traderScore: row.trader_score || 0,
     searcherScore: row.searcher_score || 0,
   };
@@ -479,6 +480,7 @@ export const auth = {
             preferred_store: updates.preferredStore || null,
             preferred_game: updates.preferredGame ? mapGameTypeToDb(updates.preferredGame) : null,
             store_announcement: updates.storeAnnouncement || null,
+            ...(updates.onboardingComplete !== undefined && { onboarding_complete: updates.onboardingComplete }),
           }),
           signal: controller.signal,
         }
