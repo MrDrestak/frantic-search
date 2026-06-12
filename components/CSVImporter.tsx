@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Upload, ArrowRight, Check, X, FileText, AlertCircle } from 'lucide-react';
+import { Upload, ArrowRight, Check, X, FileText, AlertCircle, Sparkles } from 'lucide-react';
 import { parseCSV, CSVParseResult } from '../services/scryfallService';
 
 interface CSVImporterProps {
@@ -47,11 +47,26 @@ const REQUIRED_FIELDS = [
   },
 ];
 
+function detectPlatform(headers: string[]): 'Deckbox' | 'Moxfield' | 'ManaBox' | null {
+  const lw = headers.map(h => h.toLowerCase());
+  if (lw.includes('tradelist count')) return 'Deckbox';
+  if (lw.some(h => h === 'tags' || h === 'last modified')) return 'Moxfield';
+  if (lw.some(h => h === 'set code')) return 'ManaBox';
+  return null;
+}
+
+const PLATFORM_COLORS: Record<string, string> = {
+  Deckbox: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+  Moxfield: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+  ManaBox: 'bg-green-500/10 text-green-400 border-green-500/30',
+};
+
 const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
   const [step, setStep] = useState<'upload' | 'map'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<CSVParseResult | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -60,7 +75,8 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
       try {
         const result = await parseCSV(selectedFile);
         setParsedData(result);
-        
+        setDetectedPlatform(detectPlatform(result.headers));
+
         // Auto-detect mapping
         const initialMapping: Record<string, string> = {};
         
@@ -123,32 +139,45 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
         <div className="p-6 overflow-y-auto flex-1">
           
           {step === 'upload' && (
-            <label className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-slate-700 rounded-xl hover:border-violet-500 hover:bg-slate-800/30 transition-all cursor-pointer relative">
-              <input 
-                type="file" 
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
-              />
-              <div className="flex flex-col items-center gap-4 pointer-events-none">
-                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
+            <div className="space-y-4">
+              <label className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-slate-700 rounded-xl hover:border-violet-500 hover:bg-slate-800/30 transition-all cursor-pointer relative">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
+                />
+                <div className="flex flex-col items-center gap-4 pointer-events-none">
+                  <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
                     <FileText size={32} />
-                </div>
-                <div>
+                  </div>
+                  <div>
                     <p className="text-lg font-medium text-white">Click to upload CSV</p>
                     <p className="text-sm text-slate-400">or drag and drop file here</p>
+                  </div>
                 </div>
+              </label>
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                <Sparkles size={12} />
+                Compatible con <span className="text-slate-400 font-medium">Deckbox</span> · <span className="text-slate-400 font-medium">Moxfield</span> · <span className="text-slate-400 font-medium">ManaBox</span>
               </div>
-            </label>
+            </div>
           )}
 
           {step === 'map' && parsedData && (
             <div className="space-y-6">
-                <div className="bg-slate-800/50 p-4 rounded-lg flex gap-3 items-start border border-slate-700">
-                    <AlertCircle className="text-violet-400 shrink-0 mt-0.5" size={18} />
-                    <p className="text-sm text-slate-300">
-                        Map the columns from your CSV to the card properties. Mapping <b>Set Code</b> and <b>Collector Number</b> ensures we import the exact version of your card.
-                    </p>
+                <div className="flex items-start gap-3">
+                  <div className="bg-slate-800/50 p-4 rounded-lg flex gap-3 items-start border border-slate-700 flex-1">
+                      <AlertCircle className="text-violet-400 shrink-0 mt-0.5" size={18} />
+                      <p className="text-sm text-slate-300">
+                          Map the columns from your CSV to the card properties. Mapping <b>Set Code</b> and <b>Collector Number</b> ensures we import the exact version of your card.
+                      </p>
+                  </div>
+                  {detectedPlatform && (
+                    <span className={`shrink-0 mt-0.5 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border ${PLATFORM_COLORS[detectedPlatform]}`}>
+                      <Check size={12} /> {detectedPlatform}
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid gap-4">

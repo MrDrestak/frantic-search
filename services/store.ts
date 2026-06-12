@@ -1139,6 +1139,46 @@ export const cardService = {
     return Promise.race([run(), timeout]);
   },
 
+  // Bulk insert — skips per-card limit checks and alert triggers.
+  // Caller is responsible for pre-validating slot availability.
+  bulkAddCard: async (cardData: {
+    binderId: string;
+    userId: string;
+    binderType: BinderType;
+    scryfallId: string;
+    name: string;
+    setName: string;
+    collectorNumber: string;
+    imageUrl: string;
+    rarity: string;
+    game: GameType | string;
+    condition: CardCondition;
+    isFoil: boolean;
+    quantity: number;
+    purchaseUrl?: string;
+  }): Promise<void> => {
+    assertAuthenticated(cardData.userId);
+    await directFetch('POST', 'cards', {
+      binder_id: cardData.binderId,
+      user_id: cardData.userId,
+      scryfall_id: cardData.scryfallId,
+      name: cardData.name,
+      set_name: cardData.setName,
+      collector_number: cardData.collectorNumber || '',
+      image_url: cardData.imageUrl,
+      rarity: cardData.rarity || '',
+      game: mapGameTypeToDb(cardData.game || GameType.MTG),
+      condition: mapConditionToDb(cardData.condition),
+      is_foil: cardData.isFoil,
+      quantity: cardData.quantity,
+      custom_price: null,
+      currency: null,
+      binder_type: mapBinderTypeToDb(cardData.binderType),
+      purchase_url: cardData.purchaseUrl ?? null,
+      is_showcase: false,
+    });
+  },
+
   addCard: async (cardData: Omit<Card, 'id' | 'addedAt'>): Promise<Card> => {
     assertAuthenticated(cardData.userId);
     // Check binder limits

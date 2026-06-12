@@ -5,7 +5,7 @@ import { searchCards, getCardImage, getCardPrintings } from '../services/scryfal
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus, RefreshCw } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus, RefreshCw, Download } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -34,6 +34,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
   const [showCSV, setShowCSV] = useState(false);
   const [importProgress, setImportProgress] = useState<{current: number, total: number} | null>(null);
+  const [pendingImportRows, setPendingImportRows] = useState<{ rows: any[]; availableSlots: number; totalInFile: number } | null>(null);
+  const [importResults, setImportResults] = useState<{ succeeded: string[]; failed: string[]; limitReached: boolean; details?: { name: string; status: 'ok' | 'failed' }[] } | null>(null);
 
   const [selectedCard, setSelectedCard] = useState<ScryfallCard | null>(null);
   const [condition, setCondition] = useState<CardCondition>(CardCondition.NM);
@@ -282,7 +284,36 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       window.open(whatsappUrl, '_blank');
   };
 
-  const handleBatchImport = async (mappedRows: any[]) => {
+  const formatTimeEstimate = (count: number): string => {
+    const seconds = Math.round(count * 0.4);
+    if (seconds < 60) return `~${seconds} segundos`;
+    const minutes = Math.ceil(seconds / 60);
+    return `~${minutes} minuto${minutes > 1 ? 's' : ''}`;
+  };
+
+  const downloadImportReport = (binderName: string, succeeded: string[], failed: string[]) => {
+    const lines = [
+      `Reporte de importación — ${binderName}`,
+      `Fecha: ${new Date().toLocaleString('es-PE')}`,
+      `Importadas correctamente: ${succeeded.length}`,
+      `No encontradas en Scryfall: ${failed.length}`,
+    ];
+    if (failed.length > 0) {
+      lines.push('', 'Cartas no encontradas:');
+      failed.forEach(name => lines.push(`- ${name}`));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `import-${binderName.replace(/\s+/g, '-')}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBatchImport = (mappedRows: any[]) => {
       if (!binder) return;
       if (binder.type === BinderType.AUCTION) {
           alert("CSV Import is not available for Auction Binders yet.");
@@ -294,19 +325,28 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
           alert(`This binder is full (Max ${currentLimit} unique cards). Cannot import more cards.`);
           return;
       }
-      let rowsToProcess = mappedRows;
-      let limitReached = false;
-      if (mappedRows.length > availableSlots) {
-          rowsToProcess = mappedRows.slice(0, availableSlots);
-          limitReached = true;
-      }
+      const rowsToProcess = mappedRows.length > availableSlots
+          ? mappedRows.slice(0, availableSlots)
+          : mappedRows;
       setShowCSV(false);
+      setPendingImportRows({ rows: rowsToProcess, availableSlots, totalInFile: mappedRows.length });
+  };
+
+  const handleConfirmImport = async () => {
+      if (!pendingImportRows || !binder) return;
+      const { rows: rowsToProcess, availableSlots, totalInFile } = pendingImportRows;
+      const limitReached = totalInFile > availableSlots;
+      setPendingImportRows(null);
       setImportProgress({ current: 0, total: rowsToProcess.length });
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+      const trackDetails = rowsToProcess.length <= 20;
+      const details: { name: string; status: 'ok' | 'failed' }[] = [];
       for (let i = 0; i < rowsToProcess.length; i++) {
           const row = rowsToProcess[i];
           if (!row.name) continue;
+          const cleanName = row.name.trim();
           try {
-              const cleanName = row.name.trim();
               const cleanSet = row.set?.trim();
               const cleanCN = row.collectorNumber?.trim();
               let query = '';
@@ -315,7 +355,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
               else query = `!"${cleanName}"`;
               let results = await searchCards(query);
               if (results.length === 0) {
-                  let looseQuery = cleanSet ? `${cleanName} set:${cleanSet}` : cleanName;
+                  const looseQuery = cleanSet ? `${cleanName} set:${cleanSet}` : cleanName;
                   results = await searchCards(looseQuery);
                   if (results.length === 0 && cleanSet) results = await searchCards(cleanName);
               }
@@ -328,37 +368,42 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                   else if (rowCond.includes('heav') || rowCond === 'hp') cond = CardCondition.HP;
                   else if (rowCond.includes('dam') || rowCond === 'dmg') cond = CardCondition.DMG;
                   const rowFoil = (row.isFoil || '').toString().toLowerCase();
-                  const isFoil = rowFoil === 'true' || rowFoil === 'yes' || rowFoil === 'y' || rowFoil === 'foil';
+                  const foil = rowFoil === 'true' || rowFoil === 'yes' || rowFoil === 'y' || rowFoil === 'foil';
                   const rowQty = parseInt(row.quantity);
                   const qty = (!isNaN(rowQty) && rowQty > 0) ? rowQty : 1;
-                  const priceStr = isFoil ? match.prices.usd_foil : match.prices.usd;
-                  const price = priceStr ? parseFloat(priceStr) : 0;
-                  await cardService.addCard({
+                  await cardService.bulkAddCard({
                       binderId: binder.id,
                       userId: binder.userId,
+                      binderType: binder.type,
                       scryfallId: match.id,
                       name: match.name,
                       setName: match.set_name,
                       collectorNumber: match.collector_number,
                       imageUrl: getCardImage(match),
                       condition: cond,
-                      isFoil: isFoil,
+                      isFoil: foil,
                       rarity: match.rarity,
-                      price: price,
                       purchaseUrl: match.purchase_uris?.card_kingdom ?? undefined,
                       game: binder.game,
-                      quantity: qty
+                      quantity: qty,
                   });
+                  succeeded.push(cleanName);
+                  if (trackDetails) details.push({ name: cleanName, status: 'ok' });
+              } else {
+                  failed.push(cleanName);
+                  if (trackDetails) details.push({ name: cleanName, status: 'failed' });
               }
-          } catch (e) { console.error(`Failed to import ${row.name}`, e); }
+          } catch (e) {
+              console.error(`Failed to import ${cleanName}`, e);
+              failed.push(cleanName);
+              if (trackDetails) details.push({ name: cleanName, status: 'failed' });
+          }
           setImportProgress({ current: i + 1, total: rowsToProcess.length });
-          await new Promise(r => setTimeout(r, 200)); 
+          await new Promise(r => setTimeout(r, 200));
       }
       setImportProgress(null);
       loadData();
-      if (limitReached) {
-          setTimeout(() => { alert(`Import completed partially. Only the first ${rowsToProcess.length} cards were imported to respect the unique card limit of ${currentLimit}.`); }, 500);
-      }
+      setImportResults({ succeeded, failed, limitReached, details: trackDetails ? details : undefined });
   };
 
   const filteredCards = cards.filter(card => card.name.toLowerCase().includes(filterText.toLowerCase()));
@@ -372,6 +417,57 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
           <SubscriptionModal onClose={() => setShowUpgradeModal(false)} currentTier={currentUser.subscriptionTier} onUpgrade={() => {}} />
       )}
 
+      {pendingImportRows && (
+        <div className="fixed inset-0 bg-slate-950/90 z-[60] flex flex-col items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div>
+              <h3 className="text-white font-bold text-lg">Confirmar importación</h3>
+              <p className="text-slate-400 text-sm mt-1">Revisa el resumen antes de comenzar</p>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Cartas en el archivo</span>
+                <span className="text-white font-bold">{pendingImportRows.totalInFile}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Slots disponibles en este binder</span>
+                <span className="text-white font-bold">{pendingImportRows.availableSlots} de {currentLimit}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Se importarán</span>
+                <span className="text-green-400 font-bold">{pendingImportRows.rows.length} cartas</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-slate-800 pt-3">
+                <span className="text-slate-400 flex items-center gap-1"><Clock size={14} /> Tiempo estimado</span>
+                <span className="text-violet-400 font-bold">{formatTimeEstimate(pendingImportRows.rows.length)}</span>
+              </div>
+            </div>
+            {pendingImportRows.totalInFile > pendingImportRows.availableSlots && (
+              <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-xs text-amber-300 flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-400" />
+                Solo las primeras {pendingImportRows.rows.length} cartas (en el orden del archivo) serán importadas. El binder no tiene más espacio.
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingImportRows(null)}
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold transition-colors"
+              >
+                Importar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {importProgress && (
         <div className="fixed inset-0 bg-slate-950/90 z-[60] flex flex-col items-center justify-center p-4">
             <Loader2 size={48} className="text-violet-500 animate-spin mb-4" />
@@ -380,6 +476,69 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                 <div className="bg-violet-600 h-full transition-all duration-300" style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }} />
             </div>
             <p className="text-slate-400 mt-2">{importProgress.current} of {importProgress.total} processed</p>
+            {importProgress.total > 50 && (
+              <p className="text-slate-600 text-xs mt-1">Colecciones grandes pueden tardar varios minutos</p>
+            )}
+        </div>
+      )}
+
+      {importResults && (
+        <div className="fixed inset-0 bg-slate-950/90 z-[60] flex flex-col items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center shrink-0">
+                <Check className="text-green-400" size={20} />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-lg">Import Complete</h3>
+                <p className="text-green-400 text-sm font-medium">{importResults.succeeded.length} carta(s) importadas correctamente</p>
+              </div>
+            </div>
+
+            {importResults.limitReached && (
+              <div className="bg-indigo-900/20 border border-indigo-700/30 rounded-lg p-3 text-xs text-indigo-300 flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0 text-indigo-400" />
+                Importación parcial — se alcanzó el límite del binder ({currentLimit} cartas).
+              </div>
+            )}
+
+            {importResults.details && (
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {importResults.details.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    {item.status === 'ok'
+                      ? <Check size={14} className="text-green-400 shrink-0" />
+                      : <X size={14} className="text-red-400 shrink-0" />
+                    }
+                    <span className={item.status === 'ok' ? 'text-slate-300' : 'text-slate-500 line-through'}>{item.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!importResults.details && importResults.failed.length > 0 && (
+              <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-sm">
+                <p className="text-amber-400 font-bold">{importResults.failed.length} no encontrada(s)</p>
+                <p className="text-xs text-slate-500 mt-0.5">Ver lista completa en el reporte</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => downloadImportReport(binder!.name, importResults.succeeded, importResults.failed)}
+              className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Download size={16} /> Descargar reporte (.txt)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setImportResults(null)}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-lg font-bold transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       )}
 
