@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, cardService, tradeService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
-import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue, StoreProfile } from '../types';
+import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue, StoreProfile, InventoryDecision, InventoryDecisionResult } from '../types';
 // Added AlertTriangle to imports
 import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown, BellOff } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
@@ -53,6 +53,9 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const [pendingFeedbacks, setPendingFeedbacks] = useState<TradeInteraction[]>([]);
   const [submittingFeedbackId, setSubmittingFeedbackId] = useState<string | null>(null);
   const [stores, setStores] = useState<StoreProfile[]>([]);
+  const [inventoryDecisions, setInventoryDecisions] = useState<InventoryDecision[]>([]);
+  const [processingDecision, setProcessingDecision] = useState<string | null>(null);
+  const [decisionResults, setDecisionResults] = useState<Record<string, InventoryDecisionResult>>({});
 
   // Notification State
   const [notifStatus, setNotifStatus] = useState<{ permission: string, optedIn: boolean, subscriptionId: string | null }>({ permission: 'default', optedIn: false, subscriptionId: null });
@@ -153,6 +156,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
             loadMyAuctions(currentUser.id);
             loadPendingFeedback();
+            loadInventoryDecisions();
         }
     } else if (viewingUserId) {
         const publicProfile = await auth.getUserPublicProfile(viewingUserId);
@@ -173,7 +177,12 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
   const loadPendingFeedback = async () => {
       const pending = await tradeService.getPendingFeedback();
       setPendingFeedbacks(pending);
-  }
+  };
+
+  const loadInventoryDecisions = async () => {
+      const decisions = await tradeService.getInventoryPendingDecisions();
+      setInventoryDecisions(decisions);
+  };
 
   const loadMyAuctions = async (uid: string) => {
       try {
@@ -297,12 +306,48 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   const handleFeedback = async (id: string, value: FeedbackValue) => {
       setSubmittingFeedbackId(id);
+      const item = pendingFeedbacks.find(f => f.id === id);
+      const isSeller = item?.sellerId === user?.id;
+      const willShowPrompt = isSeller && value !== FeedbackValue.NO_CONCRETADO && !!item?.cardId;
       try {
           await tradeService.submitFeedback(id, value);
-          loadPendingFeedback();
+          if (willShowPrompt) {
+              await Promise.all([loadPendingFeedback(), loadInventoryDecisions()]);
+          } else {
+              await loadPendingFeedback();
+          }
       } finally {
           setSubmittingFeedbackId(null);
       }
+  };
+
+  const handleDecrement = async (decision: InventoryDecision) => {
+      setProcessingDecision(decision.interactionId);
+      try {
+          const result = await tradeService.decrementInventory(decision.interactionId, decision.cardId);
+          setDecisionResults(prev => ({ ...prev, [decision.interactionId]: result }));
+          setTimeout(() => {
+              setInventoryDecisions(prev => prev.filter(d => d.interactionId !== decision.interactionId));
+              setDecisionResults(prev => { const n = { ...prev }; delete n[decision.interactionId]; return n; });
+          }, 2500);
+      } catch {
+          alert('Error al actualizar el inventario. Intenta de nuevo.');
+      } finally {
+          setProcessingDecision(null);
+      }
+  };
+
+  const handleSkipDecrement = (interactionId: string) => {
+      setInventoryDecisions(prev => prev.filter(d => d.interactionId !== interactionId));
+  };
+
+  const handleNotFoundClose = async (decision: InventoryDecision) => {
+      setProcessingDecision(decision.interactionId);
+      try {
+          await tradeService.decrementInventory(decision.interactionId, decision.cardId);
+      } catch { /* ignore — card already gone */ }
+      setInventoryDecisions(prev => prev.filter(d => d.interactionId !== decision.interactionId));
+      setProcessingDecision(null);
   };
 
   const handleDismiss = async (id: string) => {
@@ -551,13 +596,13 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                              </div>
                         </div>
 
-                        {isOwnProfile && pendingFeedbacks.length > 0 && (
+                        {isOwnProfile && (pendingFeedbacks.length > 0 || inventoryDecisions.length > 0) && (
                             <div className="mt-6 pt-6 border-t border-slate-800 animate-in slide-in-from-top-4">
                                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                     <CheckCircle className="text-violet-400" />
                                     Feedback Pendiente
                                     <span className="ml-auto text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full font-bold">
-                                        {pendingFeedbacks.length}
+                                        {pendingFeedbacks.length + inventoryDecisions.length}
                                     </span>
                                 </h3>
                                 <div className="space-y-4">
@@ -613,6 +658,84 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                                                         <Zap size={14} fill="currentColor" /> Excelente (+3)
                                                     </button>
                                                 </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {inventoryDecisions.map(decision => {
+                                        const result = decisionResults[decision.interactionId];
+                                        const isProcessing = processingDecision === decision.interactionId;
+
+                                        return (
+                                            <div key={decision.interactionId} className="bg-slate-950/60 border border-teal-700/30 rounded-xl p-5 shadow-inner animate-in slide-in-from-top-2">
+                                                {result ? (
+                                                    <div className="text-center py-1">
+                                                        {result.status === 'decremented' && (
+                                                            <p className="text-teal-400 font-bold">Listo. Te queda(n) {result.remaining} copia(s).</p>
+                                                        )}
+                                                        {result.status === 'deleted' && (
+                                                            <p className="text-teal-400 font-bold">Carta eliminada del binder.</p>
+                                                        )}
+                                                        {result.status === 'not_found' && (
+                                                            <p className="text-slate-400">Esta carta ya no está en tu binder.</p>
+                                                        )}
+                                                    </div>
+                                                ) : !decision.cardExists ? (
+                                                    <>
+                                                        <p className="text-slate-300 text-sm mb-2">
+                                                            Trade completado con <span className="font-black text-white">{decision.buyerName.toUpperCase()}</span>
+                                                        </p>
+                                                        <p className="text-slate-500 text-xs mb-4">
+                                                            La carta <span className="font-bold text-slate-300">{decision.cardName.toUpperCase()}</span> ya no está en tu binder.
+                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleNotFoundClose(decision)}
+                                                            disabled={isProcessing}
+                                                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                                        >
+                                                            {isProcessing ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
+                                                            Cerrar
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-3">
+                                                            Trade completado con <span className="text-white font-black">{decision.buyerName.toUpperCase()}</span>
+                                                        </p>
+                                                        <div className="mb-4 space-y-1">
+                                                            <p className="text-sm text-slate-300">
+                                                                Carta: <span className="text-white font-black">{decision.cardName.toUpperCase()}</span>
+                                                            </p>
+                                                            {decision.setName && (
+                                                                <p className="text-xs text-slate-500">Edición: {decision.setName}</p>
+                                                            )}
+                                                            {decision.binderName && (
+                                                                <p className="text-xs text-slate-500">Binder: {decision.binderName}</p>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-slate-300 text-sm mb-4">¿Descontar 1 unidad de esta carta?</p>
+                                                        <div className="flex gap-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDecrement(decision)}
+                                                                disabled={isProcessing}
+                                                                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {isProcessing ? <Loader2 size={14} className="animate-spin" /> : null}
+                                                                Sí, descontar
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSkipDecrement(decision.interactionId)}
+                                                                disabled={isProcessing}
+                                                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                No, mantener
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         );
                                     })}

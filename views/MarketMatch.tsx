@@ -149,8 +149,13 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
 
   const handleMarkContacted = (match: MatchResult) => {
       setMarkedMatchIds(prev => new Set([...prev, match.matchCard.id]));
-      tradeService.logInteraction(match.seller.id, match.seller.displayName, match.matchCard.name)
-          .catch(e => console.error('[handleMarkContacted]', e));
+      tradeService.logInteraction(
+          match.seller.id,
+          match.seller.displayName,
+          match.matchCard.name,
+          match.matchCard.id,
+          match.matchCard.binderId,
+      ).catch(e => console.error('[handleMarkContacted]', e));
   };
 
   const getContactState = (matchCardId: string): ContactState => {

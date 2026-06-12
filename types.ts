@@ -156,18 +156,38 @@ export interface TradeInteraction {
     id: string;
     buyerId: string;
     sellerId: string;
-    sellerName: string; 
+    sellerName: string;
     buyerName: string; // Added for dual feedback
-    cardName?: string; 
+    cardName?: string;
     timestamp: number;
     status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'IGNORED';
-    
+
     // DUAL FEEDBACK TRACKING
     buyerFeedback?: FeedbackValue;
     sellerFeedback?: FeedbackValue;
     buyerConfirmedAt?: number;
     sellerConfirmedAt?: number;
+
+    // INVENTORY DISCOUNT PROMPT
+    cardId?: string;
+    binderId?: string;
+    inventoryUpdated?: boolean;
 }
+
+export interface InventoryDecision {
+    interactionId: string;
+    cardId: string;
+    cardName: string;
+    setName: string;
+    binderName: string;
+    buyerName: string;
+    cardExists: boolean;
+}
+
+export type InventoryDecisionResult =
+    | { status: 'decremented'; remaining: number }
+    | { status: 'deleted' }
+    | { status: 'not_found' };
 
 export interface ScryfallCard {
   id: string;

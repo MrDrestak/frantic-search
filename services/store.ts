@@ -4,7 +4,7 @@ import {
   Binder, BinderType, Card, CardCondition, GameType, MatchResult,
   UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus,
   SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification,
-  CardAlert, FeedbackValue,
+  CardAlert, FeedbackValue, InventoryDecision, InventoryDecisionResult,
 } from '../types';
 
 // ─── DEFAULTS ────────────────────────────────────────────────────────────────
@@ -231,6 +231,9 @@ function mapToTradeInteraction(row: any): TradeInteraction {
     sellerFeedback: row.seller_feedback != null ? mapDbToFeedback(row.seller_feedback) : undefined,
     buyerConfirmedAt: row.buyer_confirmed_at ? new Date(row.buyer_confirmed_at).getTime() : undefined,
     sellerConfirmedAt: row.seller_confirmed_at ? new Date(row.seller_confirmed_at).getTime() : undefined,
+    cardId: row.card_id ?? undefined,
+    binderId: row.binder_id ?? undefined,
+    inventoryUpdated: row.inventory_updated ?? false,
   };
 }
 
@@ -770,7 +773,7 @@ export const alertService = {
 
 
 export const tradeService = {
-  logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry') => {
+  logInteraction: async (sellerId: string, sellerName: string, cardName: string = 'General Inquiry', cardId?: string, binderId?: string) => {
     if (!currentUserProfile) return;
     if (isGuestId(currentUserProfile.id)) return;
     if (currentUserProfile.id === sellerId) return;
@@ -798,6 +801,8 @@ export const tradeService = {
         seller_id: sellerId,
         seller_name: sellerName,
         card_name: cardName,
+        card_id: cardId ?? null,
+        binder_id: binderId ?? null,
         status: 'PENDING',
       });
 
@@ -846,6 +851,69 @@ export const tradeService = {
 
   dismissFeedback: async (interactionId: string) => {
     await directFetch('PATCH', 'trade_interactions', { status: 'IGNORED' }, `id=eq.${interactionId}`);
+  },
+
+  getInventoryPendingDecisions: async (): Promise<InventoryDecision[]> => {
+    if (!currentUserProfile) return [];
+    const uid = currentUserProfile.id;
+    try {
+      const rows = await directGet<any>(
+        'trade_interactions',
+        `seller_id=eq.${uid}&card_id=not.is.null&inventory_updated=eq.false&select=id,card_id,card_name,buyer_name,seller_feedback`
+      );
+      // Only completed trades — exclude NO_CONCRETADO and null (no feedback yet)
+      const completed = rows.filter((r: any) =>
+        r.seller_feedback && r.seller_feedback !== 'NO_CONCRETADO'
+      );
+      if (completed.length === 0) return [];
+
+      const cardIds = completed.map((r: any) => r.card_id).join(',');
+      const cards = await directGet<any>('cards', `id=in.(${cardIds})&select=id,name,set_name,binder_id`);
+      const cardMap = new Map<string, any>(cards.map((c: any) => [c.id, c]));
+
+      const binderIdSet = new Set(cards.map((c: any) => c.binder_id).filter(Boolean));
+      let binderMap = new Map<string, string>();
+      if (binderIdSet.size > 0) {
+        const binders = await directGet<any>('binders', `id=in.(${[...binderIdSet].join(',')})&select=id,name`);
+        binderMap = new Map(binders.map((b: any) => [b.id, b.name]));
+      }
+
+      return completed.map((r: any) => {
+        const card = cardMap.get(r.card_id);
+        return {
+          interactionId: r.id,
+          cardId: r.card_id,
+          cardName: r.card_name || (card?.name ?? ''),
+          setName: card?.set_name || '',
+          binderName: card ? (binderMap.get(card.binder_id) || '') : '',
+          buyerName: r.buyer_name,
+          cardExists: !!card,
+        };
+      });
+    } catch (e) {
+      console.error('[getInventoryPendingDecisions] error:', e);
+      return [];
+    }
+  },
+
+  decrementInventory: async (interactionId: string, cardId: string): Promise<InventoryDecisionResult> => {
+    const rows = await directGet<any>('cards', `id=eq.${cardId}&select=id,quantity&limit=1`);
+    // Mark inventory_updated regardless of outcome so this prompt never reappears
+    const markDone = () => directFetch('PATCH', 'trade_interactions', { inventory_updated: true }, `id=eq.${interactionId}`);
+    if (rows.length === 0) {
+      await markDone().catch(() => {});
+      return { status: 'not_found' };
+    }
+    const qty: number = rows[0].quantity;
+    if (qty > 1) {
+      await directFetch('PATCH', 'cards', { quantity: qty - 1 }, `id=eq.${cardId}`);
+      await markDone();
+      return { status: 'decremented', remaining: qty - 1 };
+    } else {
+      await directFetch('DELETE', 'cards', null, `id=eq.${cardId}`);
+      await markDone();
+      return { status: 'deleted' };
+    }
   },
 };
 
