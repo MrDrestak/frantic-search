@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
+      - run: npm ci --omit=dev
       - run: node scripts/sync-ck-prices.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
