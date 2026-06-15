@@ -35,6 +35,11 @@ export const oneSignalService = {
             serviceWorkerParam: { scope: "/" },
             serviceWorkerPath: "OneSignalSDKWorker.js",
             notifyButton: { enable: false },
+            welcomeNotification: {
+              title: "¡Bienvenido a Frantic Search!",
+              message: "Recibirás alertas de trades, subastas y cartas de tu wishlist.",
+              url: "https://frantic-search.vercel.app",
+            },
           });
           _os = OneSignal;
           oneSignalService.isInitialized = true;
