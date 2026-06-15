@@ -32,25 +32,8 @@ jobs:
         run: |
           STATUS=$(npx supabase status --output json)
           echo "VITE_SUPABASE_URL=$(echo "$STATUS" | jq -r '.api_url // .API_URL // "http://127.0.0.1:54321"')" >> $GITHUB_ENV
-
-          # Supabase CLI v2 exposes opaque keys (sb_secret_*) which PostgREST cannot decode
-          # for role resolution. We extract the JWT secret and sign proper JWTs instead.
           JWT_SECRET=$(echo "$STATUS" | jq -r '.jwt_secret // .JWT_SECRET // "super-secret-jwt-token-with-at-least-32-characters-long"')
-
-          JWT_SECRET="$JWT_SECRET" node -e "
-const crypto = require('crypto');
-const secret = process.env.JWT_SECRET;
-const sign = (payload) => {
-  const h = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const p = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  return h + '.' + p + '.' + crypto.createHmac('sha256', secret).update(h + '.' + p).digest('base64url');
-};
-const base = { iss: 'supabase-demo', exp: 1983812996 };
-require('fs').appendFileSync(process.env.GITHUB_ENV,
-  'VITE_SUPABASE_ANON_KEY=' + sign({ ...base, role: 'anon' }) + '\n' +
-  'SUPABASE_SERVICE_ROLE_KEY=' + sign({ ...base, role: 'service_role' }) + '\n'
-);
-"
+          JWT_SECRET="$JWT_SECRET" node scripts/generate-ci-jwt.mjs
 
       - name: Run tests
         run: npm test
