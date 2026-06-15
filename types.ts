@@ -138,6 +138,7 @@ export interface Card {
 export interface ShowcaseItem extends Card {
   sellerName: string;
   sellerId: string;
+  sellerWhatsapp?: string;
 }
 
 export interface MatchResult {

@@ -156,7 +156,9 @@
     "subtitle": "Descubre las cartas destacadas de nuestros mejores vendedores.",
     "filterPlaceholder": "Buscar cartas (mín. 3 caracteres)...",
     "allGames": "Todos los Juegos",
-    "noResults": "No se encontraron cartas con esos filtros."
+    "noResults": "No se encontraron cartas con esos filtros.",
+    "contactWhatsapp": "Contactar por WhatsApp",
+    "viewProfile": "Ver perfil"
   },
 
   "profile": {

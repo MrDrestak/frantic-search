@@ -1327,7 +1327,7 @@ export const showcaseService = {
     try {
       const { data } = await supabase
         .from('cards')
-        .select('*, users!cards_user_id_fkey(id, display_name, trader_score, subscription_tier)')
+        .select('*, users!cards_user_id_fkey(id, display_name, trader_score, subscription_tier, whatsapp)')
         .eq('is_showcase', true)
         .order('added_at', { ascending: false })
         .limit(50);
@@ -1336,6 +1336,7 @@ export const showcaseService = {
         ...mapToCard(row),
         sellerId: row.user_id,
         sellerName: row.users?.display_name || 'Unknown Trader',
+        sellerWhatsapp: row.users?.whatsapp || undefined,
       }));
     } catch {
       return [];
@@ -1412,7 +1413,7 @@ export const auctionService = {
     }).eq('id', card.id);
     notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
     oneSignalService.sendNotification('Auction Sold!', `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error('Push Notification Failed', err));
-    tradeService.logInteraction(card.userId, card.name, card.name);
+    tradeService.logInteraction(card.userId, card.name, card.name, card.id, card.binderId);
   },
 };
 

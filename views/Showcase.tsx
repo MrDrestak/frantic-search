@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
-import { showcaseService, auth } from '../services/store';
+import { showcaseService, auth, tradeService } from '../services/store';
 import { ShowcaseItem, GameType } from '../types';
 import PremiumLoading from '../components/PremiumLoading';
-import { Star, Search, Filter, User, ExternalLink } from 'lucide-react';
+import { Star, Search, Filter, User, ExternalLink, MessageCircle } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
 
 interface ShowcaseProps {
@@ -126,8 +126,21 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
                           <span className="uppercase font-medium">{item.condition}</span>
                       </div>
                       
-                      <div className="mt-auto pt-3 border-t border-slate-800">
-                          <button 
+                      <div className="mt-auto pt-3 border-t border-slate-800 space-y-2">
+                          {item.sellerWhatsapp && (
+                            <button
+                              onClick={() => {
+                                const msg = encodeURIComponent(`Hola ${item.sellerName}, vi tu carta "${item.name}" en la Vitrina de Frantic Search. ¿Está disponible?`);
+                                window.open(`https://wa.me/51${item.sellerWhatsapp}?text=${msg}`, '_blank');
+                                tradeService.logInteraction(item.sellerId, item.sellerName, item.name, item.id, item.binderId)
+                                  .catch(() => {});
+                              }}
+                              className="w-full flex items-center justify-center gap-2 bg-green-600/10 hover:bg-green-600 border border-green-700/40 hover:border-green-500 text-green-400 hover:text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
+                            >
+                              <MessageCircle size={13} /> {t('showcase.contactWhatsapp')}
+                            </button>
+                          )}
+                          <button
                             onClick={() => onViewProfile(item.sellerId)}
                             className="w-full flex items-center justify-between gap-2 bg-slate-950 hover:bg-violet-600/10 border border-slate-800 hover:border-violet-500/50 p-2 rounded-lg transition-all group/btn"
                           >
