@@ -7,7 +7,6 @@ declare global {
 }
 
 const APP_ID = "181d9c5a-7cfd-4fc7-961e-b58799cd476e";
-const REST_API_KEY = "os_v2_app_daozywt47vh4pfq6wwdzttkhny7nuawlmkkehqvtshtldyxplfcnqrpn4erbbxqr2mxvyglagogh6zn6zcgfixviffxrns7a3t7otvi";
 
 // Holds the initialized OneSignal instance received from the deferred callback
 let _os: any = null;
@@ -90,35 +89,21 @@ export const oneSignalService = {
     targetUserIds?: string[],
     url?: string,
   ): Promise<any> => {
-    const body: any = {
-      app_id: APP_ID,
-      headings: { en: title },
-      contents: { en: message },
-      url: url || window.location.origin,
-      priority: 10,
-    };
-
-    if (targetUserIds && targetUserIds.length > 0) {
-      body.include_aliases = { external_id: targetUserIds };
-      body.target_channel = "push";
-    } else {
-      body.included_segments = ["Total Subscriptions"];
-    }
-
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     try {
-      const targetUrl = "https://onesignal.com/api/v1/notifications";
-      const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl);
-      const response = await fetch(proxyUrl, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Basic ${REST_API_KEY}`,
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ title, message, userIds: targetUserIds, url }),
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(`OneSignal ${response.status}: ${JSON.stringify(err)}`);
+        throw new Error(`send-notification ${response.status}: ${JSON.stringify(err)}`);
       }
       const data = await response.json();
       console.log("OneSignal push sent:", data);
