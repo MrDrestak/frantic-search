@@ -1415,6 +1415,26 @@ export const auctionService = {
     oneSignalService.sendNotification('Auction Sold!', `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error('Push Notification Failed', err));
     tradeService.logInteraction(card.userId, card.name, card.name, card.id, card.binderId);
   },
+
+  closeAuction: async (card: Card): Promise<boolean> => {
+    if (!card.id) return false;
+    const { data, error } = await supabase.rpc('close_auction', { p_card_id: card.id });
+    if (error) { console.error('[closeAuction]', error); return false; }
+    const closed = data as boolean;
+    if (closed && card.topBidderId) {
+      oneSignalService.sendNotification(
+        '¡Subasta finalizada!',
+        `Tu ${card.name} fue vendida. ¡Contacta al ganador!`,
+        [card.userId],
+      ).catch(() => {});
+      oneSignalService.sendNotification(
+        '¡Ganaste la subasta!',
+        `Ganaste ${card.name}. Contacta al vendedor.`,
+        [card.topBidderId],
+      ).catch(() => {});
+    }
+    return closed;
+  },
 };
 
 // ─── MATCHING SERVICE ─────────────────────────────────────────────────────────

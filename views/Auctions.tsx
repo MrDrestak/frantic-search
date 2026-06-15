@@ -168,6 +168,11 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
                         onBid={handleBid}
                         onBuyNow={handleBuyNow}
                         onViewProfile={onViewProfile}
+                        onExpired={(expired) => {
+                            auctionService.closeAuction(expired).then(closed => {
+                                if (closed) loadAuctions();
+                            }).catch(() => {});
+                        }}
                     />
                 ))}
                 {filteredAuctions.length === 0 && (

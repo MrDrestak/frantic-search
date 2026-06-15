@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, AuctionStatus } from '../types';
 import { Gavel, Clock, ArrowUp, ShoppingCart, User, AlertTriangle, Zap } from 'lucide-react';
 import { auth } from '../services/store';
@@ -11,13 +11,15 @@ interface AuctionCardProps {
     onBid: (card: Card) => void;
     onBuyNow: (card: Card) => void;
     onViewProfile: (userId: string) => void;
+    onExpired?: (card: Card) => void;
 }
 
-const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBuyNow, onViewProfile }) => {
+const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBuyNow, onViewProfile, onExpired }) => {
     const { t } = useTranslation();
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isExpired, setIsExpired] = useState(false);
     const [isExtended, setIsExtended] = useState(false);
+    const expiredCallbackFired = useRef(false);
 
     const currentUser = auth.getCurrentUser();
     const isOwner = currentUser?.id === card.userId;
@@ -32,6 +34,10 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
             if (diff <= 0) {
                 setIsExpired(true);
                 setTimeLeft(t('auctions.auctionEnded'));
+                if (!expiredCallbackFired.current && onExpired && card.auctionStatus === AuctionStatus.ACTIVE) {
+                    expiredCallbackFired.current = true;
+                    onExpired(card);
+                }
                 return;
             }
 

@@ -1,0 +1,19 @@
+name: Close expired auctions
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # cada 30 minutos
+  workflow_dispatch:
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call close_expired_auctions()
+        run: |
+          RESULT=$(curl --fail -s -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/close_expired_auctions" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "Subastas cerradas: $RESULT"
