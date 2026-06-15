@@ -4,12 +4,14 @@ import { showcaseService, auth } from '../services/store';
 import { ShowcaseItem, GameType } from '../types';
 import PremiumLoading from '../components/PremiumLoading';
 import { Star, Search, Filter, User, ExternalLink } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface ShowcaseProps {
     onViewProfile: (userId: string) => void;
 }
 
 const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
+  const { t } = useTranslation();
   const [items, setItems] = useState<ShowcaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -59,9 +61,9 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
             <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
                 <Star size={24} fill="currentColor" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Community Showcase</h1>
+            <h1 className="text-2xl font-bold text-white">{t('showcase.title')}</h1>
         </div>
-        <p className="text-slate-400">Discover top-tier cards listed by our top traders.</p>
+        <p className="text-slate-400">{t('showcase.subtitle')}</p>
       </header>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4">
@@ -69,7 +71,7 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
               <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
               <input 
                   type="text" 
-                  placeholder="Filter cards (min 3 chars)..." 
+                  placeholder={t('showcase.filterPlaceholder')}
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-violet-500 outline-none"
@@ -82,7 +84,7 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
                   onChange={(e) => setGameFilter(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-violet-500 outline-none appearance-none"
               >
-                  <option value="">All Games</option>
+                  <option value="">{t('showcase.allGames')}</option>
                   {Object.values(GameType).map(g => (
                       <option key={g} value={g}>{g}</option>
                   ))}
@@ -146,7 +148,7 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
 
           {filteredItems.length === 0 && (
               <div className="col-span-full text-center py-12 text-slate-500">
-                  No showcase items found matching your filters.
+                  {t('showcase.noResults')}
               </div>
           )}
       </div>

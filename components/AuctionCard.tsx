@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, AuctionStatus } from '../types';
 import { Gavel, Clock, ArrowUp, ShoppingCart, User, AlertTriangle, Zap } from 'lucide-react';
 import { auth } from '../services/store';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface AuctionCardProps {
     card: Card;
@@ -13,10 +14,11 @@ interface AuctionCardProps {
 }
 
 const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBuyNow, onViewProfile }) => {
+    const { t } = useTranslation();
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isExpired, setIsExpired] = useState(false);
     const [isExtended, setIsExtended] = useState(false);
-    
+
     const currentUser = auth.getCurrentUser();
     const isOwner = currentUser?.id === card.userId;
     const isWinning = currentUser?.id === card.topBidderId;
@@ -29,7 +31,7 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
 
             if (diff <= 0) {
                 setIsExpired(true);
-                setTimeLeft("Ended");
+                setTimeLeft(t('auctions.auctionEnded'));
                 return;
             }
 
@@ -81,7 +83,7 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
             {/* Extended Badge */}
             {isExtended && (
                 <div className="absolute top-2 left-2 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1 animate-pulse">
-                    <Zap size={10} fill="currentColor" /> OVERTIME
+                    <Zap size={10} fill="currentColor" /> {t('auctions.overtime').toUpperCase()}
                 </div>
             )}
 
@@ -127,7 +129,7 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
                 {/* Bid Info */}
                 <div className="mt-auto bg-slate-950/50 rounded-lg p-3 border border-slate-800">
                      <div className="flex justify-between items-end mb-1">
-                         <span className="text-[10px] uppercase font-bold text-slate-500">Current Bid</span>
+                         <span className="text-[10px] uppercase font-bold text-slate-500">{card.topBidderId ? t('auctions.currentBid') : t('auctions.startingPrice')}</span>
                          <div className="text-xl font-bold text-white">
                              {card.currency === 'PEN' ? 'S/' : '$'} {card.currentBid?.toFixed(2)}
                          </div>
@@ -135,18 +137,18 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
                      
                      {isWinning && (
                          <div className="text-[10px] text-green-400 font-bold mb-2 flex items-center gap-1">
-                             <ArrowUp size={10} /> You are winning!
+                             <ArrowUp size={10} /> {t('auctions.youAreWinning')}
                          </div>
                      )}
-                     
+
                      {!isWinning && card.topBidderId && (
                          <div className="text-[10px] text-amber-500/80 font-medium mb-2">
-                             {card.currentBid === card.basePrice ? "Starting Bid" : "1 Active Bidder"}
+                             {card.currentBid === card.basePrice ? t('auctions.startingBid') : t('auctions.oneBidder')}
                          </div>
                      )}
 
                      {!card.topBidderId && (
-                         <div className="text-[10px] text-slate-500 mb-2">No bids yet</div>
+                         <div className="text-[10px] text-slate-500 mb-2">{t('auctions.noBidsYet')}</div>
                      )}
 
                      <div className="flex gap-2">
@@ -159,7 +161,7 @@ const AuctionCard: React.FC<AuctionCardProps> = ({ card, sellerName, onBid, onBu
                                  : 'bg-amber-600 hover:bg-amber-700 text-white'
                              }`}
                          >
-                             <Gavel size={14} /> Bid (+1)
+                             <Gavel size={14} /> {t('auctions.bidButton')}
                          </button>
                          {card.buyItNowPrice && (
                              <button 

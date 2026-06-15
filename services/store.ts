@@ -215,6 +215,7 @@ function mapToCard(row: any): Card {
     topBidderId: row.top_bidder_id ?? undefined,
     auctionStatus: (row.auction_status as AuctionStatus) ?? undefined,
     winnerId: row.winner_id ?? undefined,
+    sellerName: row.users?.display_name || undefined,
   };
 }
 
@@ -1019,6 +1020,39 @@ export const adminService = {
     console.warn('wipeDatabase: not available from client. Use Supabase dashboard or Edge Function.');
   },
 
+  getUserDisplayNames: async (ids: string[]): Promise<Record<string, string>> => {
+    if (ids.length === 0) return {};
+    try {
+      const rows = await directGet<{ id: string; display_name: string }>(
+        'users',
+        `id=in.(${ids.join(',')})&select=id,display_name`,
+      );
+      return Object.fromEntries(rows.map(r => [r.id, r.display_name || 'Desconocido']));
+    } catch {
+      return {};
+    }
+  },
+
+  getWishlistUserIds: async (): Promise<string[]> => {
+    try {
+      const rows = await directGet<{ user_id: string }>('binders', 'type=eq.WISHLIST&select=user_id');
+      return [...new Set(rows.map(r => r.user_id))];
+    } catch {
+      return [];
+    }
+  },
+
+  getActiveBidderIds: async (): Promise<string[]> => {
+    try {
+      const rows = await directGet<{ top_bidder_id: string }>(
+        'cards',
+        'binder_type=eq.AUCTION&auction_status=eq.ACTIVE&top_bidder_id=not.is.null&select=top_bidder_id',
+      );
+      return [...new Set(rows.map(r => r.top_bidder_id).filter(Boolean))];
+    } catch {
+      return [];
+    }
+  },
 };
 
 // ─── BINDER SERVICE ───────────────────────────────────────────────────────────
@@ -1325,6 +1359,20 @@ export const auctionService = {
         .eq('binder_type', 'AUCTION')
         .eq('auction_status', AuctionStatus.ACTIVE)
         .order('auction_end_date', { ascending: true });
+      const rows = await attachPrices(data || []);
+      return rows.map(mapToCard);
+    } catch {
+      return [];
+    }
+  },
+
+  getUserAuctions: async (userId: string): Promise<Card[]> => {
+    try {
+      const { data } = await supabase
+        .from('cards')
+        .select('*, users!cards_user_id_fkey(display_name)')
+        .eq('user_id', userId)
+        .eq('binder_type', 'AUCTION');
       const rows = await attachPrices(data || []);
       return rows.map(mapToCard);
     } catch {

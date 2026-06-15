@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { auth } from '../services/store';
 import { AlertTriangle, User, Loader2 } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface LoginProps {
   onLogin: () => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
@@ -68,8 +70,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <span className="text-3xl font-bold text-white">FS</span>
         </div>
         
-        <h1 className="text-3xl font-bold text-white mb-2">Frantic Search</h1>
-        <p className="text-slate-400 mb-8">The best GameHub for all TCG, like Magic: The Gathering, Pokémon, Yu-Gi-Oh! and more.</p>
+        <h1 className="text-3xl font-bold text-white mb-2">{t('login.title')}</h1>
+        <p className="text-slate-400 mb-8">{t('login.subtitle')}</p>
 
         {error && (
             <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-6 flex gap-3 items-start text-left">
@@ -83,7 +85,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           className="w-full bg-white hover:bg-slate-200 text-slate-900 font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-3 transition-colors mb-4"
         >
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-          Sign in with Google
+          {t('login.googleButton')}
         </button>
 
         <div className="flex items-center w-full my-4">
@@ -97,11 +99,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-6 rounded-lg flex items-center justify-center gap-3 transition-colors border border-slate-700"
         >
           <User size={18} />
-          Continue as Guest (Test Mode)
+          {t('login.guestButton')}
         </button>
 
         <p className="text-xs text-slate-400 mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy.
+          {t('login.guestDisclaimer')}
         </p>
       </div>
     </div>

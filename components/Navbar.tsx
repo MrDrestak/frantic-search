@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Layers, ShoppingBag, User, Star, Gavel, Home } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface NavbarProps {
   currentPage: string;
@@ -9,13 +10,14 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
+  const { t } = useTranslation();
   const navItems = [
-    { id: 'home', icon: Home, label: 'Home' },
-    { id: 'dashboard', icon: Layers, label: 'Binders' },
-    { id: 'market', icon: ShoppingBag, label: 'Market' },
-    { id: 'auctions', icon: Gavel, label: 'Auctions' },
-    { id: 'showcase', icon: Star, label: 'Showcase' },
-    { id: 'profile', icon: User, label: 'Profile' },
+    { id: 'home', icon: Home, label: t('nav.home') },
+    { id: 'dashboard', icon: Layers, label: t('nav.binders') },
+    { id: 'market', icon: ShoppingBag, label: t('nav.market') },
+    { id: 'auctions', icon: Gavel, label: t('nav.auctions') },
+    { id: 'showcase', icon: Star, label: t('nav.showcase') },
+    { id: 'profile', icon: User, label: t('nav.profile') },
   ];
 
   return (

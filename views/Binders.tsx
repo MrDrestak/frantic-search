@@ -7,12 +7,14 @@ import PremiumLoading from '../components/PremiumLoading';
 import { Plus, X, Lock, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface BindersProps {
   onSelectBinder: (binderId: string) => void;
 }
 
 const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
+  const { t } = useTranslation();
   const [binders, setBinders] = useState<Binder[]>([]);
   const [lockedStatus, setLockedStatus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -137,14 +139,14 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
 
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">Tus Binders</h1>
-          <p className="text-slate-400">Organiza tu colección: Binders de intercambio/venta, deseos (las cartas que buscas) y tus subastas.</p> //Manage your collection, trade lists, and auctions
+          <h1 className="text-2xl font-bold text-white">{t('binders.title')}</h1>
+          <p className="text-slate-400">{t('binders.subtitle')}</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsCreating(true)}
           className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-lg shadow-violet-900/20"
         >
-          <Plus size={18} /> New Binder
+          <Plus size={18} /> {t('binders.newBinder')}
         </button>
       </header>
       
@@ -184,7 +186,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
             >
                 <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">Crea un Nuevo Binder</h2>
+                <h2 className="text-xl font-bold text-white">{t('createBinder.title')}</h2>
                 <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
                     <X size={24} />
                 </button>
@@ -192,7 +194,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 
                 <form onSubmit={handleCreate} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">Nombre de tu Binder</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">{t('createBinder.nameLabel')}</label>
                     <input 
                     autoFocus
                     type="text" 
@@ -204,7 +206,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">Tipo de Binder</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">{t('createBinder.typeLabel')}</label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <button
                         type="button"
@@ -252,11 +254,11 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                     </div>
                 </div>
 
-                <button 
+                <button
                     type="submit"
                     className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg font-medium transition-colors"
                 >
-                    Crear un Binder
+                    {t('createBinder.submit')}
                 </button>
                 </form>
             </motion.div>
@@ -318,7 +320,7 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
                 animate={{ opacity: 1 }}
                 className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl"
             >
-                <p>No se encontró ningún Binder. ¡Crea uno para iniciar!</p> //No binders found. Create one to get started!
+                <p>{t('binders.emptyState')} {t('binders.emptyStateCta')}.</p>
             </motion.div>
         )}
       </motion.div>

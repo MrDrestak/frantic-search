@@ -4,26 +4,26 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserPlus, AlertCircle } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
-import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType, BinderType, AuctionStatus } from '../types';
-import { db } from '../services/firebase';
+import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType } from '../types';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface AdminPanelProps {
     onBack: () => void;
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'SYSTEM' | 'USERS' | 'NEWS' | 'STORES' | 'NOTIFICATIONS'>('SYSTEM');
     const [user] = useState(auth.getCurrentUser());
-    
-    // Ensure admin access
+
     if (!user?.isAdmin) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-8">
                 <ShieldAlert size={64} className="text-red-500 mb-4" />
-                <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
-                <p className="text-slate-400 mb-6">You do not have administrative privileges.</p>
+                <h1 className="text-2xl font-bold text-white mb-2">{t('admin.accessDenied')}</h1>
+                <p className="text-slate-400 mb-6">{t('admin.accessDeniedDesc')}</p>
                 <button onClick={onBack} className="text-violet-400 hover:text-white underline">
-                    Return to App
+                    {t('admin.returnToApp')}
                 </button>
             </div>
         );
@@ -37,27 +37,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </button>
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        Admin Control Panel <ShieldAlert size={20} className="text-red-500" />
+                        {t('admin.title')} <ShieldAlert size={20} className="text-red-500" />
                     </h1>
-                    <p className="text-slate-400">Manage system, users, content, and partners.</p>
+                    <p className="text-slate-400">{t('admin.subtitle')}</p>
                 </div>
             </header>
 
             {/* TABS */}
             <div className="flex border-b border-slate-800 overflow-x-auto">
                 {[
-                    { id: 'SYSTEM', label: 'System Config' },
-                    { id: 'USERS', label: 'User Management' },
-                    { id: 'NEWS', label: 'News Manager' },
-                    { id: 'STORES', label: 'Store Directory' },
-                    { id: 'NOTIFICATIONS', label: 'Push Notifications' }
+                    { id: 'SYSTEM', label: t('admin.tabs.systemConfig') },
+                    { id: 'USERS', label: t('admin.tabs.userManagement') },
+                    { id: 'NEWS', label: t('admin.tabs.newsManager') },
+                    { id: 'STORES', label: t('admin.tabs.storeDirectory') },
+                    { id: 'NOTIFICATIONS', label: t('admin.tabs.pushNotifications') }
                 ].map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                            activeTab === tab.id 
-                            ? 'border-violet-500 text-white' 
+                            activeTab === tab.id
+                            ? 'border-violet-500 text-white'
                             : 'border-transparent text-slate-400 hover:text-slate-200'
                         }`}
                     >
@@ -97,31 +97,16 @@ const NotificationsTab = () => {
             let userIds: string[] | undefined = undefined;
 
             if (targetType === 'WISHLIST') {
-                // Fetch all users who have at least one wishlist binder
-                const snap = await db.collection('binders').where('type', '==', BinderType.WISHLIST).get();
-                const ids = new Set<string>();
-                snap.docs.forEach((doc: any) => ids.add(doc.data().userId));
-                userIds = Array.from(ids);
+                userIds = await adminService.getWishlistUserIds();
                 if (userIds.length === 0) {
-                    alert("No users found with Wishlists.");
+                    alert("No se encontraron usuarios con Wishlists.");
                     setIsSending(false);
                     return;
                 }
             } else if (targetType === 'BIDDERS') {
-                // Fetch all unique users who are top bidders on any active auction
-                const snap = await db.collection('cards')
-                    .where('binderType', '==', BinderType.AUCTION)
-                    .where('auctionStatus', '==', AuctionStatus.ACTIVE)
-                    .get();
-                
-                const ids = new Set<string>();
-                snap.docs.forEach((doc: any) => {
-                    const data = doc.data();
-                    if (data.topBidderId) ids.add(data.topBidderId);
-                });
-                userIds = Array.from(ids);
+                userIds = await adminService.getActiveBidderIds();
                 if (userIds.length === 0) {
-                    alert("No active bidders found.");
+                    alert("No se encontraron pujadores activos.");
                     setIsSending(false);
                     return;
                 }

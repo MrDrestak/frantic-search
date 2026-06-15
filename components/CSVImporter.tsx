@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Upload, ArrowRight, Check, X, FileText, AlertCircle, Sparkles } from 'lucide-react';
 import { parseCSV, CSVParseResult } from '../services/scryfallService';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface CSVImporterProps {
   onClose: () => void;
@@ -62,6 +63,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'upload' | 'map'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<CSVParseResult | null>(null);
@@ -128,7 +130,7 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
         <div className="flex justify-between items-center p-6 border-b border-slate-800">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Upload className="text-violet-500" />
-            Bulk Import Cards
+            {t('binderDetail.uploadCsv')}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
@@ -152,8 +154,8 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
                     <FileText size={32} />
                   </div>
                   <div>
-                    <p className="text-lg font-medium text-white">Click to upload CSV</p>
-                    <p className="text-sm text-slate-400">or drag and drop file here</p>
+                    <p className="text-lg font-medium text-white">Click para subir CSV</p>
+                    <p className="text-sm text-slate-400">o arrastra y suelta el archivo aquí</p>
                   </div>
                 </div>
               </label>
@@ -241,7 +243,7 @@ const CSVImporter: React.FC<CSVImporterProps> = ({ onClose, onImport }) => {
                     disabled={!mapping['name']}
                     className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2"
                 >
-                    <Check size={18} /> Import Cards
+                    <Check size={18} /> Importar Cartas
                 </button>
              </>
           )}

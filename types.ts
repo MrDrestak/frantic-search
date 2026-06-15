@@ -132,6 +132,7 @@ export interface Card {
   topBidderId?: string;
   auctionStatus?: AuctionStatus;
   winnerId?: string; // Final winner
+  sellerName?: string; // Populated when query joins users table
 }
 
 export interface ShowcaseItem extends Card {

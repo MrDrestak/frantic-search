@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { X, Crown, Shield, Star, Bell, Check, ExternalLink } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 import { SubscriptionTier, GlobalConfig } from '../types';
 import { configService, subscriptionService } from '../services/store';
 
@@ -11,6 +12,7 @@ interface SubscriptionModalProps {
 }
 
 const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentTier, onUpgrade }) => {
+    const { t } = useTranslation();
     const config: GlobalConfig = configService.getConfig();
 
     const handleSelect = async (tier: SubscriptionTier) => {
@@ -20,8 +22,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
         const paymentLink = details.paymentLink;
 
         if (paymentLink && paymentLink.startsWith('http')) {
-            // Redirect to Payment Processor
-            if (confirm(`You will be redirected to our secure payment partner to upgrade to ${tier}. Continue?`)) {
+            if (confirm(t('pricing.confirmUpgrade', { tier }))) {
                 window.open(paymentLink, '_blank');
                 // We keep the modal open or close it, user waits for backend to process webhook
                 onClose();
@@ -45,7 +46,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
             <div className={`relative bg-slate-900 border ${isCurrent ? 'border-green-500 ring-1 ring-green-500' : 'border-slate-700 hover:border-violet-500'} rounded-xl p-6 flex flex-col transition-all duration-300`}>
                 {isCurrent && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
-                        CURRENT PLAN
+                        {t('pricing.currentPlan').toUpperCase()}
                     </div>
                 )}
                 
@@ -65,21 +66,21 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                     {/* Binders */}
                     <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                            <span className="text-slate-400">Trade/Sell Binders</span>
+                            <span className="text-slate-400">{t('pricing.tradeSellBinders')}</span>
                             <div className="text-right">
                                 <span className="text-white font-bold">{details.maxTradeBinders}</span>
                                 <span className="text-slate-500 text-xs ml-1">({details.maxCardsPerTradeBinder} cards max)</span>
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                            <span className="text-slate-400">Wishlist Binders</span>
+                            <span className="text-slate-400">{t('pricing.wishlistBinders')}</span>
                             <div className="text-right">
                                 <span className="text-white font-bold">{details.maxWishlistBinders}</span>
                                 <span className="text-slate-500 text-xs ml-1">({details.maxCardsPerWishlistBinder} cards max)</span>
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                            <span className="text-slate-400">Auction Binders</span>
+                            <span className="text-slate-400">{t('pricing.auctionBinders')}</span>
                             <div className="text-right">
                                 <span className="text-white font-bold">{details.maxAuctionBinders}</span>
                                 <span className="text-slate-500 text-xs ml-1">({details.maxAuctionCardsPerBinder} cards max)</span>
@@ -92,14 +93,14 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                         <div className="flex justify-between items-center text-sm">
                             <div className="flex items-center gap-2 text-slate-300">
                                 <Bell size={14} className="text-violet-400" />
-                                <span>Card Alerts</span>
+                                <span>{t('pricing.cardAlerts')}</span>
                             </div>
                             <span className="text-white font-bold">{details.maxCardAlerts}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <div className="flex items-center gap-2 text-slate-300">
                                 <Star size={14} className="text-yellow-400" />
-                                <span>Showcase Cards</span>
+                                <span>{t('pricing.showcaseCards')}</span>
                             </div>
                             <span className="text-white font-bold">{details.maxShowcaseItems}</span>
                         </div>
@@ -116,10 +117,10 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                     }`}
                 >
                     {isCurrent ? (
-                        <span className="flex items-center justify-center gap-2"><Check size={16}/> Active Plan</span>
+                        <span className="flex items-center justify-center gap-2"><Check size={16}/> {t('pricing.activePlan')}</span>
                     ) : (
                         <span className="flex items-center justify-center gap-2">
-                             Upgrade to {tier} {config[tier].paymentLink ? <ExternalLink size={14}/> : ''}
+                             {t('pricing.upgradeTo', { tier })} {config[tier].paymentLink ? <ExternalLink size={14}/> : ''}
                         </span>
                     )}
                 </button>
@@ -132,8 +133,8 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
             <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-6xl h-[90vh] md:h-auto overflow-y-auto shadow-2xl flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b border-slate-800 sticky top-0 bg-slate-950 z-10">
                     <div>
-                        <h2 className="text-2xl font-bold text-white">Upgrade Your Experience</h2>
-                        <p className="text-slate-400 text-sm">Unlock more binders, larger capacities, and exclusive features.</p>
+                        <h2 className="text-2xl font-bold text-white">{t('pricing.title')}</h2>
+                        <p className="text-slate-400 text-sm">{t('pricing.subtitle')}</p>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white bg-slate-900 p-2 rounded-full hover:bg-slate-800 transition-colors">
                         <X size={24} />
@@ -161,7 +162,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onClose, currentT
                 {/* Mythic Note */}
                 <div className="p-6 border-t border-slate-800 bg-slate-900/50 text-center">
                     <p className="text-slate-500 text-sm">
-                        Are you a verified TCG Store? Contact support to apply for the <span className="text-purple-400 font-bold">Mythic</span> partner tier.
+                        {t('pricing.mythicFooter')}
                     </p>
                 </div>
             </div>

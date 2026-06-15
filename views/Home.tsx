@@ -5,6 +5,7 @@ import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus, Bi
 import { Star, MapPin, Layers, Loader2, ChevronLeft, ChevronRight, Gavel, Clock, Zap, TrendingUp, Sparkles, Megaphone } from 'lucide-react';
 import HolographicCard from '../components/HolographicCard';
 import { motion } from 'framer-motion';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface HomeProps {
     onNavigate: (page: string) => void;
@@ -12,6 +13,7 @@ interface HomeProps {
 }
 
 const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
+    const { t } = useTranslation();
     const [allShowcaseItems, setAllShowcaseItems] = useState<ShowcaseItem[]>([]);
     const [filteredShowcaseItems, setFilteredShowcaseItems] = useState<ShowcaseItem[]>([]);
     const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
@@ -112,18 +114,18 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                     <div className="flex justify-between items-center mb-4 px-1">
                         <div className="flex items-center gap-2">
                             <Star className="text-amber-500" size={20} fill="currentColor" />
-                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Featured Showcase</h2>
+                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.featuredShowcase')}</h2>
                         </div>
                         <select 
                             value={showcaseFilter}
                             onChange={(e) => setShowcaseFilter(e.target.value)}
                             className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 text-xs text-slate-300 outline-none"
                         >
-                            <option value="">All Games</option>
+                            <option value="">{t('common.allGames')}</option>
                             {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
                         </select>
                     </div>
-                    
+
                     <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative min-h-[400px]">
                         {filteredShowcaseItems.length > 0 ? (
                             <div 
@@ -155,7 +157,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 <section className="col-span-1 md:col-span-5 flex flex-col h-full order-2">
                     <div className="flex items-center gap-2 mb-4 px-1">
                         <Gavel className="text-amber-500" size={20} />
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">Featured Auction</h2>
+                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.featuredAuction')}</h2>
                     </div>
 
                     <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group min-h-[400px]">
@@ -180,7 +182,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                                     </div>
                                     <div className="flex justify-between items-end border-t border-slate-800 pt-3">
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase">Current Bid</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase">{t('auctions.currentBid')}</span>
                                             <span className="text-xl font-black text-amber-500">
                                                 {featuredAuction.currency === 'PEN' ? 'S/' : '$'} {featuredAuction.currentBid?.toFixed(2)}
                                             </span>
@@ -213,7 +215,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 <section className="col-span-1 md:col-span-12 flex flex-col h-full order-3">
                     <div className="flex items-center gap-2 mb-4 px-1">
                         <MapPin className="text-green-500" size={20} />
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">Partner Stores</h2>
+                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.partnerStores')}</h2>
                     </div>
 
                     <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-inner min-h-[300px]">
@@ -246,14 +248,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                     <div className="flex justify-between items-center mb-4 px-1">
                         <div className="flex items-center gap-2">
                             <Layers className="text-violet-500" size={20} />
-                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Latest News</h2>
+                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.latestNews')}</h2>
                         </div>
                         <select 
                             value={newsFilter} 
                             onChange={(e) => setNewsFilter(e.target.value)}
                             className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
                         >
-                            <option value="">All Games</option>
+                            <option value="">{t('common.allGames')}</option>
                             {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
                         </select>
                     </div>

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Binder, BinderType } from '../types';
 import { Heart, Store, Gavel, Share2 } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface BinderCardProps {
   binder: Binder;
@@ -10,6 +11,7 @@ interface BinderCardProps {
 }
 
 const BinderCard: React.FC<BinderCardProps> = ({ binder, onClick, onShare }) => {
+  const { t } = useTranslation();
   const isWishlist = binder.type === BinderType.WISHLIST;
   const isAuction = binder.type === BinderType.AUCTION;
   
@@ -34,7 +36,7 @@ const BinderCard: React.FC<BinderCardProps> = ({ binder, onClick, onShare }) => 
               {binder.name}
           </h3>
           <span className="text-sm font-medium text-slate-400">
-              {binder.cardCount || 0} Cards
+              {t('binders.cardCount', { count: binder.cardCount || 0 })}
           </span>
       </div>
 

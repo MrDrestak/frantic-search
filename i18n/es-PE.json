@@ -1,0 +1,367 @@
+{
+  "_meta": {
+    "locale": "es-PE",
+    "version": "1.0",
+    "description": "Frantic Search — Traducciones español (Perú)",
+    "source": "Extraído de screenshots UI, mayo 2026"
+  },
+
+  "nav": {
+    "home": "Inicio",
+    "binders": "Binders",
+    "market": "Mercado",
+    "auctions": "Subastas",
+    "showcase": "Vitrina",
+    "profile": "Perfil"
+  },
+
+  "home": {
+    "featuredShowcase": "Vitrina Destacada",
+    "featuredAuction": "Subasta Destacada",
+    "partnerStores": "Tiendas Aliadas",
+    "latestNews": "Últimas Noticias",
+    "topCollector": "Top Coleccionista",
+    "viewDetail": "Ver Detalle",
+    "noAuctions": "En espera de nuevas subastas en el multiverso.",
+    "heroTitle": "Deja de buscar. Empieza a encontrar.",
+    "heroSubtitle": "Precios reales, jugadores reales, cartas reales.",
+    "heroCta": "Crea tu cuenta gratis",
+    "heroCtaTrial": "Empieza con 30 días gratis",
+    "matchesPending": "Tienes {count} matches nuevos",
+    "noMatchesPending": "No tienes matches pendientes"
+  },
+
+  "binders": {
+    "title": "Tus Binders",
+    "subtitle": "Organiza tu colección: binders de intercambio/venta, deseos (las cartas que buscas) y tus subastas.",
+    "newBinder": "+ Nuevo Binder",
+    "cardCount": "{count} Cartas",
+    "cardCountSingular": "{count} Carta",
+    "emptyState": "No tienes binders aún.",
+    "emptyStateCta": "Crea uno para iniciar"
+  },
+
+  "createBinder": {
+    "title": "Crea un Nuevo Binder",
+    "nameLabel": "Nombre de tu Binder",
+    "namePlaceholder": "ej. Trades Enero o Subastas Premium",
+    "typeLabel": "Tipo de Binder",
+    "typeForTrade": "Intercambio / Venta",
+    "typeWishlist": "Lista de Deseos",
+    "typeAuction": "Subasta",
+    "multiplierLabel": "Multiplicador USD a Soles",
+    "multiplierHint": "Precio CK (USD) × {multiplier} = precio en S/",
+    "submit": "Crear Binder"
+  },
+
+  "binderDetail": {
+    "forTradeSell": "Intercambio / Venta",
+    "wishlist": "Lista de Deseos",
+    "auction": "Subasta",
+    "uniqueCards": "{current} / {max} Cartas",
+    "uploadCsv": "Subir CSV",
+    "addCard": "+ Agregar Carta",
+    "filterPlaceholder": "Buscar cartas por nombre...",
+    "emptyTitle": "Este binder está vacío.",
+    "emptyCta": "Empieza a agregar cartas",
+    "emptyHint": "Busca una carta por nombre y agrégala a tu binder.",
+    "tooltipWhatsapp": "Compartir por WhatsApp",
+    "tooltipShare": "Compartir enlace",
+    "tooltipDelete": "Eliminar binder"
+  },
+
+  "cardDetails": {
+    "title": "Detalle de Carta",
+    "condition": "Condición",
+    "conditionNM": "Near Mint",
+    "conditionLP": "Lightly Played",
+    "conditionMP": "Moderately Played",
+    "conditionHP": "Heavily Played",
+    "conditionDMG": "Damaged",
+    "quantity": "Cantidad",
+    "quantityCopies": "Copias de esta versión específica",
+    "foilLabel": "Foil / Acabado Especial",
+    "estPrice": "Precio Est.",
+    "customPriceLabel": "Tu Precio",
+    "customPriceHint": "Deja vacío para usar el precio CK × multiplicador"
+  },
+
+  "addCard": {
+    "searchPlaceholder": "Buscar carta por nombre...",
+    "searchHint": "Escribe al menos 3 caracteres",
+    "noResults": "No se encontraron cartas",
+    "addToBinder": "Agregar al Binder",
+    "added": "¡Carta agregada!"
+  },
+
+  "market": {
+    "title": "Market Match",
+    "subtitle": "Encontramos personas vendiendo cartas de tus Listas de Deseos.",
+    "youWant": "Tú buscas:",
+    "contact": "Contactar",
+    "otherVersions": "Mostrar {count} versión más disponible",
+    "otherVersionsPlural": "Mostrar {count} versiones más disponibles",
+    "hideVersions": "Ocultar versiones adicionales",
+    "noMatches": "No hay matches por ahora. Agrega cartas a tu Lista de Deseos para encontrar vendedores.",
+    "noMatchesCta": "Ir a Binders",
+    "estLabel": "Est:",
+    "askLabel": "Precio:",
+    "lastActive": "Activo {time}",
+    "noMatchesTitle": "Sin matches aún",
+    "noMatchesDesc": "Agrega más cartas a tus binders de \"Lista de Deseos\" o espera a que otros las publiquen.",
+    "contactButton": "Contactar",
+    "marcarContactado": "Marcar como contactado",
+    "feedbackPendiente": "Feedback pendiente",
+    "exactMatchNotFound": "Coincidencia exacta no encontrada. Mostrando {count} cartas similares de otras ediciones."
+  },
+
+  "auctions": {
+    "title": "Casa de Subastas",
+    "subtitle": "Puja por cartas exclusivas o lista las tuyas al mejor postor. Todas las subastas cierran a las 10:00 PM (GMT-05:00 Bogotá, Lima, Quito). Una puja de último momento activa una extensión de 5 minutos.",
+    "searchPlaceholder": "Buscar cartas o vendedores...",
+    "myActiveBids": "Mis Pujas Activas",
+    "currentBid": "Puja Actual",
+    "startingPrice": "Precio Base",
+    "noBidsYet": "Sin pujas aún",
+    "activeBidders": "{count} Pujador activo",
+    "activeBiddersPlural": "{count} Pujadores activos",
+    "bidButton": "Pujar (+1)",
+    "buyNowButton": "Compra Inmediata",
+    "timeRemaining": "{time} restante",
+    "auctionEnded": "Subasta finalizada",
+    "seller": "Vendedor",
+    "winner": "Ganador",
+    "noAuctions": "No hay subastas activas.",
+    "noAuctionsCta": "Crea una subasta desde tus Binders",
+    "unknown": "Desconocido",
+    "overtime": "¡Tiempo extra!",
+    "allGames": "Todos los Juegos",
+    "youAreWinning": "¡Vas ganando!",
+    "startingBid": "Puja inicial",
+    "oneBidder": "1 Pujador activo"
+  },
+
+  "createAuction": {
+    "title": "Configuración de Subasta",
+    "infoText": "Todas las subastas cierran a las 22:00 GMT-5 (Lima/Bogotá/Quito) en la fecha seleccionada. Cada subasta es por exactamente 1 copia.",
+    "finishDate": "Fecha de Cierre",
+    "currency": "Moneda",
+    "basePrice": "Precio Base",
+    "directBuyPrice": "Compra Inmediata",
+    "submit": "Crear Subasta"
+  },
+
+  "showcase": {
+    "title": "Vitrina de la Comunidad",
+    "subtitle": "Descubre las cartas destacadas de nuestros mejores vendedores.",
+    "filterPlaceholder": "Buscar cartas (mín. 3 caracteres)...",
+    "allGames": "Todos los Juegos",
+    "noResults": "No se encontraron cartas con esos filtros."
+  },
+
+  "profile": {
+    "myProfile": "Mi Perfil",
+    "myProfileSubtitle": "Administra tu identidad como trader y tu tienda pública.",
+    "traderProfile": "Perfil del Trader",
+    "traderProfileSubtitle": "Detalles del vendedor e inventario.",
+    "shareProfile": "Compartir Perfil",
+    "editProfile": "Editar Perfil",
+    "updatePlan": "Cambiar Plan",
+    "adminPanel": "Panel Admin",
+    "traderScore": "Trader",
+    "searcherScore": "Searcher",
+    "rankCommon": "Novato",
+    "rankUncommon": "Activo",
+    "rankRare": "Confiable",
+    "rankMythic": "Élite",
+    "whatsapp": "WhatsApp",
+    "revealContact": "Revelar Contacto",
+    "preferredStore": "Tienda Preferida",
+    "openInMaps": "Abrir en Google Maps",
+    "publicStorefront": "Tienda Pública",
+    "searchInventory": "Buscar inventario...",
+    "allGames": "Todos los Juegos",
+    "guestTrader": "Trader Invitado",
+    "plays": "Juega:"
+  },
+
+  "editProfile": {
+    "nickname": "Apodo (Nombre público)",
+    "announcementUser": "Mi Anuncio",
+    "announcementStore": "Anuncio de la Tienda",
+    "announcementPlaceholder": "ej. CK × 3, solo Near Mint. Envíos a todo Perú.",
+    "preferredGame": "Juego Preferido",
+    "whatsappVerification": "Verificación de WhatsApp",
+    "country": "País",
+    "phoneNumber": "Número de Teléfono",
+    "verifiedNumber": "Número Verificado",
+    "verifyNumber": "Verificar Número",
+    "preferredStore": "Tienda Preferida",
+    "cancel": "Cancelar",
+    "saveChanges": "Guardar Cambios"
+  },
+
+  "notifications": {
+    "active": "Notificaciones Activas",
+    "activeSubtitle": "Recibirás alertas de subastas y deseos.",
+    "disabled": "Notificaciones Desactivadas",
+    "disabledSubtitle": "Activa las alertas para no perderte pujas ni cartas de tu lista.",
+    "activate": "Activar"
+  },
+
+  "pricing": {
+    "title": "Mejora tu Experiencia",
+    "subtitle": "Desbloquea más binders, mayor capacidad y funciones exclusivas.",
+    "currentPlan": "Plan Actual",
+    "activePlan": "Plan Activo",
+    "upgradeToUncommon": "Cambiar a Uncommon",
+    "upgradeToRare": "Cambiar a Rare",
+    "downgradeToCommon": "Cambiar a Common",
+    "tradeSellBinders": "Binders Intercambio/Venta",
+    "wishlistBinders": "Binders Lista de Deseos",
+    "auctionBinders": "Binders Subasta",
+    "cardAlerts": "Alertas de Cartas",
+    "showcaseCards": "Cartas en Vitrina",
+    "cardsMax": "{count} cartas máx.",
+    "perMonth": "/mes",
+    "mythicFooter": "¿Eres una tienda TCG verificada? Contáctanos para aplicar al tier Mythic de partner.",
+    "mythicFooterLink": "Contáctanos",
+    "upgradeTo": "Cambiar a {tier}",
+    "confirmUpgrade": "Serás redirigido a nuestro procesador de pagos para cambiar al plan {tier}. ¿Continuar?"
+  },
+
+  "admin": {
+    "title": "Panel de Administración",
+    "subtitle": "Gestión de sistema, usuarios, contenido y aliados.",
+    "accessDenied": "Acceso Denegado",
+    "accessDeniedDesc": "No tienes privilegios de administrador.",
+    "returnToApp": "Volver a la aplicación",
+    "tabs": {
+      "systemConfig": "Configuración",
+      "userManagement": "Usuarios",
+      "newsManager": "Noticias",
+      "storeDirectory": "Directorio de Tiendas",
+      "pushNotifications": "Notificaciones Push"
+    },
+    "saveChanges": "Guardar Cambios",
+
+    "systemConfig": {
+      "tradeVerification": "Lógica de Verificación de Trades",
+      "minWaitHours": "Espera Mínima (Horas)",
+      "maxWindowHours": "Ventana Máxima (Horas)",
+      "tierConfig": "Configuración del Tier {tier}",
+      "paymentLink": "Enlace de Pago (Stripe/MercadoPago)",
+      "paymentLinkHint": "Pega el link de Mercado Pago o Stripe. Los usuarios serán redirigidos aquí al mejorar su plan.",
+      "maxBinders": "Máx. Binders",
+      "maxCardsPerBinder": "Máx. Cartas por Binder",
+      "trade": "Intercambio",
+      "wishlist": "Deseos",
+      "auction": "Subasta",
+      "general": "General"
+    },
+
+    "userManagement": {
+      "tierManagement": "Gestión de Tier de Usuario",
+      "emailPlaceholder": "Email de Google del usuario",
+      "updateTier": "Actualizar Tier",
+      "downgradeWarning": "Advertencia: Bajar el tier de un usuario puede bloquear sus binders existentes si exceden los nuevos límites.",
+      "dangerZone": "Zona de Peligro",
+      "wipeDatabase": "Borrar Base de Datos"
+    },
+
+    "newsManager": {
+      "title": "Noticias",
+      "addNews": "+ Agregar Noticia"
+    },
+
+    "storeDirectory": {
+      "title": "Directorio de Tiendas",
+      "addStore": "+ Agregar Tienda"
+    },
+
+    "pushNotifications": {
+      "title": "Enviar Notificación Push",
+      "titleLabel": "Título de la Notificación",
+      "titlePlaceholder": "ej. ¡Nuevos Binders Disponibles!",
+      "messageLabel": "Contenido del Mensaje",
+      "messagePlaceholder": "ej. Revisa las últimas cartas de los mejores traders...",
+      "targetAudience": "Audiencia Objetivo",
+      "allUsers": "Todos los Usuarios",
+      "activeWishlist": "Con Wishlist Activa",
+      "activeBidders": "Pujadores Activos",
+      "send": "Enviar Notificación"
+    }
+  },
+
+  "login": {
+    "title": "Frantic Search",
+    "subtitle": "Deja de buscar. Empieza a encontrar.",
+    "googleButton": "Continuar con Google",
+    "guestButton": "Entrar como Invitado",
+    "guestDisclaimer": "El modo invitado es limitado. Tus datos no se guardan entre sesiones."
+  },
+
+  "common": {
+    "loading": "Cargando...",
+    "error": "Ocurrió un error",
+    "retry": "Reintentar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "confirm": "Confirmar",
+    "close": "Cerrar",
+    "back": "Volver",
+    "next": "Siguiente",
+    "search": "Buscar",
+    "noResults": "Sin resultados",
+    "seeAll": "Ver todos",
+    "unknown": "Desconocido",
+    "magicTheGathering": "Magic: The Gathering",
+    "allGames": "Todos los Juegos"
+  },
+
+  "currency": {
+    "usd": "USD ($)",
+    "pen": "PEN (S/)",
+    "formatPen": "S/ {amount}",
+    "formatUsd": "US$ {amount}",
+    "ckReference": "CK: US$ {amount}"
+  },
+
+  "feedback": {
+    "title": "Califica esta interacción",
+    "subtitle": "Tu feedback ayuda a construir la reputación de la comunidad.",
+    "malo": "Malo",
+    "bueno": "Bueno",
+    "excelente": "Excelente",
+    "noConcretado": "No se concretó",
+    "pendingOther": "Esperando feedback del otro participante",
+    "completed": "Feedback completado",
+    "submit": "Enviar Feedback"
+  },
+
+  "errors": {
+    "binderLimitReached": "Alcanzaste el límite de binders para tu plan.",
+    "cardLimitReached": "Este binder alcanzó su límite de cartas.",
+    "showcaseLimitReached": "Alcanzaste el límite de cartas en vitrina.",
+    "alertLimitReached": "Alcanzaste el límite de alertas de cartas.",
+    "auctionEnded": "Esta subasta ya terminó.",
+    "bidTooLow": "Tu puja debe ser mayor a la puja actual.",
+    "selfBidForbidden": "No puedes pujar en tu propia subasta.",
+    "upgradeRequired": "Necesitas mejorar tu plan para esta acción.",
+    "upgradeCta": "Ver Planes",
+    "networkError": "Error de conexión. Verifica tu internet.",
+    "genericError": "Algo salió mal. Intenta de nuevo."
+  },
+
+  "time": {
+    "justNow": "Justo ahora",
+    "minutesAgo": "Hace {count} min",
+    "hoursAgo": "Hace {count} h",
+    "daysAgo": "Hace {count} d",
+    "daysLeft": "{count}d {hours}h",
+    "hoursLeft": "{hours}h {minutes}m",
+    "minutesLeft": "{minutes}m",
+    "expired": "Expirado"
+  }
+}

@@ -5,6 +5,7 @@ import { MatchResult, Card } from '../types';
 import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star, CheckCircle, Clock } from 'lucide-react';
 import PremiumLoading from '../components/PremiumLoading';
 import { motion } from 'framer-motion';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface MarketMatchProps {
     onViewProfile: (userId: string) => void;
@@ -21,7 +22,9 @@ interface RenderMatchCardProps {
     contactState: ContactState;
 }
 
-const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onViewProfile, onContact, onMarkContacted, contactState }) => (
+const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onViewProfile, onContact, onMarkContacted, contactState }) => {
+  const { t } = useTranslation();
+  return (
     <div className={`bg-slate-900 border rounded-xl p-4 flex flex-col md:flex-row gap-4 items-start md:items-center hover:border-violet-500/30 transition-colors ${isExact ? 'border-green-500/30 bg-green-950/10' : 'border-slate-800'}`}>
          {/* Card Info */}
          <div className="flex gap-4 items-center flex-1">
@@ -44,12 +47,12 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
                      {/* Price Display */}
                      {match.matchCard.customPrice && match.matchCard.customPrice > 0 ? (
                           <span className="text-[10px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded border border-green-800 font-bold">
-                              Ask: {match.matchCard.currency === 'PEN' ? 'S/' : '$'} {match.matchCard.customPrice.toFixed(2)}
+                              {t('market.askLabel')} {match.matchCard.currency === 'PEN' ? 'S/' : '$'} {match.matchCard.customPrice.toFixed(2)}
                           </span>
                      ) : (
                           match.matchCard.price && match.matchCard.price > 0 && (
                               <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50">
-                                  Est: ${match.matchCard.price.toFixed(2)}
+                                  {t('market.estLabel')} ${match.matchCard.price.toFixed(2)}
                               </span>
                           )
                      )}
@@ -91,7 +94,7 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
                       onClick={() => onContact(match)}
                       className="w-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition-colors"
                   >
-                      <MessageCircle size={14} /> Contact
+                      <MessageCircle size={14} /> {t('market.contactButton')}
                   </button>
               )}
               {contactState === 'opened' && (
@@ -99,19 +102,21 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
                       onClick={() => onMarkContacted(match)}
                       className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition-colors"
                   >
-                      <CheckCircle size={14} /> Marcar como contactado
+                      <CheckCircle size={14} /> {t('market.marcarContactado')}
                   </button>
               )}
               {contactState === 'marked' && (
                   <div className="w-full bg-slate-800/60 text-slate-500 text-xs font-bold py-2 rounded flex items-center justify-center gap-2 border border-slate-700 cursor-default">
-                      <Clock size={14} /> Feedback pendiente
+                      <Clock size={14} /> {t('market.feedbackPendiente')}
                   </div>
               )}
          </div>
     </div>
-);
+  );
+};
 
 const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
+  const { t } = useTranslation();
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -139,7 +144,7 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
 
   const handleContact = (match: MatchResult) => {
       if (match.seller.whatsapp) {
-          const text = `Hi! I saw you have ${match.matchCard.name} for trade on Lotus Exchange. Is it still available?`;
+          const text = `¡Hola! Vi que tienes ${match.matchCard.name} disponible en Frantic Search. ¿Sigue disponible?`;
           window.open(`https://wa.me/${match.seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank');
           setContactedMatchIds(prev => new Set([...prev, match.matchCard.id]));
       } else {
@@ -190,14 +195,14 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24">
        <header>
-          <h1 className="text-2xl font-bold text-white">Market Matches</h1>
-          <p className="text-slate-400">We found people selling cards from your Wishlists.</p>
+          <h1 className="text-2xl font-bold text-white">{t('market.title')}</h1>
+          <p className="text-slate-400">{t('market.subtitle')}</p>
        </header>
 
        {groupedMatches.length === 0 ? (
            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
-               <h3 className="text-xl text-white mb-2">No matches found yet</h3>
-               <p className="text-slate-400">Add more cards to your "Wishlist" binders, or wait for others to list them.</p>
+               <h3 className="text-xl text-white mb-2">{t('market.noMatchesTitle')}</h3>
+               <p className="text-slate-400">{t('market.noMatchesDesc')}</p>
            </div>
        ) : (
            <div className="space-y-8">
@@ -213,7 +218,7 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
                                     <img src={group.wantCard.imageUrl} className="w-8 h-12 rounded object-cover border border-slate-700 opacity-60 grayscale" alt="" />
                                 </div>
                                 <div>
-                                    <h3 className="text-slate-300 font-medium text-sm">You want: <span className="text-white font-bold">{group.wantCard.name}</span></h3>
+                                    <h3 className="text-slate-300 font-medium text-sm">{t('market.youWant')} <span className="text-white font-bold">{group.wantCard.name}</span></h3>
                                     <p className="text-xs text-slate-500">{group.wantCard.setName} (Your Version)</p>
                                 </div>
                            </div>

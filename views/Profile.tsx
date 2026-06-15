@@ -1,12 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth, cardService, tradeService, storeDirectoryService } from '../services/store';
+import { auth, cardService, tradeService, storeDirectoryService, auctionService, adminService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
 import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameType, TradeInteraction, FeedbackValue, StoreProfile, InventoryDecision, InventoryDecisionResult } from '../types';
 // Added AlertTriangle to imports
 import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown, BellOff } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
-import { db } from '../services/firebase';
 import MTGCard from '../components/MTGCard';
 
 interface ProfileProps {
@@ -186,13 +185,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
   const loadMyAuctions = async (uid: string) => {
       try {
-          const snap = await db.collection("cards")
-            .where("userId", "==", uid)
-            .where("binderType", "==", BinderType.AUCTION)
-            .get();
-          
-          const auctionCards: Card[] = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Card));
-          
+          const auctionCards = await auctionService.getUserAuctions(uid);
+
           const idsToFetch = new Set<string>();
           auctionCards.forEach(c => {
               if (c.topBidderId) idsToFetch.add(c.topBidderId);
@@ -200,18 +194,10 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
           });
 
           if (idsToFetch.size > 0) {
-              const names: Record<string, string> = {};
-              await Promise.all(Array.from(idsToFetch).map(async (id) => {
-                  try {
-                      const doc = await db.collection("users").doc(id).get();
-                      if (doc.exists) {
-                          names[id] = (doc.data() as any)?.displayName || 'Unknown';
-                      }
-                  } catch (e) { console.warn("Failed to fetch bidder name", e); }
-              }));
+              const names = await adminService.getUserDisplayNames(Array.from(idsToFetch));
               setBidderNames(names);
           }
-          
+
           setMyAuctions(auctionCards);
       } catch (e) { console.error("Failed to load auctions", e); }
   };
