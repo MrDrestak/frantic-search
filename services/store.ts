@@ -1523,6 +1523,13 @@ export const matchingService = {
 
     const sellerMap = Object.fromEntries((sellers || []).map((s: any) => [s.id, mapToUserProfile(s)]));
 
+    const TIER_RANK: Record<string, number> = {
+      [SubscriptionTier.MYTHIC]:   0,
+      [SubscriptionTier.RARE]:     1,
+      [SubscriptionTier.UNCOMMON]: 2,
+      [SubscriptionTier.COMMON]:   3,
+    };
+
     const results: MatchResult[] = [];
     for (const m of matches) {
       const exactWant = wishlistCards.find((w: any) => w.name === m.name && w.scryfall_id === m.scryfall_id);
@@ -1539,6 +1546,13 @@ export const matchingService = {
         });
       }
     }
+
+    results.sort((a, b) => {
+      const tierDiff = (TIER_RANK[a.seller.subscriptionTier] ?? 9) - (TIER_RANK[b.seller.subscriptionTier] ?? 9);
+      if (tierDiff !== 0) return tierDiff;
+      return b.seller.traderScore - a.seller.traderScore;
+    });
+
     return results;
   },
 };

@@ -2,7 +2,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { matchingService, auth, tradeService } from '../services/store';
 import { MatchResult, Card } from '../types';
-import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star, CheckCircle, Clock } from 'lucide-react';
+import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star, CheckCircle, Clock, Crown } from 'lucide-react';
+import { SubscriptionTier } from '../types';
 import PremiumLoading from '../components/PremiumLoading';
 import { motion } from 'framer-motion';
 import { useTranslation } from '../i18n/useTranslation';
@@ -61,19 +62,24 @@ const RenderMatchCard: React.FC<RenderMatchCardProps> = ({ match, isExact, onVie
          </div>
 
          {/* Seller Info */}
-         <div className="w-full md:w-56 bg-slate-950 rounded-lg p-3 border border-slate-800 shrink-0">
+         <div className={`w-full md:w-56 rounded-lg p-3 border shrink-0 ${match.seller.subscriptionTier === SubscriptionTier.MYTHIC ? 'bg-purple-950/20 border-purple-700/40' : 'bg-slate-950 border-slate-800'}`}>
               <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
                           {match.seller.displayName.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                          <button 
+                          <button
                               onClick={() => onViewProfile(match.seller.id)}
                               className="text-sm font-bold text-white hover:text-violet-400 hover:underline text-left truncate block"
                           >
                               {match.seller.displayName}
                           </button>
+                          {match.seller.subscriptionTier === SubscriptionTier.MYTHIC && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold text-purple-400 uppercase tracking-wide">
+                                  <Crown size={8} /> Tienda Verificada
+                              </span>
+                          )}
                       </div>
                   </div>
                   {/* Trader Score Badge */}
