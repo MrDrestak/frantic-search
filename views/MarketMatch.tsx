@@ -266,7 +266,7 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
                                    <div className="bg-amber-900/10 border border-amber-500/20 rounded-lg p-3 flex items-center gap-3">
                                        <AlertTriangle className="text-amber-500 shrink-0" size={18} />
                                        <p className="text-sm text-amber-200/80">
-                                           Exact match not found. Showing <b>{group.loose.length}</b> similar cards from other sets.
+                                           {t('market.exactMatchNotFound')}
                                        </p>
                                    </div>
                                    {group.loose.map(m => (

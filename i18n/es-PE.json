@@ -8,7 +8,7 @@
 
   "nav": {
     "home": "Inicio",
-    "binders": "Binders",
+    "binders": "Folders",
     "market": "Mercado",
     "auctions": "Subastas",
     "showcase": "Vitrina",
@@ -59,9 +59,9 @@
     "wishlist": "Lista de Deseos",
     "auction": "Subasta",
     "uniqueCards": "{current} / {max} Cartas",
-    "uploadCsv": "Subir CSV",
-    "addCard": "+ Agregar Carta",
-    "filterPlaceholder": "Buscar cartas por nombre...",
+    "uploadCsv": "Carga Masiva",
+    "addCard": "Añadir Carta",
+    "filterPlaceholder": "Filtra por el nombre de la carta",
     "emptyTitle": "Este binder está vacío.",
     "emptyCta": "Empieza a agregar cartas",
     "emptyHint": "Busca una carta por nombre y agrégala a tu binder.",
@@ -112,7 +112,7 @@
     "contactButton": "Contactar",
     "marcarContactado": "Marcar como contactado",
     "feedbackPendiente": "Feedback pendiente",
-    "exactMatchNotFound": "Coincidencia exacta no encontrada. Mostrando {count} cartas similares de otras ediciones."
+    "exactMatchNotFound": "No hemos podido encontrar exactamente la carta que buscas, pero te mostramos cartas similares de otros sets."
   },
 
   "auctions": {
@@ -163,9 +163,12 @@
 
   "profile": {
     "myProfile": "Mi Perfil",
-    "myProfileSubtitle": "Administra tu identidad como trader y tu tienda pública.",
+    "myProfileSubtitle": "Maneja tu Perfil, anuncios y Tienda principal.",
     "traderProfile": "Perfil del Trader",
-    "traderProfileSubtitle": "Detalles del vendedor e inventario.",
+    "traderProfileSubtitle": "Conoce al trader y su inventario.",
+    "announcement": "Tu Anuncio",
+    "storeAnnouncement": "Tu Anuncio / Estado de Tienda",
+    "storeAnnouncementPlaceholder": "ej. Compro colecciones este fin de semana. Cerrado los lunes.",
     "shareProfile": "Compartir Perfil",
     "editProfile": "Editar Perfil",
     "updatePlan": "Cambiar Plan",
@@ -180,8 +183,8 @@
     "revealContact": "Revelar Contacto",
     "preferredStore": "Tienda Preferida",
     "openInMaps": "Abrir en Google Maps",
-    "publicStorefront": "Tienda Pública",
-    "searchInventory": "Buscar inventario...",
+    "publicStorefront": "Tienda Principal",
+    "searchInventory": "Buscar en tu Tienda por nombre",
     "allGames": "Todos los Juegos",
     "guestTrader": "Trader Invitado",
     "plays": "Juega:"

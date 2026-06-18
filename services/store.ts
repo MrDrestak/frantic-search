@@ -540,16 +540,16 @@ export const auth = {
       } catch { /* ignore — full profile loads async below */ }
     }
 
-    // Safety valve: if the entire init chain hangs, unblock the app after 10s.
-    // Clears ALL supabase localStorage state (token + PKCE residue) so the
-    // next page load starts clean instead of hanging again.
+    // Safety valve: if the entire init chain hangs, unblock the app after 30s.
+    // IMPORTANT: we do NOT wipe tokens here. The old 10s wipe caused permanent
+    // logouts when the browser throttled timers in background tabs — the SDK was
+    // still initializing but the safety fired first and destroyed the session.
+    // If the page is currently hidden, skip entirely (we're throttled, not hung).
     const _authSafety = setTimeout(() => {
-      console.warn('[auth] initialization timed out — clearing stale session');
-      try {
-        Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
-      } catch { /* ignore */ }
+      if (document.visibilityState === 'hidden') return;
+      console.warn('[auth] initialization timed out — showing login (session preserved)');
       callback(null);
-    }, 10000);
+    }, 30000);
 
     // Single source of truth for auth state: onAuthStateChange with INITIAL_SESSION.
     // We no longer call getSession() separately — that created a race condition where
@@ -566,7 +566,9 @@ export const auth = {
           if (session?.user) {
             let activeSession = session;
             const nowSec = Math.floor(Date.now() / 1000);
-            if (session.expires_at && session.expires_at < nowSec + 30) {
+            const tokenExpired = !!session.expires_at && session.expires_at < nowSec;
+            const tokenNearExpiry = !!session.expires_at && session.expires_at < nowSec + 60;
+            if (tokenNearExpiry) {
               try {
                 const result = await Promise.race([
                   supabase.auth.refreshSession({ refresh_token: session.refresh_token }),
@@ -576,15 +578,22 @@ export const auth = {
                 ]);
                 if (result.data?.session) {
                   activeSession = result.data.session;
-                } else {
+                } else if (tokenExpired) {
+                  // Truly expired AND refresh returned nothing — must re-login
                   clearTimeout(_authSafety);
                   callback(null);
                   return;
                 }
+                // Near-expiry but refresh returned null: proceed, token still valid briefly
               } catch {
-                clearTimeout(_authSafety);
-                callback(null);
-                return;
+                if (tokenExpired) {
+                  // Truly expired AND refresh timed out — must re-login
+                  clearTimeout(_authSafety);
+                  callback(null);
+                  return;
+                }
+                // Near-expiry refresh failed but token still technically valid — let user in
+                // visibilitychange handler will retry the refresh when the tab is next focused
               }
             }
             profile = await getOrCreateProfile(activeSession.user);
@@ -1169,10 +1178,13 @@ export const cardService = {
         return [];
       }
     };
-    const timeout = new Promise<Card[]>(resolve =>
-      setTimeout(() => { console.warn('[getTraderInventory] timed out'); resolve([]); }, 10000)
-    );
-    return Promise.race([run(), timeout]);
+    let timeoutId!: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<Card[]>(resolve => {
+      timeoutId = setTimeout(() => { console.warn('[getTraderInventory] timed out'); resolve([]); }, 10000);
+    });
+    const result = await Promise.race([run(), timeout]);
+    clearTimeout(timeoutId);
+    return result;
   },
 
   // Bulk insert — skips per-card limit checks and alert triggers.

@@ -413,8 +413,8 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     </button>
                 )}
                 <div>
-                    <h1 className="text-2xl font-bold text-white mb-2">{isOwnProfile ? 'My Profile' : 'Trader Profile'}</h1>
-                    <p className="text-slate-400">{isOwnProfile ? 'Manage your trader identity & public storefront.' : 'View trader details and inventory.'}</p>
+                    <h1 className="text-2xl font-bold text-white mb-2">{isOwnProfile ? 'Mi Perfil' : 'Perfil del Trader'}</h1>
+                    <p className="text-slate-400">{isOwnProfile ? 'Maneja tu Perfil, anuncios y Tienda principal.' : 'Conoce al trader y su inventario.'}</p>
                 </div>
             </div>
             {!isEditing && (
@@ -464,7 +464,7 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
             <div className="bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-500/30 p-4 rounded-xl mb-6 flex items-start gap-4 shadow-lg">
                 <div className="p-2 bg-amber-500/20 rounded-lg text-amber-500 shrink-0"><Megaphone size={24} /></div>
                 <div>
-                    <h3 className="text-amber-200 font-bold mb-1">Announcement</h3>
+                    <h3 className="text-amber-200 font-bold mb-1">Tu Anuncio</h3>
                     <p className="text-amber-100/90 text-sm whitespace-pre-wrap">{user.storeAnnouncement}</p>
                 </div>
             </div>
@@ -733,16 +733,16 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     <form onSubmit={handleSave} className="space-y-6 animate-in fade-in duration-300">
                         <div className="grid grid-cols-1 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Nickname (Display Name)</label>
-                                <div className="relative"><User className="absolute left-3 top-3 text-slate-500" size={18} /><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none" placeholder="e.g. Jace Beleren" required /></div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Apodo (Nombre público)</label>
+                                <div className="relative"><User className="absolute left-3 top-3 text-slate-500" size={18} /><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none" placeholder="ej. Jace Beleren" required /></div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Store Status / Announcement</label>
-                                <div className="relative"><Megaphone className="absolute left-3 top-3 text-slate-500" size={18} /><textarea value={storeAnnouncement} onChange={(e) => setStoreAnnouncement(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none h-24 resize-none" placeholder="e.g. Buying collections this weekend! Closed on Mondays." maxLength={150} /></div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Tu Anuncio / Estado de Tienda</label>
+                                <div className="relative"><Megaphone className="absolute left-3 top-3 text-slate-500" size={18} /><textarea value={storeAnnouncement} onChange={(e) => setStoreAnnouncement(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none h-24 resize-none" placeholder="ej. Compro colecciones este fin de semana. Cerrado los lunes." maxLength={150} /></div>
                                 <p className="text-xs text-slate-500 mt-1 text-right">{storeAnnouncement.length}/150</p>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Preferred Game</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Juego Preferido</label>
                                 <div className="relative"><Gamepad2 className="absolute left-3 top-3 text-slate-500" size={18} /><select value={preferredGame} onChange={(e) => setPreferredGame(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none appearance-none"><option value="">Every Game (Show All)</option>{Object.values(GameType).map((g) => ( <option key={g} value={g}>{g}</option> ))}</select></div>
                             </div>
                             <div>
@@ -775,14 +775,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
 
         {!isEditing && (
             <div className="space-y-6">
-                <div className="flex items-center gap-2 mb-2"><div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400"><Layers size={20} /></div><h2 className="text-xl font-bold text-white">Public Storefront</h2></div>
+                <div className="flex items-center gap-2 mb-2"><div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400"><Layers size={20} /></div><h2 className="text-xl font-bold text-white">Tienda Principal</h2></div>
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
                      <div className="mb-6 flex flex-col md:flex-row gap-4">
-                        <div className="relative flex-1"><Search className="absolute left-3 top-2.5 text-slate-500" size={18} /><input type="text" placeholder="Search inventory..." value={storefrontSearch} onChange={(e) => setStorefrontSearch(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
-                        <div className="relative w-full md:w-48"><Filter className="absolute left-3 top-2.5 text-slate-500" size={18} /><select value={gameFilter} onChange={(e) => setGameFilter(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"><option value="">All Games</option>{Object.values(GameType).map(g => ( <option key={g} value={g}>{g}</option> ))}</select></div>
+                        <div className="relative flex-1"><Search className="absolute left-3 top-2.5 text-slate-500" size={18} /><input type="text" placeholder="Buscar en tu Tienda por nombre" value={storefrontSearch} onChange={(e) => setStorefrontSearch(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+                        <div className="relative w-full md:w-48"><Filter className="absolute left-3 top-2.5 text-slate-500" size={18} /><select value={gameFilter} onChange={(e) => setGameFilter(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"><option value="">Todos los Juegos</option>{Object.values(GameType).map(g => ( <option key={g} value={g}>{g}</option> ))}</select></div>
                      </div>
-                     {isLoadingStorefront ? ( <div className="text-center py-10 text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" />Loading inventory...</div> ) : (
-                         <><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">{displayedCards.map(card => ( <div key={card.id} className="relative"><MTGCard card={card} enableShowcase={false} /></div> ))}</div>{filteredStorefront.length > ITEMS_PER_PAGE && ( <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-800"><button onClick={handlePrevPage} disabled={currentPage === 1} className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors"><ChevronLeft size={16} /> Prev</button><span className="text-sm text-slate-500">Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}</span><button onClick={handleNextPage} disabled={currentPage === totalPages} className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors">Next <ChevronRight size={16} /></button></div> )}</>
+                     {isLoadingStorefront ? ( <div className="text-center py-10 text-slate-500"><Loader2 className="animate-spin mx-auto mb-2" />Cargando inventario...</div> ) : (
+                         <><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">{displayedCards.map(card => ( <div key={card.id} className="relative"><MTGCard card={card} enableShowcase={false} /></div> ))}</div>{filteredStorefront.length > ITEMS_PER_PAGE && ( <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-800"><button onClick={handlePrevPage} disabled={currentPage === 1} className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors"><ChevronLeft size={16} /> Ant.</button><span className="text-sm text-slate-500">Página <span className="text-white font-bold">{currentPage}</span> de {totalPages}</span><button onClick={handleNextPage} disabled={currentPage === totalPages} className="flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded hover:bg-slate-800 transition-colors">Sig. <ChevronRight size={16} /></button></div> )}</>
                      )}
                 </div>
             </div>
