@@ -372,6 +372,35 @@ async function directFetch(
   }
 }
 
+async function directInsert<T>(table: string, body: Record<string, any>): Promise<T> {
+  const { supabaseUrl, anonKey, accessToken } = getDirectFetchHeaders();
+  const url = `${supabaseUrl}/rest/v1/${table}`;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        Prefer: 'return=representation',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error((errBody as any).message || (errBody as any).hint || `HTTP ${res.status}`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows[0] : rows;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 async function getOrCreateProfile(authUser: any): Promise<UserProfile> {
   const { data } = await supabase.from('users').select('*').eq('id', authUser.id).single();
   if (data) {
@@ -1292,35 +1321,30 @@ export const cardService = {
     const binderTypeDb = resolvedBinderType ? mapBinderTypeToDb(resolvedBinderType) : null;
     const isAuction = binderTypeDb === 'AUCTION';
 
-    const { data, error } = await supabase
-      .from('cards')
-      .insert({
-        binder_id: cardData.binderId,
-        user_id: cardData.userId,
-        scryfall_id: cardData.scryfallId,
-        name: cardData.name,
-        set_name: cardData.setName,
-        collector_number: cardData.collectorNumber,
-        image_url: cardData.imageUrl,
-        rarity: cardData.rarity,
-        condition: mapConditionToDb(cardData.condition || CardCondition.NM),
-        is_foil: cardData.isFoil || false,
-        quantity: isAuction ? 1 : (cardData.quantity || 1),
-        custom_price: cardData.customPrice ?? null,
-        currency: cardData.currency ?? null,
-        binder_type: binderTypeDb,
-        purchase_url: cardData.purchaseUrl ?? null,
-        game: mapGameTypeToDb(cardData.game || GameType.MTG),
-        is_showcase: false,
-        base_price: cardData.basePrice ?? null,
-        buy_it_now_price: cardData.buyItNowPrice ?? null,
-        current_bid: cardData.basePrice ?? 0,
-        auction_status: isAuction ? (cardData.auctionStatus || AuctionStatus.ACTIVE).toString() : null,
-        auction_end_date: cardData.auctionEndDate ? new Date(cardData.auctionEndDate).toISOString() : null,
-      })
-      .select('*')
-      .single();
-    if (error) throw error;
+    const data = await directInsert<any>('cards', {
+      binder_id: cardData.binderId,
+      user_id: cardData.userId,
+      scryfall_id: cardData.scryfallId,
+      name: cardData.name,
+      set_name: cardData.setName,
+      collector_number: cardData.collectorNumber,
+      image_url: cardData.imageUrl,
+      rarity: cardData.rarity,
+      condition: mapConditionToDb(cardData.condition || CardCondition.NM),
+      is_foil: cardData.isFoil || false,
+      quantity: isAuction ? 1 : (cardData.quantity || 1),
+      custom_price: cardData.customPrice ?? null,
+      currency: cardData.currency ?? null,
+      binder_type: binderTypeDb,
+      purchase_url: cardData.purchaseUrl ?? null,
+      game: mapGameTypeToDb(cardData.game || GameType.MTG),
+      is_showcase: false,
+      base_price: cardData.basePrice ?? null,
+      buy_it_now_price: cardData.buyItNowPrice ?? null,
+      current_bid: cardData.basePrice ?? 0,
+      auction_status: isAuction ? (cardData.auctionStatus || AuctionStatus.ACTIVE).toString() : null,
+      auction_end_date: cardData.auctionEndDate ? new Date(cardData.auctionEndDate).toISOString() : null,
+    });
 
     // Trigger alerts for watchers
     const isTradeable = !binderTypeDb || binderTypeDb === 'FOR_TRADE' || binderTypeDb === 'AUCTION';
@@ -1360,7 +1384,7 @@ export const cardService = {
 
   removeCard: async (cardId: string) => {
     // card_count decremented automatically by trigger tr_cards_count
-    await supabase.from('cards').delete().eq('id', cardId);
+    await directFetch('DELETE', 'cards', null, `id=eq.${cardId}`);
   },
 
   toggleShowcase: async (cardId: string, isShowcase: boolean) => {
