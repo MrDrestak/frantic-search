@@ -194,7 +194,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             icon={<Folder size={18} className="text-violet-400" />}
                             label="Cartas en Folders"
                             value={userStats.folderCards}
-                            onClick={() => onNavigate('binders')}
+                            onClick={() => onNavigate('dashboard')}
                         />
                         <StatCard
                             icon={<Gavel size={18} className="text-amber-500" />}
@@ -206,7 +206,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             icon={<Heart size={18} className="text-pink-500" />}
                             label="Lista de Deseos"
                             value={userStats.wishlistCards}
-                            onClick={() => onNavigate('binders')}
+                            onClick={() => onNavigate('dashboard')}
                         />
                         <StatCard
                             icon={<MessageCircle size={18} className="text-green-400" />}
@@ -453,7 +453,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         </select>
                     </div>
                     <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-5 space-y-3 min-h-[420px]">
-                        {newsItems.filter(n => !newsFilter || n.game === newsFilter).slice(0, 5).map(news => (
+                        {newsItems.filter(ni => !newsFilter || ni.game === newsFilter).slice(0, 5).map(news => (
                             <a
                                 key={news.id}
                                 href={news.linkUrl}
