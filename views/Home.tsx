@@ -360,17 +360,18 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                     >
                         {filteredShowcaseItems.length > 0 ? (
                             <div className="h-full flex flex-col">
-                                {/* Cards row */}
-                                <div className="flex-1 flex items-center justify-center gap-3 px-4 pt-6 pb-2">
+                                {/* Cards row — dimensiones fijas para no depender del ancho del contenedor */}
+                                <div className="flex-1 flex items-center justify-center gap-6 px-4">
                                     {/* Prev */}
                                     {n > 1 && (
                                         <div
-                                            className="w-1/4 shrink-0 cursor-pointer opacity-40 hover:opacity-65 transition-opacity"
+                                            className="shrink-0 cursor-pointer opacity-40 hover:opacity-65 transition-opacity rounded-xl overflow-hidden shadow-md"
+                                            style={{ width: 100, height: 140 }}
                                             onClick={() => setActiveIndex(prevIdx)}
                                         >
                                             <img
                                                 src={filteredShowcaseItems[prevIdx].imageUrl}
-                                                className="w-full aspect-[5/7] object-cover rounded-xl shadow-md"
+                                                className="w-full h-full object-cover"
                                                 alt=""
                                             />
                                         </div>
@@ -379,33 +380,35 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                                     {/* Center */}
                                     <motion.div
                                         key={activeIndex}
-                                        initial={{ opacity: 0.7, scale: 0.97 }}
+                                        initial={{ opacity: 0.8, scale: 0.96 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ duration: 0.3 }}
-                                        className={`shrink-0 relative cursor-pointer ${n > 1 ? 'flex-1' : 'w-1/2'}`}
+                                        className="shrink-0 relative cursor-pointer rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+                                        style={{ width: 180, height: 252 }}
                                         onClick={() => onNavigate('showcase')}
                                     >
                                         <img
                                             src={filteredShowcaseItems[activeIndex].imageUrl}
-                                            className="w-full aspect-[5/7] object-cover rounded-2xl shadow-2xl ring-1 ring-white/10"
+                                            className="w-full h-full object-cover"
                                             alt={filteredShowcaseItems[activeIndex].name}
                                         />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent rounded-2xl" />
-                                        <div className="absolute bottom-0 left-0 right-0 p-4">
-                                            <h3 className="text-white font-bold text-base truncate">{filteredShowcaseItems[activeIndex].name}</h3>
-                                            <p className="text-slate-400 text-xs">{filteredShowcaseItems[activeIndex].sellerName}</p>
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
+                                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                                            <h3 className="text-white font-bold text-sm truncate">{filteredShowcaseItems[activeIndex].name}</h3>
+                                            <p className="text-slate-400 text-[10px]">{filteredShowcaseItems[activeIndex].sellerName}</p>
                                         </div>
                                     </motion.div>
 
                                     {/* Next */}
                                     {n > 1 && (
                                         <div
-                                            className="w-1/4 shrink-0 cursor-pointer opacity-40 hover:opacity-65 transition-opacity"
+                                            className="shrink-0 cursor-pointer opacity-40 hover:opacity-65 transition-opacity rounded-xl overflow-hidden shadow-md"
+                                            style={{ width: 100, height: 140 }}
                                             onClick={() => setActiveIndex(nextIdx)}
                                         >
                                             <img
                                                 src={filteredShowcaseItems[nextIdx].imageUrl}
-                                                className="w-full aspect-[5/7] object-cover rounded-xl shadow-md"
+                                                className="w-full h-full object-cover"
                                                 alt=""
                                             />
                                         </div>
