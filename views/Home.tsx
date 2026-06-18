@@ -197,7 +197,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         <Zap className="text-violet-400" size={20} />
                         <h2 className="text-xl font-bold text-white uppercase tracking-wider">Mi Resumen</h2>
                     </div>
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-4 space-y-3">
+                    <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl p-4 space-y-3">
                         <StatCard
                             icon={<Folder size={18} className="text-violet-400" />}
                             label="Cartas en Folders"
@@ -237,7 +237,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             </span>
                         )}
                     </div>
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group min-h-[340px]">
+                    <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group">
                         {featuredAuction ? (
                             <div onClick={() => onNavigate('auctions')} className="h-full flex flex-col cursor-pointer">
                                 <div className="flex-1 relative overflow-hidden">
@@ -286,45 +286,45 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                         <MapPin className="text-green-500" size={20} />
                         <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.partnerStores')}</h2>
                     </div>
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-5 min-h-[340px]">
+                    <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl p-5">
                         {stores.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-slate-600 italic text-sm">Próximamente más tiendas aliadas...</div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 h-full">
                                 {stores.slice(0, 6).map(store => (
-                                    <div key={store.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col items-center gap-2 hover:border-green-500/30 transition-all group">
-                                        {/* Logo */}
+                                    <div key={store.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col h-full hover:border-green-500/30 transition-all group">
+                                        {/* Logo — crece para llenar el espacio disponible */}
                                         <div
-                                            className="w-full cursor-pointer"
+                                            className="flex-1 flex flex-col items-center justify-center cursor-pointer min-h-0"
                                             onClick={() => store.linkedUserId ? onViewProfile(store.linkedUserId) : window.open(store.websiteUrl, '_blank')}
                                         >
-                                            <div className="w-full aspect-square bg-white rounded-xl flex items-center justify-center p-3 border-2 border-transparent group-hover:border-green-500/20 shadow-md overflow-hidden mb-2 transition-all">
+                                            <div className="w-full bg-white rounded-xl flex items-center justify-center p-3 border-2 border-transparent group-hover:border-green-500/20 shadow-md overflow-hidden transition-all" style={{ aspectRatio: '1/1' }}>
                                                 <img src={store.logoUrl} alt={store.name} className="w-full h-full object-contain" />
                                             </div>
-                                            <h3 className="text-white font-bold text-xs text-center truncate">{store.name}</h3>
+                                            <h3 className="text-white font-bold text-xs text-center truncate w-full mt-2">{store.name}</h3>
                                         </div>
 
-                                        {/* Maps link */}
-                                        <a
-                                            href={store.mapsUrl || '#'}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            onClick={e => { if (!store.mapsUrl) e.preventDefault(); e.stopPropagation(); }}
-                                            className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300 transition-colors w-full justify-center"
-                                        >
-                                            <MapPin size={9} className="shrink-0" />
-                                            <span className="truncate">{store.location}</span>
-                                            {store.mapsUrl && <ExternalLink size={8} className="shrink-0 opacity-60" />}
-                                        </a>
-
-                                        {/* Eventos button */}
-                                        <button
-                                            onClick={() => setEventsModalStore(store)}
-                                            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-700 hover:border-amber-500/50 hover:bg-amber-500/5 text-[10px] font-bold text-slate-400 hover:text-amber-400 transition-all"
-                                        >
-                                            <Calendar size={10} />
-                                            Eventos
-                                        </button>
+                                        {/* Bottom: Maps + Eventos */}
+                                        <div className="space-y-2 mt-3 shrink-0">
+                                            <a
+                                                href={store.mapsUrl || '#'}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                onClick={e => { if (!store.mapsUrl) e.preventDefault(); e.stopPropagation(); }}
+                                                className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300 transition-colors w-full justify-center"
+                                            >
+                                                <MapPin size={9} className="shrink-0" />
+                                                <span className="truncate">{store.location}</span>
+                                                {store.mapsUrl && <ExternalLink size={8} className="shrink-0 opacity-60" />}
+                                            </a>
+                                            <button
+                                                onClick={() => setEventsModalStore(store)}
+                                                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-700 hover:border-amber-500/50 hover:bg-amber-500/5 text-[10px] font-bold text-slate-400 hover:text-amber-400 transition-all"
+                                            >
+                                                <Calendar size={10} />
+                                                Eventos
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -354,7 +354,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                     </div>
 
                     <div
-                        className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden min-h-[420px]"
+                        className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden"
                         onMouseEnter={() => setIsHoveringCarousel(true)}
                         onMouseLeave={() => setIsHoveringCarousel(false)}
                     >
@@ -465,7 +465,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             {Object.values(GameType).map(g => <option key={g} value={g}>{g}</option>)}
                         </select>
                     </div>
-                    <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl p-5 space-y-3 min-h-[420px]">
+                    <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl p-5 space-y-3 overflow-y-auto">
                         {newsItems.filter(ni => !newsFilter || ni.game === newsFilter).slice(0, 5).map(news => (
                             <a
                                 key={news.id}
