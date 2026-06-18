@@ -338,78 +338,162 @@ const SystemConfigTab = () => {
     );
 };
 
+const TIER_COLORS: Record<string, string> = {
+    COMMON:   'text-slate-400 border-slate-600 bg-slate-800/50',
+    UNCOMMON: 'text-green-400 border-green-700 bg-green-900/20',
+    RARE:     'text-blue-400 border-blue-700 bg-blue-900/20',
+    MYTHIC:   'text-purple-400 border-purple-700 bg-purple-900/20',
+};
+
 const UserManagementTab = () => {
     const [targetEmail, setTargetEmail] = useState('');
     const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(SubscriptionTier.RARE);
+    const [expiresAt, setExpiresAt] = useState('');
+    const [isPermanent, setIsPermanent] = useState(false);
     const [isAssigning, setIsAssigning] = useState(false);
+    const [lastResult, setLastResult] = useState<{ email: string; tier: string; expires: string } | null>(null);
     const [isWiping, setIsWiping] = useState(false);
 
     const handleUpdateTier = async () => {
-        if (!targetEmail.trim()) { alert('Please enter an email.'); return; }
+        if (!targetEmail.trim()) { alert('Ingresa un correo.'); return; }
+        if (!isPermanent && !expiresAt) { alert('Elige una fecha de expiración o marca como permanente.'); return; }
         setIsAssigning(true);
+        setLastResult(null);
         try {
-            await adminService.assignTierByEmail(targetEmail, selectedTier);
-            alert(`Success! ${targetEmail} is now assigned to the ${selectedTier} tier.`);
+            await adminService.assignTierByEmail(targetEmail, selectedTier, isPermanent ? undefined : expiresAt);
+            setLastResult({
+                email: targetEmail,
+                tier: selectedTier,
+                expires: isPermanent ? 'Permanente' : new Date(expiresAt).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }),
+            });
             setTargetEmail('');
-        } catch (e: any) { alert(e.message); }
+            setExpiresAt('');
+        } catch (e: any) {
+            alert('Error: ' + e.message);
+        }
         setIsAssigning(false);
     };
 
     const handleWipe = async () => {
-        if (!confirm("DANGER: WIPE ALL DATA?")) return;
+        if (!confirm("¿BORRAR TODA LA BASE DE DATOS? Esta acción es irreversible.")) return;
         setIsWiping(true);
         try {
             await adminService.wipeDatabase();
             window.location.reload();
-        } catch(e) { alert("Failed"); setIsWiping(false); }
-    }
+        } catch { alert("Falló."); setIsWiping(false); }
+    };
+
+    // Min date = tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDate = tomorrow.toISOString().split('T')[0];
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-                <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <UserPlus size={20} className="text-indigo-400" /> User Tier Management
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-5">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                    <UserPlus size={20} className="text-indigo-400" /> Gestión de Tier
                 </h3>
-                <div className="space-y-4">
-                    <div className="flex flex-col gap-3">
+
+                {/* Email */}
+                <div>
+                    <label className="text-xs uppercase font-bold text-slate-400 mb-1 block">Correo del usuario</label>
+                    <input
+                        type="email"
+                        placeholder="usuario@gmail.com"
+                        value={targetEmail}
+                        onChange={(e) => setTargetEmail(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                </div>
+
+                {/* Tier selector */}
+                <div>
+                    <label className="text-xs uppercase font-bold text-slate-400 mb-2 block">Tier a asignar</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {Object.values(SubscriptionTier).map(tier => (
+                            <button
+                                key={tier}
+                                type="button"
+                                onClick={() => setSelectedTier(tier)}
+                                className={`py-2 px-3 rounded-lg text-sm font-bold border transition-all ${
+                                    selectedTier === tier
+                                    ? TIER_COLORS[tier]
+                                    : 'text-slate-500 border-slate-800 bg-slate-950 hover:border-slate-600'
+                                }`}
+                            >
+                                {tier}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Expiration */}
+                <div>
+                    <label className="text-xs uppercase font-bold text-slate-400 mb-2 block">Duración</label>
+                    <div className="flex items-center gap-3 mb-3">
+                        <button
+                            type="button"
+                            onClick={() => setIsPermanent(false)}
+                            className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-all ${!isPermanent ? 'bg-violet-600/20 border-violet-500 text-violet-300' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                        >
+                            Con vencimiento
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsPermanent(true)}
+                            className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-all ${isPermanent ? 'bg-amber-600/20 border-amber-500 text-amber-300' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                        >
+                            Permanente
+                        </button>
+                    </div>
+                    {!isPermanent && (
                         <input
-                            type="text"
-                            placeholder="User Google Email"
-                            value={targetEmail}
-                            onChange={(e) => setTargetEmail(e.target.value)}
+                            type="date"
+                            value={expiresAt}
+                            min={minDate}
+                            onChange={(e) => setExpiresAt(e.target.value)}
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-violet-500"
                         />
-                        <div className="flex gap-2">
-                            <select
-                                value={selectedTier}
-                                onChange={(e) => setSelectedTier(e.target.value as SubscriptionTier)}
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-violet-500"
-                            >
-                                {Object.values(SubscriptionTier).map(tier => (
-                                    <option key={tier} value={tier}>{tier}</option>
-                                ))}
-                            </select>
-                            <button
-                                type="button"
-                                onClick={handleUpdateTier}
-                                disabled={isAssigning}
-                                className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-2 rounded-lg font-bold transition-all shadow-lg shadow-violet-900/20 flex items-center justify-center gap-2"
-                            >
-                                {isAssigning ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                Update Tier
-                            </button>
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 flex items-start gap-1">
-                        <AlertCircle size={10} className="mt-0.5 shrink-0" />
-                        Warning: Downgrading a user may lock their existing binders if they exceed the new tier limits.
-                    </p>
+                    )}
+                    {isPermanent && (
+                        <p className="text-xs text-amber-400/70 flex items-center gap-1">
+                            <AlertCircle size={10} /> Sin fecha de vencimiento — el tier no expira automáticamente.
+                        </p>
+                    )}
                 </div>
+
+                {/* Submit */}
+                <button
+                    type="button"
+                    onClick={handleUpdateTier}
+                    disabled={isAssigning}
+                    className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2"
+                >
+                    {isAssigning ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                    Asignar Tier
+                </button>
+
+                {/* Success feedback */}
+                {lastResult && (
+                    <div className="bg-green-900/20 border border-green-700/40 rounded-lg p-3 text-sm space-y-1">
+                        <p className="text-green-400 font-bold flex items-center gap-1"><UserCheck size={14} /> Tier actualizado</p>
+                        <p className="text-slate-300">{lastResult.email}</p>
+                        <p className="text-slate-400">Tier: <span className={`font-bold ${TIER_COLORS[lastResult.tier]?.split(' ')[0]}`}>{lastResult.tier}</span> · Vence: {lastResult.expires}</p>
+                    </div>
+                )}
+
+                <p className="text-[10px] text-slate-600 flex items-start gap-1">
+                    <AlertCircle size={10} className="mt-0.5 shrink-0" />
+                    Si bajas el tier del usuario sus binders podrían quedar bloqueados si superan los nuevos límites.
+                </p>
             </div>
+
             <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-6">
-                <h3 className="text-red-500 font-bold mb-2 flex items-center gap-2"><Trash2 size={20} /> Danger Zone</h3>
-                <button onClick={handleWipe} disabled={isWiping} className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold w-full justify-center">
-                    {isWiping ? <Loader2 className="animate-spin"/> : 'Wipe Database'}
+                <h3 className="text-red-500 font-bold mb-4 flex items-center gap-2"><Trash2 size={20} /> Zona de Peligro</h3>
+                <p className="text-slate-400 text-sm mb-4">Borra todos los datos de la base de datos. Esta acción es irreversible.</p>
+                <button onClick={handleWipe} disabled={isWiping} className="bg-red-600/10 hover:bg-red-600 hover:text-white text-red-500 border border-red-600/50 px-4 py-3 rounded-lg flex items-center gap-2 font-bold w-full justify-center transition-all">
+                    {isWiping ? <Loader2 className="animate-spin"/> : <><Trash2 size={16}/> Borrar Base de Datos</>}
                 </button>
             </div>
         </div>

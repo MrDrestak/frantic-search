@@ -697,13 +697,45 @@ export const configService = {
   getSystemConfig: () => currentSystemConfig,
 
   updateConfig: async (newConfig: GlobalConfig) => {
-    await supabase.from('settings').upsert({ key: 'global_config', value: newConfig });
-    currentConfig = newConfig;
+    const { supabaseUrl, anonKey, accessToken } = getDirectFetchHeaders();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 9000);
+    try {
+      const res = await fetch(`${supabaseUrl}/rest/v1/settings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({ key: 'global_config', value: newConfig }),
+        signal: controller.signal,
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).message || `HTTP ${res.status}`); }
+      currentConfig = newConfig;
+    } finally { clearTimeout(tid); }
   },
 
   updateSystemConfig: async (newSysConfig: SystemConfig) => {
-    await supabase.from('settings').upsert({ key: 'system_config', value: newSysConfig });
-    currentSystemConfig = newSysConfig;
+    const { supabaseUrl, anonKey, accessToken } = getDirectFetchHeaders();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 9000);
+    try {
+      const res = await fetch(`${supabaseUrl}/rest/v1/settings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({ key: 'system_config', value: newSysConfig }),
+        signal: controller.signal,
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).message || `HTTP ${res.status}`); }
+      currentSystemConfig = newSysConfig;
+    } finally { clearTimeout(tid); }
   },
 };
 
@@ -1019,8 +1051,11 @@ export const subscriptionService = {
 // ─── ADMIN SERVICE ────────────────────────────────────────────────────────────
 
 export const adminService = {
-  assignTierByEmail: async (email: string, tier: SubscriptionTier) => {
-    await directFetch('PATCH', 'users', { subscription_tier: mapSubscriptionTierToDb(tier) }, `email=eq.${encodeURIComponent(email)}`);
+  assignTierByEmail: async (email: string, tier: SubscriptionTier, expiresAt?: string) => {
+    const updates: Record<string, any> = { subscription_tier: mapSubscriptionTierToDb(tier) };
+    if (expiresAt) updates.trial_ends_at = new Date(expiresAt).toISOString();
+    else updates.trial_ends_at = null; // clear expiry when assigning permanently
+    await directFetch('PATCH', 'users', updates, `email=eq.${encodeURIComponent(email)}`);
     return true;
   },
 
