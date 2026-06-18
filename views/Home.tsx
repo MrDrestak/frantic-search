@@ -229,19 +229,16 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 {/* 2. SUBASTA DESTACADA */}
                 <section className="col-span-1 md:col-span-5 flex flex-col order-2">
                     <div className="flex items-center gap-2 mb-4 px-1">
-                        <Gavel className="text-amber-500" size={20} />
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.featuredAuction')}</h2>
-                        {activeAuctionsCount > 0 && (
-                            <span className="ml-auto flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full">
-                                {activeAuctionsCount} activa{activeAuctionsCount !== 1 ? 's' : ''}
-                            </span>
-                        )}
+                        <Gavel className="text-amber-500 shrink-0" size={20} />
+                        <h2 className="text-base font-bold text-white uppercase tracking-wider whitespace-nowrap">
+                            Subastas activas: <span className="text-amber-400">{activeAuctionsCount}</span>
+                        </h2>
                     </div>
                     <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group">
                         {featuredAuction ? (
                             <div onClick={() => onNavigate('auctions')} className="h-full flex flex-col cursor-pointer">
                                 <div className="flex-1 relative overflow-hidden">
-                                    <img src={featuredAuction.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
+                                    <img src={featuredAuction.imageUrl} className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110" alt="" />
                                     {featuredAuction.topBidderId === currentUser?.id && (
                                         <div className="absolute top-3 left-3 bg-green-600 text-[10px] font-black px-2 py-0.5 rounded-full text-white flex items-center gap-1 shadow-lg animate-pulse z-10">
                                             <TrendingUp size={10} /> GANANDO
