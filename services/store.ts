@@ -261,6 +261,7 @@ function mapToStoreProfile(row: any): StoreProfile {
     location: row.location,
     games: (row.games || ['MTG']).map(mapDbToGameType),
     linkedUserId: row.linked_user_id ?? undefined,
+    eventsImageUrl: row.events_image_url ?? undefined,
   };
 }
 
@@ -1608,10 +1609,36 @@ export const storeDirectoryService = {
       maps_url: store.mapsUrl,
       location: store.location,
       games: validGames.length ? validGames : ['MTG'],
+      events_image_url: store.eventsImageUrl ?? null,
     });
+  },
+
+  updateEventsImage: async (id: string, eventsImageUrl: string | null) => {
+    await directFetch('PATCH', 'stores', { events_image_url: eventsImageUrl }, `id=eq.${id}`);
   },
 
   deleteStore: async (id: string) => {
     await directFetch('DELETE', 'stores', null, `id=eq.${id}`);
+  },
+};
+
+// ─── USER STATS SERVICE ───────────────────────────────────────────────────────
+
+export const userStatsService = {
+  getUserStats: async (userId: string): Promise<{ folderCards: number; auctionCards: number; wishlistCards: number; pendingFeedbacks: number }> => {
+    try {
+      const [cards, feedbacks] = await Promise.all([
+        directGet<{ binder_type: string }>('cards', `user_id=eq.${userId}&select=binder_type`),
+        directGet<{ id: string }>('trade_interactions', `or=(buyer_id.eq.${userId},seller_id.eq.${userId})&status=eq.PENDING&select=id`),
+      ]);
+      return {
+        folderCards: cards.filter(c => c.binder_type === 'FOR_TRADE').length,
+        auctionCards: cards.filter(c => c.binder_type === 'AUCTION').length,
+        wishlistCards: cards.filter(c => c.binder_type === 'WISHLIST').length,
+        pendingFeedbacks: feedbacks.length,
+      };
+    } catch {
+      return { folderCards: 0, auctionCards: 0, wishlistCards: 0, pendingFeedbacks: 0 };
+    }
   },
 };

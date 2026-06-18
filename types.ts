@@ -236,12 +236,13 @@ export interface NewsItem {
 export interface StoreProfile {
     id: string;
     name: string;
-    logoUrl: string; // URL to logo image
+    logoUrl: string;
     websiteUrl: string;
     mapsUrl: string;
     location: string;
     games: GameType[];
-    linkedUserId?: string; // OPTIONAL: ID of the UserProfile within the app to link directly
+    linkedUserId?: string;
+    eventsImageUrl?: string;
 }
 
 export interface AppNotification {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 /* Added AlertCircle to lucide-react imports */
-import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserPlus, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ShieldAlert, Trash2, UserCheck, Crown, Layers, Heart, Gavel, DollarSign, Bell, Clock, FileText, Plus, ExternalLink, X, MapPin, Link, Send, CreditCard, UserPlus, AlertCircle, Image } from 'lucide-react';
 import { configService, auth, adminService, newsService, storeDirectoryService } from '../services/store';
 import { oneSignalService } from '../services/onesignalService';
 import { GlobalConfig, SubscriptionTier, TierLimits, SystemConfig, NewsItem, StoreProfile, GameType } from '../types';
@@ -594,131 +594,186 @@ const StoreManagerTab = () => {
     const [stores, setStores] = useState<StoreProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
-    
-    // Form
+    const [editEventsId, setEditEventsId] = useState<string | null>(null);
+    const [editEventsUrl, setEditEventsUrl] = useState('');
+    const [savingEventsId, setSavingEventsId] = useState<string | null>(null);
+
+    // Form state
     const [name, setName] = useState('');
     const [location, setLocation] = useState('');
     const [logoUrl, setLogoUrl] = useState('');
     const [websiteUrl, setWebsiteUrl] = useState('');
     const [mapsUrl, setMapsUrl] = useState('');
-    const [linkedProfileInput, setLinkedProfileInput] = useState(''); // New input for URL or ID
+    const [eventsImageUrl, setEventsImageUrl] = useState('');
+    const [linkedProfileInput, setLinkedProfileInput] = useState('');
     const [selectedGames, setSelectedGames] = useState<GameType[]>([]);
 
     useEffect(() => { load(); }, []);
+
     const load = async () => {
         setLoading(true);
         setStores(await storeDirectoryService.getStores());
         setLoading(false);
-    }
+    };
 
     const toggleGame = (g: GameType) => {
-        if (selectedGames.includes(g)) setSelectedGames(prev => prev.filter(x => x !== g));
-        else setSelectedGames(prev => [...prev, g]);
-    }
+        setSelectedGames(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+    };
 
     const handleSubmit = async () => {
         if (!name.trim() || !location.trim() || !logoUrl.trim() || !websiteUrl.trim() || !mapsUrl.trim()) {
-            alert('Please fill in all required fields (Store Name, Location, Logo URL, Website URL, Maps URL).');
+            alert('Completa los campos obligatorios: Nombre, Ubicación, Logo URL, Web URL, Maps URL.');
             return;
         }
-
-        let linkedUserId: string | undefined = undefined;
+        let linkedUserId: string | undefined;
         if (linkedProfileInput.trim()) {
             const urlMatch = linkedProfileInput.match(/[?&]trader=([^&]+)/);
             linkedUserId = urlMatch ? urlMatch[1] : linkedProfileInput.trim();
         }
-
-        const payload: any = { name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames };
+        const payload: any = { name, location, logoUrl, websiteUrl, mapsUrl, games: selectedGames, eventsImageUrl: eventsImageUrl || undefined };
         if (linkedUserId) payload.linkedUserId = linkedUserId;
-
         try {
             await storeDirectoryService.addStore(payload);
             setIsFormOpen(false);
-            setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
+            setName(''); setLocation(''); setLogoUrl(''); setWebsiteUrl(''); setMapsUrl(''); setEventsImageUrl(''); setLinkedProfileInput(''); setSelectedGames([]);
             load();
         } catch (err: any) {
-            alert('Error adding store: ' + err.message);
+            alert('Error al agregar tienda: ' + err.message);
         }
     };
 
+    const handleSaveEventsImage = async (storeId: string) => {
+        setSavingEventsId(storeId);
+        try {
+            await storeDirectoryService.updateEventsImage(storeId, editEventsUrl || null);
+            setEditEventsId(null);
+            setEditEventsUrl('');
+            load();
+        } catch (err: any) {
+            alert('Error: ' + err.message);
+        }
+        setSavingEventsId(null);
+    };
+
     const handleDelete = async (id: string) => {
-        if(confirm("Delete store?")) {
+        if (confirm('¿Eliminar esta tienda?')) {
             await storeDirectoryService.deleteStore(id);
             load();
         }
-    }
+    };
+
+    const inputCls = 'bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-violet-500 w-full';
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-white">Store Directory</h3>
-                <button onClick={() => setIsFormOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Plus size={18}/> Add Store</button>
+                <h3 className="text-xl font-bold text-white">Directorio de Tiendas</h3>
+                <button onClick={() => setIsFormOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2">
+                    <Plus size={18} /> Agregar Tienda
+                </button>
             </div>
 
             {isFormOpen && (
-                <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl mb-6">
-                    <div className="space-y-4">
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <input placeholder="Store Name *" value={name} onChange={e=>setName(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Location (e.g. Lima, Peru) *" value={location} onChange={e=>setLocation(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Logo Image URL *" value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Website URL *" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <input placeholder="Google Maps URL *" value={mapsUrl} onChange={e=>setMapsUrl(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-2 text-white"/>
-                             <div className="relative">
-                                <Link size={16} className="absolute left-3 top-3 text-slate-500" />
-                                <input
-                                    placeholder="Linked Profile (Paste Share Link) - Optional"
-                                    value={linkedProfileInput}
-                                    onChange={e=>setLinkedProfileInput(e.target.value)}
-                                    className="bg-slate-950 border border-slate-700 rounded p-2 pl-9 text-white w-full"
-                                    title="Paste a full share profile URL or a User ID to link this store to an app account"
-                                />
-                             </div>
-                         </div>
-                         <div>
-                             <label className="text-sm text-slate-400 mb-2 block">Games Sold:</label>
-                             <div className="flex gap-2">
-                                 <button
-                                    type="button"
-                                    onClick={() => toggleGame(GameType.MTG)}
-                                    className={`px-3 py-1 rounded text-sm border ${selectedGames.includes(GameType.MTG) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
-                                 >
-                                     MTG
-                                 </button>
-                             </div>
-                         </div>
-                         <div className="flex gap-2">
-                             <button type="button" onClick={()=>setIsFormOpen(false)} className="bg-slate-800 text-white px-4 py-2 rounded">Cancel</button>
-                             <button type="button" onClick={handleSubmit} className="bg-green-600 text-white px-4 py-2 rounded">Add Store</button>
-                         </div>
+                <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl mb-6 space-y-4">
+                    <h4 className="text-white font-bold text-sm uppercase tracking-wide">Nueva Tienda</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input placeholder="Nombre *" value={name} onChange={e => setName(e.target.value)} className={inputCls} />
+                        <input placeholder="Ubicación (ej. Lima, Miraflores) *" value={location} onChange={e => setLocation(e.target.value)} className={inputCls} />
+                        <input placeholder="URL del Logo *" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} className={inputCls} />
+                        <input placeholder="URL del Sitio Web *" value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} className={inputCls} />
+                        <input placeholder="URL de Google Maps *" value={mapsUrl} onChange={e => setMapsUrl(e.target.value)} className={inputCls} />
+                        <input placeholder="URL Imagen Eventos (opcional)" value={eventsImageUrl} onChange={e => setEventsImageUrl(e.target.value)} className={inputCls} />
+                        <div className="relative md:col-span-2">
+                            <Link size={16} className="absolute left-3 top-3 text-slate-500" />
+                            <input
+                                placeholder="Perfil vinculado — pega el Share Link o el User ID (opcional)"
+                                value={linkedProfileInput}
+                                onChange={e => setLinkedProfileInput(e.target.value)}
+                                className={`${inputCls} pl-9`}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs text-slate-400 mb-2 block uppercase font-bold">Juegos que vende</label>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => toggleGame(GameType.MTG)}
+                                className={`px-3 py-1 rounded-lg text-sm border transition-all ${selectedGames.includes(GameType.MTG) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400'}`}
+                            >MTG</button>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setIsFormOpen(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm">Cancelar</button>
+                        <button type="button" onClick={handleSubmit} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Agregar</button>
                     </div>
                 </div>
             )}
 
-            {loading ? <div className="text-center text-slate-500">Loading...</div> : (
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {loading ? (
+                <div className="text-center text-slate-500 py-8"><Loader2 className="animate-spin inline" /></div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {stores.map(store => (
-                        <div key={store.id} className="relative bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center text-center">
-                             {store.linkedUserId && (
-                                 <div className="absolute top-2 left-2 bg-blue-500 text-white p-1 rounded-full shadow-lg" title="Linked to App Profile">
-                                     <UserCheck size={12} />
-                                 </div>
-                             )}
-                             <img src={store.logoUrl} className="w-16 h-16 object-contain rounded-full bg-slate-950 border border-slate-800 mb-2" alt=""/>
-                             <h4 className="text-white font-bold">{store.name}</h4>
-                             <p className="text-xs text-slate-400">{store.location}</p>
-                             <div className="flex gap-1 mt-2 mb-2">
-                                 {store.games.map(g => (
-                                     <div key={g} className="w-2 h-2 rounded-full bg-slate-500" title={g}/>
-                                 ))}
-                             </div>
-                             <button onClick={() => handleDelete(store.id)} className="absolute top-2 right-2 text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
+                        <div key={store.id} className="relative bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center text-center gap-2">
+                            {store.linkedUserId && (
+                                <div className="absolute top-2 left-2 bg-blue-500 text-white p-1 rounded-full shadow-lg" title="Vinculado a perfil de app">
+                                    <UserCheck size={12} />
+                                </div>
+                            )}
+                            <button onClick={() => handleDelete(store.id)} className="absolute top-2 right-2 text-slate-500 hover:text-red-500 transition-colors">
+                                <Trash2 size={16} />
+                            </button>
+                            <img src={store.logoUrl} className="w-16 h-16 object-contain rounded-full bg-white border border-slate-200 p-1" alt="" />
+                            <h4 className="text-white font-bold text-sm">{store.name}</h4>
+                            <p className="text-xs text-slate-400">{store.location}</p>
+
+                            {/* Eventos image section */}
+                            <div className="w-full mt-1">
+                                {editEventsId === store.id ? (
+                                    <div className="flex gap-1">
+                                        <input
+                                            type="text"
+                                            value={editEventsUrl}
+                                            onChange={e => setEditEventsUrl(e.target.value)}
+                                            placeholder="URL de imagen eventos..."
+                                            className="flex-1 bg-slate-950 border border-slate-700 rounded p-1.5 text-white text-xs outline-none"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={() => handleSaveEventsImage(store.id)}
+                                            disabled={savingEventsId === store.id}
+                                            className="bg-violet-600 hover:bg-violet-700 text-white px-2 py-1 rounded text-xs font-bold disabled:opacity-50"
+                                        >
+                                            {savingEventsId === store.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                        </button>
+                                        <button
+                                            onClick={() => setEditEventsId(null)}
+                                            className="text-slate-500 hover:text-white px-1"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => { setEditEventsId(store.id); setEditEventsUrl(store.eventsImageUrl || ''); }}
+                                        className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all
+                                            ${store.eventsImageUrl
+                                                ? 'border-amber-700/40 bg-amber-900/10 text-amber-400 hover:border-amber-500/60'
+                                                : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'
+                                            }`}
+                                    >
+                                        <Image size={10} />
+                                        {store.eventsImageUrl ? 'Imagen cargada — Editar' : 'Cargar imagen de Eventos'}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
             )}
         </div>
-    )
+    );
 };
 
 export default AdminPanel;
