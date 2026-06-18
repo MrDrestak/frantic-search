@@ -781,7 +781,7 @@ export const notificationService = {
     imageUrl?: string,
   ) => {
     try {
-      await supabase.from('notifications').insert({
+      await directFetch('POST', 'notifications', {
         user_id: userId,
         type,
         title,
@@ -796,16 +796,16 @@ export const notificationService = {
   },
 
   markAsRead: async (notificationId: string) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+    await directFetch('PATCH', 'notifications', { read: true }, `id=eq.${notificationId}`);
   },
 
   markAllAsRead: async (userId: string) => {
-    await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+    await directFetch('PATCH', 'notifications', { read: true }, `user_id=eq.${userId}&read=eq.false`);
   },
 
   cleanup: async (userId: string) => {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('notifications').delete().eq('user_id', userId).lt('created_at', thirtyDaysAgo);
+    await directFetch('DELETE', 'notifications', null, `user_id=eq.${userId}&created_at=lt.${thirtyDaysAgo}`);
   },
 };
 
@@ -813,33 +813,26 @@ export const notificationService = {
 
 export const alertService = {
   isWatching: async (userId: string, cardName: string): Promise<boolean> => {
-    const { count } = await supabase
-      .from('card_alerts')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('card_name', cardName);
-    return (count || 0) > 0;
+    const rows = await directGet<{user_id: string}>('card_alerts', `user_id=eq.${userId}&card_name=eq.${encodeURIComponent(cardName)}&select=user_id`);
+    return rows.length > 0;
   },
 
   toggleAlert: async (userId: string, cardName: string): Promise<boolean> => {
     assertAuthenticated(userId);
     const watching = await alertService.isWatching(userId, cardName);
     if (watching) {
-      await supabase.from('card_alerts').delete().eq('user_id', userId).eq('card_name', cardName);
+      await directFetch('DELETE', 'card_alerts', null, `user_id=eq.${userId}&card_name=eq.${encodeURIComponent(cardName)}`);
       return false;
     }
     const limits = await subscriptionService.checkLimit('CARD_ALERT');
     if (!limits.allowed) throw new Error(`Alert limit reached (${limits.limit}). Upgrade your plan to track more cards.`);
-    await supabase.from('card_alerts').insert({ user_id: userId, card_name: cardName });
+    await directFetch('POST', 'card_alerts', { user_id: userId, card_name: cardName });
     return true;
   },
 
   findWatchers: async (cardName: string): Promise<string[]> => {
-    const { data } = await supabase
-      .from('card_alerts')
-      .select('user_id')
-      .eq('card_name', cardName);
-    return (data || []).map((r: any) => r.user_id);
+    const rows = await directGet<{user_id: string}>('card_alerts', `card_name=eq.${encodeURIComponent(cardName)}&select=user_id`);
+    return rows.map((r) => r.user_id);
   },
 };
 
@@ -915,12 +908,11 @@ export const tradeService = {
 
   submitFeedback: async (interactionId: string, feedback: FeedbackValue) => {
     if (!currentUserProfile) return;
-    const { error } = await supabase.rpc('submit_feedback', {
+    await directFetch('POST', 'rpc/submit_feedback', {
       p_interaction_id: interactionId,
       p_user_id: currentUserProfile.id,
       p_feedback: mapFeedbackToDb(feedback),
     });
-    if (error) throw error;
   },
 
   dismissFeedback: async (interactionId: string) => {
@@ -998,7 +990,7 @@ export const subscriptionService = {
     const user = currentUserProfile;
     if (!user) return;
     if (localStorage.getItem('lotus_is_guest') !== 'true') {
-      await supabase.from('users').update({ subscription_tier: mapSubscriptionTierToDb(tier) }).eq('id', user.id);
+      await directFetch('PATCH', 'users', { subscription_tier: mapSubscriptionTierToDb(tier) }, `id=eq.${user.id}`);
     }
     currentUserProfile = { ...user, subscriptionTier: tier };
   },
@@ -1035,20 +1027,13 @@ export const subscriptionService = {
       return { allowed: cards.length < limit, limit, current: cards.length };
     }
     if (type === 'SHOWCASE_ITEM') {
-      const { count } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUserProfile.id)
-        .eq('is_showcase', true);
-      const current = count || 0;
+      const rows = await directGet<{id: string}>('cards', `user_id=eq.${currentUserProfile.id}&is_showcase=eq.true&select=id`);
+      const current = rows.length;
       return { allowed: current < limits.maxShowcaseItems, limit: limits.maxShowcaseItems, current };
     }
     if (type === 'CARD_ALERT') {
-      const { count } = await supabase
-        .from('card_alerts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUserProfile.id);
-      const current = count || 0;
+      const rows = await directGet<{user_id: string}>('card_alerts', `user_id=eq.${currentUserProfile.id}&select=user_id`);
+      const current = rows.length;
       return { allowed: current < limits.maxCardAlerts, limit: limits.maxCardAlerts, current };
     }
     return { allowed: true, limit: 999, current: 0 };
@@ -1153,25 +1138,20 @@ export const binderService = {
 
   createBinder: async (binderData: Omit<Binder, 'id' | 'createdAt' | 'cardCount'>): Promise<Binder> => {
     assertAuthenticated(binderData.userId);
-    const { data, error } = await supabase
-      .from('binders')
-      .insert({
-        user_id: binderData.userId,
-        game: mapGameTypeToDb(binderData.game || GameType.MTG),
-        type: mapBinderTypeToDb(binderData.type),
-        name: binderData.name,
-        cover_image: binderData.coverImage ?? null,
-        card_count: 0,
-      })
-      .select('*')
-      .single();
-    if (error) throw error;
+    const data = await directInsert<any>('binders', {
+      user_id: binderData.userId,
+      game: mapGameTypeToDb(binderData.game || GameType.MTG),
+      type: mapBinderTypeToDb(binderData.type),
+      name: binderData.name,
+      cover_image: binderData.coverImage ?? null,
+      card_count: 0,
+    });
     return mapToBinder(data);
   },
 
   deleteBinder: async (binderId: string) => {
     // CASCADE delete of cards handled by FK in Postgres
-    await supabase.from('binders').delete().eq('id', binderId);
+    await directFetch('DELETE', 'binders', null, `id=eq.${binderId}`);
   },
 };
 
@@ -1362,22 +1342,19 @@ export const cardService = {
   },
 
   updatePrice: async (cardId: string, customPrice: number, currency: 'USD' | 'PEN') => {
-    await supabase.from('cards').update({ custom_price: customPrice, currency }).eq('id', cardId);
+    await directFetch('PATCH', 'cards', { custom_price: customPrice, currency }, `id=eq.${cardId}`);
   },
 
   syncBinderPrices: async (_binderId: string, cards: Card[]) => {
     const scryfallIds = cards.map(c => c.scryfallId);
     if (scryfallIds.length === 0) return;
-    const { data: prices } = await supabase
-      .from('prices')
-      .select('scryfall_id, price_sell_usd')
-      .in('scryfall_id', scryfallIds);
-    if (!prices?.length) return;
-    const priceMap = new Map(prices.map((p: any) => [p.scryfall_id, p.price_sell_usd]));
+    const prices = await directGet<{scryfall_id: string; price_sell_usd: number}>('prices', `scryfall_id=in.(${scryfallIds.join(',')})&select=scryfall_id,price_sell_usd`);
+    if (!prices.length) return;
+    const priceMap = new Map(prices.map((p) => [p.scryfall_id, p.price_sell_usd]));
     for (const card of cards) {
       const newPrice = priceMap.get(card.scryfallId);
       if (newPrice !== undefined && newPrice !== card.price) {
-        await supabase.from('cards').update({ custom_price: newPrice }).eq('id', card.id);
+        await directFetch('PATCH', 'cards', { custom_price: newPrice }, `id=eq.${card.id}`);
       }
     }
   },
@@ -1388,7 +1365,7 @@ export const cardService = {
   },
 
   toggleShowcase: async (cardId: string, isShowcase: boolean) => {
-    await supabase.from('cards').update({ is_showcase: isShowcase }).eq('id', cardId);
+    await directFetch('PATCH', 'cards', { is_showcase: isShowcase }, `id=eq.${cardId}`);
   },
 };
 
@@ -1397,13 +1374,8 @@ export const cardService = {
 export const showcaseService = {
   getShowcaseItems: async (_game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
     try {
-      const { data } = await supabase
-        .from('cards')
-        .select('*, users!cards_user_id_fkey(id, display_name, trader_score, subscription_tier, whatsapp)')
-        .eq('is_showcase', true)
-        .order('added_at', { ascending: false })
-        .limit(50);
-      const rows = await attachPrices(data || []);
+      const data = await directGet<any>('cards', `is_showcase=eq.true&order=added_at.desc&limit=50&select=*,users!cards_user_id_fkey(id,display_name,trader_score,subscription_tier,whatsapp)`);
+      const rows = await attachPrices(data);
       return rows.map((row: any) => ({
         ...mapToCard(row),
         sellerId: row.user_id,
@@ -1426,13 +1398,8 @@ export const showcaseService = {
 export const auctionService = {
   getAllAuctions: async (): Promise<Card[]> => {
     try {
-      const { data } = await supabase
-        .from('cards')
-        .select('*, users!cards_user_id_fkey(display_name, trader_score, photo_url)')
-        .eq('binder_type', 'AUCTION')
-        .eq('auction_status', AuctionStatus.ACTIVE)
-        .order('auction_end_date', { ascending: true });
-      const rows = await attachPrices(data || []);
+      const data = await directGet<any>('cards', `binder_type=eq.AUCTION&auction_status=eq.ACTIVE&order=auction_end_date.asc&select=*,users!cards_user_id_fkey(display_name,trader_score,photo_url)`);
+      const rows = await attachPrices(data);
       return rows.map(mapToCard);
     } catch {
       return [];
@@ -1441,12 +1408,8 @@ export const auctionService = {
 
   getUserAuctions: async (userId: string): Promise<Card[]> => {
     try {
-      const { data } = await supabase
-        .from('cards')
-        .select('*, users!cards_user_id_fkey(display_name)')
-        .eq('user_id', userId)
-        .eq('binder_type', 'AUCTION');
-      const rows = await attachPrices(data || []);
+      const data = await directGet<any>('cards', `user_id=eq.${userId}&binder_type=eq.AUCTION&select=*,users!cards_user_id_fkey(display_name)`);
+      const rows = await attachPrices(data);
       return rows.map(mapToCard);
     } catch {
       return [];
@@ -1478,11 +1441,11 @@ export const auctionService = {
   directBuy: async (card: Card, userId: string): Promise<void> => {
     if (!card.id) return;
     if (card.userId === userId) throw new Error('You cannot buy your own auction.');
-    await supabase.from('cards').update({
+    await directFetch('PATCH', 'cards', {
       auction_status: AuctionStatus.SOLD.toString(),
       winner_id: userId,
       current_bid: card.buyItNowPrice,
-    }).eq('id', card.id);
+    }, `id=eq.${card.id}`);
     notificationService.send(card.userId, 'SYSTEM', 'Auction Sold!', `Your ${card.name} was bought instantly for ${card.buyItNowPrice}. Contact the winner!`, `/?trader=${userId}`, card.imageUrl);
     oneSignalService.sendNotification('Auction Sold!', `Your ${card.name} was bought instantly! Check your dashboard.`, [card.userId]).catch(err => console.error('Push Notification Failed', err));
     tradeService.logInteraction(card.userId, card.name, card.name, card.id, card.binderId);
@@ -1490,9 +1453,10 @@ export const auctionService = {
 
   closeAuction: async (card: Card): Promise<boolean> => {
     if (!card.id) return false;
-    const { data, error } = await supabase.rpc('close_auction', { p_card_id: card.id });
-    if (error) { console.error('[closeAuction]', error); return false; }
-    const closed = data as boolean;
+    let closed: boolean;
+    try {
+      closed = await directInsert<boolean>('rpc/close_auction', { p_card_id: card.id });
+    } catch (e) { console.error('[closeAuction]', e); return false; }
     if (closed && card.topBidderId) {
       oneSignalService.sendNotification(
         '¡Subasta finalizada!',
@@ -1527,26 +1491,17 @@ export const matchingService = {
 
     console.log('[findMatches] searching for:', namesToSearch);
 
-    const { data: matches, error: mErr } = await supabase
-      .from('cards')
-      .select('*')
-      .in('name', namesToSearch)
-      .in('binder_type', ['FOR_TRADE'])
-      .neq('user_id', currentUserId);
+    const matches = await directGet<any>('cards', `name=in.(${namesToSearch.map(n => `"${n}"`).join(',')})&binder_type=in.(FOR_TRADE)&user_id=neq.${currentUserId}&select=*`);
 
-    if (mErr) console.error('[findMatches] matches query error:', mErr);
-    console.log('[findMatches] raw matches:', matches?.length ?? 0);
+    console.log('[findMatches] raw matches:', matches.length);
 
-    if (!matches?.length) return [];
+    if (!matches.length) return [];
 
     // Fetch seller profiles separately to avoid RLS issues with JOIN
     const sellerIds = [...new Set(matches.map((m: any) => m.user_id))] as string[];
-    const { data: sellers } = await supabase
-      .from('users')
-      .select('id, display_name, trader_score, searcher_score, whatsapp, subscription_tier, photo_url, preferred_store, preferred_game')
-      .in('id', sellerIds);
+    const sellers = await directGet<any>('users', `id=in.(${sellerIds.join(',')})&select=id,display_name,trader_score,searcher_score,whatsapp,subscription_tier,photo_url,preferred_store,preferred_game`);
 
-    const sellerMap = Object.fromEntries((sellers || []).map((s: any) => [s.id, mapToUserProfile(s)]));
+    const sellerMap = Object.fromEntries(sellers.map((s: any) => [s.id, mapToUserProfile(s)]));
 
     const TIER_RANK: Record<string, number> = {
       [SubscriptionTier.MYTHIC]:   0,
