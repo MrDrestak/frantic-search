@@ -103,6 +103,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
         return active.sort((a, b) => b.addedAt - a.addedAt)[0];
     }, [auctions, currentUser]);
 
+    const activeAuctionsCount = useMemo(() => {
+        const now = Date.now();
+        return auctions.filter(a =>
+            a.auctionEndDate && a.auctionEndDate >= now &&
+            (a.auctionStatus === AuctionStatus.ACTIVE || a.binderType === BinderType.AUCTION)
+        ).length;
+    }, [auctions]);
+
     useEffect(() => {
         let items = allShowcaseItems;
         if (showcaseFilter) items = items.filter(i => (i.game || GameType.MTG) === showcaseFilter);
@@ -223,6 +231,11 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                     <div className="flex items-center gap-2 mb-4 px-1">
                         <Gavel className="text-amber-500" size={20} />
                         <h2 className="text-xl font-bold text-white uppercase tracking-wider">{t('home.featuredAuction')}</h2>
+                        {activeAuctionsCount > 0 && (
+                            <span className="ml-auto flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                {activeAuctionsCount} activa{activeAuctionsCount !== 1 ? 's' : ''}
+                            </span>
+                        )}
                     </div>
                     <div className="flex-1 bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden relative group min-h-[340px]">
                         {featuredAuction ? (
@@ -324,7 +337,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
             <div className="grid grid-cols-1 md:grid-cols-20 gap-6 items-stretch">
 
                 {/* 4. VITRINA — 3-card carousel */}
-                <section className="col-span-1 md:col-span-13 flex flex-col order-4">
+                <section className="col-span-1 md:col-span-12 flex flex-col order-4">
                     <div className="flex justify-between items-center mb-4 px-1">
                         <div className="flex items-center gap-2">
                             <Star className="text-amber-500" size={20} fill="currentColor" />
@@ -437,7 +450,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 </section>
 
                 {/* 5. ÚLTIMAS NOTICIAS */}
-                <section className="col-span-1 md:col-span-7 flex flex-col order-5">
+                <section className="col-span-1 md:col-span-8 flex flex-col order-5">
                     <div className="flex justify-between items-center mb-4 px-1">
                         <div className="flex items-center gap-2">
                             <Layers className="text-violet-500" size={20} />
