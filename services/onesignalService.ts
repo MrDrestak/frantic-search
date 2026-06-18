@@ -8,8 +8,8 @@ declare global {
 
 const APP_ID = "181d9c5a-7cfd-4fc7-961e-b58799cd476e";
 
-// Holds the initialized OneSignal instance received from the deferred callback
 let _os: any = null;
+let _loggedInUserId: string | null = null;
 
 export const oneSignalService = {
   isInitialized: false,
@@ -55,16 +55,20 @@ export const oneSignalService = {
 
   login: async (userId: string): Promise<void> => {
     if (!_os || !userId) return;
+    if (_loggedInUserId === userId) return;
+    _loggedInUserId = userId;
     try {
       await _os.login(userId);
       console.log("OneSignal: user logged in", userId);
     } catch (e) {
+      _loggedInUserId = null;
       console.error("OneSignal login error:", e);
     }
   },
 
   logout: async (): Promise<void> => {
     if (!_os) return;
+    _loggedInUserId = null;
     try { await _os.logout(); } catch {}
   },
 
