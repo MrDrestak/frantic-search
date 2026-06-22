@@ -687,6 +687,62 @@ export const auth = {
   },
 };
 
+// ─── CK PRICE LOOKUP ─────────────────────────────────────────────────────────
+
+let _ckCache: any[] | null = null;
+let _ckCachedAt = 0;
+
+export const getCKPrice = async (
+  scryfallId: string,
+  cardName: string,
+  setCode: string,
+): Promise<{ sell: number; buy: number } | null> => {
+  // 1. Fast path: our Supabase prices table (synced regularly by cron)
+  try {
+    const rows = await directGet<{ price_sell_usd: number; price_buy_usd: number }>(
+      'prices',
+      `scryfall_id=eq.${scryfallId}&select=price_sell_usd,price_buy_usd&limit=1`,
+    );
+    if (rows[0]?.price_sell_usd) {
+      return { sell: rows[0].price_sell_usd, buy: rows[0].price_buy_usd ?? 0 };
+    }
+  } catch { /* fall through to CK API */ }
+
+  // 2. Fallback: CK public pricelist — cached in memory for 1h to avoid re-downloading
+  try {
+    const now = Date.now();
+    if (!_ckCache || now - _ckCachedAt > 60 * 60 * 1000) {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch('https://api.cardkingdom.com/api/pricelist', {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(tid);
+      if (!res.ok) return null;
+      const json = await res.json();
+      _ckCache = json.data || [];
+      _ckCachedAt = now;
+    }
+    const name = cardName.toLowerCase();
+    const set = setCode.toLowerCase();
+    const match = _ckCache!.find(
+      (item: any) =>
+        item.name?.toLowerCase() === name &&
+        item.edition_code?.toLowerCase() === set &&
+        !item.foil,
+    );
+    if (match) {
+      return {
+        sell: parseFloat(match.sell_price || '0'),
+        buy: parseFloat(match.buy_price || '0'),
+      };
+    }
+  } catch { /* CK unreachable */ }
+
+  return null;
+};
+
 // ─── CONFIG SERVICE ───────────────────────────────────────────────────────────
 
 export const configService = {

@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { cardService, binderService, auth, subscriptionService } from '../services/store';
+import { cardService, binderService, auth, subscriptionService, getCKPrice } from '../services/store';
+import { motion } from 'framer-motion';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
 import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
 import MTGCard from '../components/MTGCard';
@@ -23,7 +24,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [filterText, setFilterText] = useState('');
 
   const [showSearch, setShowSearch] = useState(false);
-  const [searchStep, setSearchStep] = useState<'QUERY' | 'VERSIONS' | 'CONFIG'>('QUERY');
+  const [searchStep, setSearchStep] = useState<'QUERY' | 'VERSIONS' | 'LOADING' | 'CONFIG'>('QUERY');
+  const [ckPriceData, setCkPriceData] = useState<{ sell: number; buy: number } | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ScryfallCard[]>([]);
@@ -122,21 +124,28 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       setIsLoadingVersions(false);
   };
 
-  const handleVersionSelect = (card: ScryfallCard) => {
+  const handleVersionSelect = async (card: ScryfallCard) => {
       setSelectedCard(card);
-      setSearchStep('CONFIG');
+      setCkPriceData(null);
+      setSearchStep('LOADING');
       setQuantity(1);
+
+      const ck = await getCKPrice(card.id, card.name, card.set).catch(() => null);
+      setCkPriceData(ck);
+
+      const refPrice = ck?.sell ?? parseFloat(card.prices.usd || '1');
       if (!card.prices.usd && card.prices.usd_foil) {
           setIsFoil(true);
       } else {
           setIsFoil(false);
       }
-      setBasePrice(card.prices.usd || '1.00');
-      setBuyItNowPrice(card.prices.usd ? (parseFloat(card.prices.usd) * 2).toFixed(2) : '5.00');
+      setBasePrice(refPrice.toFixed(2));
+      setBuyItNowPrice((refPrice * 2).toFixed(2));
+      setSearchStep('CONFIG');
   };
 
   const handleBackStep = () => {
-      if (searchStep === 'CONFIG') setSearchStep('VERSIONS');
+      if (searchStep === 'CONFIG' || searchStep === 'LOADING') setSearchStep('VERSIONS');
       else if (searchStep === 'VERSIONS') setSearchStep('QUERY');
       else {
           setShowSearch(false);
@@ -171,8 +180,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             }
         }
 
-        const priceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
-        const price = priceStr ? parseFloat(priceStr) : 0;
+        const scryfallPriceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
+        const price = ckPriceData?.sell ?? (scryfallPriceStr ? parseFloat(scryfallPriceStr) : 0);
 
         let auctionData = {};
         if (binder.type === BinderType.AUCTION) {
@@ -616,7 +625,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       {showSearch && isOwner && (
          <div className="fixed inset-0 bg-slate-950/95 z-[60] flex flex-col p-4 md:p-8">
             <div className="max-w-4xl mx-auto w-full h-full flex flex-col">
-                <div className="flex justify-between items-center mb-6 flex-none"><div className="flex items-center gap-2">{searchStep !== 'QUERY' && (<button onClick={handleBackStep} className="p-1 hover:bg-slate-800 rounded-full text-slate-400"><ArrowLeft size={20} /></button>)}<h2 className="text-xl md:text-2xl font-bold text-white">{searchStep === 'QUERY' && "Buscar Cartas"}{searchStep === 'VERSIONS' && "Selecciona la Versión"}{searchStep === 'CONFIG' && (binder.type === BinderType.AUCTION ? "Detalles de Subasta" : "Detalles de la Carta")}</h2></div><button onClick={() => { setShowSearch(false); setSearchStep('QUERY'); setSearchQuery(''); setSelectedCard(null); }} className="text-slate-400 hover:text-white"><X size={28} /></button></div>
+                <div className="flex justify-between items-center mb-6 flex-none"><div className="flex items-center gap-2">{searchStep !== 'QUERY' && searchStep !== 'LOADING' && (<button onClick={handleBackStep} className="p-1 hover:bg-slate-800 rounded-full text-slate-400"><ArrowLeft size={20} /></button>)}<h2 className="text-xl md:text-2xl font-bold text-white">{searchStep === 'QUERY' && "Buscar Cartas"}{searchStep === 'VERSIONS' && "Selecciona la Versión"}{searchStep === 'LOADING' && <span className="text-amber-400">Consultando precio...</span>}{searchStep === 'CONFIG' && (binder.type === BinderType.AUCTION ? "Detalles de Subasta" : "Detalles de la Carta")}</h2></div><button onClick={() => { setShowSearch(false); setSearchStep('QUERY'); setSearchQuery(''); setSelectedCard(null); setCkPriceData(null); }} className="text-slate-400 hover:text-white"><X size={28} /></button></div>
 
                 {searchStep === 'QUERY' && (
                     <><div className="relative mb-6 flex-none"><Search className="absolute left-4 top-3.5 text-slate-400" size={20} /><input type="text" placeholder="Busca por nombre (ej. Black Lotus)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white focus:ring-2 focus:ring-violet-500 focus:outline-none text-lg" /></div><div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-0">{isSearching && <div className="col-span-full text-center text-slate-500 py-10"><Loader2 className="animate-spin mx-auto mb-2"/>Buscando en Scryfall...</div>}{searchResults.map(card => (<div key={card.id} onClick={() => handleCardClick(card)} className="flex gap-4 p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-violet-500 cursor-pointer transition-colors group"><img src={getCardImage(card)} alt={card.name} className="w-16 h-24 object-cover rounded bg-slate-950" /><div className="flex-1 min-w-0 flex flex-col justify-center"><h4 className="font-bold text-white truncate">{card.name}</h4><p className="text-sm text-slate-400 flex items-center gap-1">Seleccionar versión <ChevronRight size={14} /></p></div></div>))}</div></>
@@ -624,6 +633,30 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
                 {searchStep === 'VERSIONS' && (
                     <div className="flex-1 overflow-y-auto min-h-0">{isLoadingVersions ? (<div className="text-center text-slate-500 py-20"><Loader2 className="animate-spin mx-auto mb-4" size={32}/><p>Cargando todas las versiones...</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{versionResults.map(version => (<div key={version.id} onClick={() => handleVersionSelect(version)} className="flex gap-4 p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-violet-500 cursor-pointer transition-colors group relative overflow-hidden"><img src={getCardImage(version)} alt={version.name} className="w-20 h-28 object-cover rounded bg-slate-950 shadow-md" /><div className="flex-1 min-w-0 py-1"><div className="flex justify-between items-start"><h4 className="font-bold text-white truncate text-lg">{version.name}</h4><span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${version.rarity === 'rare' || version.rarity === 'mythic' ? 'bg-amber-500/20 text-amber-500' : 'bg-slate-700 text-slate-400'}`}>{version.rarity}</span></div><p className="text-violet-400 font-medium text-sm mt-1">{version.set_name}</p><div className="flex items-center gap-3 mt-auto pt-2"><span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400 font-mono">{version.set.toUpperCase()} • #{version.collector_number}</span></div><div className="mt-2 text-xs text-green-400 font-mono">Est: ${version.prices.usd || version.prices.usd_foil || '---'}</div></div></div>))}</div>)}</div>
+                )}
+
+                {searchStep === 'LOADING' && (
+                    <div className="flex-1 flex flex-col items-center justify-center gap-8">
+                        <motion.div
+                            animate={{ rotate: [0, -15, 15, 0] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                            className="text-amber-400"
+                        >
+                            <Gavel size={56} />
+                        </motion.div>
+                        <div className="text-center space-y-2">
+                            <p className="text-amber-400 font-bold text-xl tracking-wide">Extrayendo información desde otro reino...</p>
+                            <p className="text-slate-500 text-sm">Consultando precios en Card Kingdom</p>
+                        </div>
+                        <div className="w-72 h-2 bg-slate-800 rounded-full overflow-hidden relative">
+                            <motion.div
+                                className="absolute h-full bg-amber-500 rounded-full"
+                                style={{ width: '40%' }}
+                                animate={{ left: ['-40%', '100%'] }}
+                                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                        </div>
+                    </div>
                 )}
 
                 {searchStep === 'CONFIG' && selectedCard && (
@@ -649,7 +682,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                                     </div>
                                 )}
 
-                                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><input type="checkbox" id="foil" checked={isFoil} onChange={(e) => setIsFoil(e.target.checked)} className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500" /><label htmlFor="foil" className="text-white cursor-pointer select-none font-medium">Foil / Special Finish</label></div><div className="text-right"><div className="text-xs text-slate-400">Est. Price</div><div className="text-xl font-bold text-green-400">${(isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd) || '---'}</div></div></div></div>
+                                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><input type="checkbox" id="foil" checked={isFoil} onChange={(e) => setIsFoil(e.target.checked)} className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500" /><label htmlFor="foil" className="text-white cursor-pointer select-none font-medium">Foil / Special Finish</label></div><div className="text-right"><div className="text-xs text-slate-400">{ckPriceData ? 'Card Kingdom' : 'Est. Scryfall'}</div><div className="text-xl font-bold text-green-400">${ckPriceData ? ckPriceData.sell.toFixed(2) : ((isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd) || '---')}</div>{ckPriceData && ckPriceData.buy > 0 && <div className="text-[10px] text-slate-500 mt-0.5">CK Compra: ${ckPriceData.buy.toFixed(2)}</div>}</div></div></div>
 
                                 {binder.type === BinderType.AUCTION && (
                                     <div className="space-y-4 bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl"><h4 className="text-amber-400 font-bold flex items-center gap-2"><Gavel size={18} /> Configuración de Subasta</h4><div className="bg-blue-900/30 border border-blue-800 rounded p-3 text-xs text-blue-200 flex items-start gap-2"><Clock size={16} className="mt-0.5 shrink-0" /><p>Todas las subastas cierran a las <strong>22:00 GMT-5</strong> (Lima/Bogota/Quito) en la fecha seleccionada. Cada subasta es por exactamente <b>1</b> copia.</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Fecha de Cierre</label><div className="relative"><Calendar className="absolute left-3 top-2.5 text-slate-500" size={16} /><input type="date" value={auctionEndDate} onChange={(e) => setAuctionEndDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Moneda</label><select value={auctionCurrency} onChange={(e) => setAuctionCurrency(e.target.value as any)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"><option value="USD">USD ($)</option><option value="PEN">SOL (S/)</option></select></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Precio Base</label><input type="number" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Precio de Compra Directa</label><input type="number" step="0.01" value={buyItNowPrice} onChange={(e) => setBuyItNowPrice(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div></div></div>
