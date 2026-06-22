@@ -10,6 +10,12 @@ export const adminClient = createClient(supabaseUrl, serviceRoleKey, {
 
 export async function createTestUser(emailPrefix: string, tier: string = 'COMMON') {
   const email = `${emailPrefix}@test.frantic`;
+
+  // Safety net: delete leftover from a crashed previous run before creating
+  const { data: existing } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+  const leftover = existing?.users?.find(u => u.email === email);
+  if (leftover) await adminClient.auth.admin.deleteUser(leftover.id);
+
   const { data, error } = await adminClient.auth.admin.createUser({
     email,
     password: 'test-password-123',
@@ -34,15 +40,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Limpiar todos los usuarios de test (CASCADE elimina sus binders, cards, etc.)
-  const { data: testUsers } = await adminClient
-    .from('users')
-    .select('id')
-    .like('email', '%@test.frantic');
-
-  if (testUsers?.length) {
-    for (const u of testUsers) {
-      await adminClient.auth.admin.deleteUser(u.id);
-    }
+  // Limpiar todos los usuarios de test desde auth.users (más confiable que la tabla pública)
+  const { data } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+  const testUsers = data?.users?.filter(u => u.email?.endsWith('@test.frantic')) ?? [];
+  for (const u of testUsers) {
+    await adminClient.auth.admin.deleteUser(u.id);
   }
 });

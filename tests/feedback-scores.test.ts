@@ -28,7 +28,7 @@ describe('submit_feedback() — reputación atómica', () => {
     });
 
   beforeEach(async () => {
-    const suffix = Date.now();
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const buyer  = await createTestUser(`buyer-${suffix}`);
     const seller = await createTestUser(`seller-${suffix}`);
     buyerId  = buyer.id;
