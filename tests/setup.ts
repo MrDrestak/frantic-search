@@ -23,7 +23,14 @@ export async function createTestUser(emailPrefix: string, tier: string = 'COMMON
   });
   if (error) throw new Error(`createTestUser failed: ${error.message}`);
 
-  // El trigger on_auth_user_created crea el perfil. Si necesitamos un tier distinto, lo actualizamos.
+  // Wait for the on_auth_user_created trigger to create the public profile.
+  // Without this, FKs to public.users fail intermittently in CI.
+  for (let i = 0; i < 20; i++) {
+    const { data: profile } = await adminClient.from('users').select('id').eq('id', data.user.id).maybeSingle();
+    if (profile) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
   if (tier !== 'COMMON') {
     await adminClient
       .from('users')

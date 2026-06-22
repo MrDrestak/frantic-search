@@ -34,7 +34,7 @@ describe('submit_feedback() — reputación atómica', () => {
     buyerId  = buyer.id;
     sellerId = seller.id;
 
-    const { data } = await adminClient
+    const { data, error } = await adminClient
       .from('trade_interactions')
       .insert({
         buyer_id:    buyerId,
@@ -46,6 +46,7 @@ describe('submit_feedback() — reputación atómica', () => {
       })
       .select('id')
       .single();
+    if (error) throw new Error(`beforeEach insert failed: ${error.message}`);
     interactionId = data!.id;
   });
 
