@@ -99,6 +99,7 @@ export interface Binder {
   name: string;
   coverImage?: string;
   cardCount: number;
+  priceMultiplier?: number;
   createdAt: number;
 }
 

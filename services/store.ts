@@ -182,6 +182,7 @@ function mapToBinder(row: any): Binder {
     name: row.name,
     coverImage: row.cover_image || undefined,
     cardCount: row.card_count || 0,
+    priceMultiplier: row.price_multiplier ?? undefined,
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -1204,6 +1205,11 @@ export const binderService = {
     return mapToBinder(data);
   },
 
+  updateMultiplier: async (binderId: string, multiplier: number) => {
+    const clamped = Math.min(5.0, Math.max(1.5, parseFloat(multiplier.toFixed(1))));
+    await directFetch('PATCH', 'binders', { price_multiplier: clamped }, `id=eq.${binderId}`);
+  },
+
   deleteBinder: async (binderId: string) => {
     // CASCADE delete of cards handled by FK in Postgres
     await directFetch('DELETE', 'binders', null, `id=eq.${binderId}`);
@@ -1401,12 +1407,14 @@ export const cardService = {
   },
 
   syncBinderPrices: async (_binderId: string, cards: Card[]) => {
-    const scryfallIds = cards.map(c => c.scryfallId);
+    // Skip PEN-priced cards — they have a multiplier applied and must not be overwritten by sync
+    const usdCards = cards.filter(c => c.currency !== 'PEN');
+    const scryfallIds = usdCards.map(c => c.scryfallId);
     if (scryfallIds.length === 0) return;
     const prices = await directGet<{scryfall_id: string; price_sell_usd: number}>('prices', `scryfall_id=in.(${scryfallIds.join(',')})&select=scryfall_id,price_sell_usd`);
     if (!prices.length) return;
     const priceMap = new Map(prices.map((p) => [p.scryfall_id, p.price_sell_usd]));
-    for (const card of cards) {
+    for (const card of usdCards) {
       const newPrice = priceMap.get(card.scryfallId);
       if (newPrice !== undefined && newPrice !== card.price) {
         await directFetch('PATCH', 'cards', { custom_price: newPrice }, `id=eq.${card.id}`);

@@ -20,6 +20,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const [currentLimit, setCurrentLimit] = useState(25);
   const [isOwner, setIsOwner] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [multiplier, setMultiplier] = useState<number>(3.0);
+  const [isSavingMultiplier, setIsSavingMultiplier] = useState(false);
   
   const [filterText, setFilterText] = useState('');
 
@@ -64,7 +66,8 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   const loadData = async () => {
     const currentBinder = await binderService.getBinder(binderId);
     setBinder(currentBinder || null);
-    
+    setMultiplier(currentBinder?.priceMultiplier ?? 3.0);
+
     const currentUser = auth.getCurrentUser();
     const owner = currentUser && currentBinder && currentUser.id === currentBinder.userId;
     setIsOwner(!!owner);
@@ -99,6 +102,17 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
       } finally {
           setIsSyncing(false);
       }
+  };
+
+  const handleSaveMultiplier = async () => {
+    if (!binder) return;
+    setIsSavingMultiplier(true);
+    try {
+        await binderService.updateMultiplier(binder.id, multiplier);
+        setBinder(prev => prev ? { ...prev, priceMultiplier: multiplier } : prev);
+    } finally {
+        setIsSavingMultiplier(false);
+    }
   };
 
   useEffect(() => {
@@ -181,7 +195,15 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         }
 
         const scryfallPriceStr = isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd;
-        const price = ckPriceData?.sell ?? (scryfallPriceStr ? parseFloat(scryfallPriceStr) : 0);
+        const ckSell = ckPriceData?.sell ?? (scryfallPriceStr ? parseFloat(scryfallPriceStr) : 0);
+
+        // For Trade binders: store PEN price (CK × multiplier) so buyers see the real ask price
+        let customPrice: number | undefined;
+        let currency: 'USD' | 'PEN' | undefined;
+        if (binder.type === BinderType.FOR_TRADE && ckSell > 0) {
+            customPrice = parseFloat((ckSell * multiplier).toFixed(2));
+            currency = 'PEN';
+        }
 
         let auctionData = {};
         if (binder.type === BinderType.AUCTION) {
@@ -203,11 +225,13 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
             name: selectedCard.name,
             setName: selectedCard.set_name,
             collectorNumber: selectedCard.collector_number,
+            customPrice,
+            currency,
             imageUrl: getCardImage(selectedCard),
             condition: condition,
             isFoil: isFoil,
             rarity: selectedCard.rarity,
-            price: price,
+            price: ckSell,
             purchaseUrl: selectedCard.purchase_uris?.card_kingdom ?? undefined,
             game: binder.game,
             quantity: binder.type === BinderType.AUCTION ? 1 : quantity,
@@ -618,6 +642,32 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         <div className="flex gap-2 shrink-0"><button onClick={handleWhatsAppShare} className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded-lg transition-colors border border-transparent hover:border-green-400" title="Share to WhatsApp"><MessageCircle size={20} /></button><button onClick={handleShareBinder} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-blue-400" title="Copy Link"><Share2 size={20} /></button>{isOwner && (<><button onClick={() => setShowDeleteModal(true)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors border border-transparent hover:border-red-400" title="Delete Binder"><Trash2 size={20} /></button>{binder.type !== BinderType.AUCTION && (<button onClick={() => setShowCSV(true)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700 transition-colors"><Upload size={18} /> <span className="hidden md:inline">Carga Masiva</span></button>)}<button onClick={() => setShowSearch(true)} className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-violet-900/20"><Plus size={18} /> <span className="hidden md:inline">Añadir Carta</span></button></>)}</div>
       </header>
       
+      {isOwner && binder.type === BinderType.FOR_TRADE && (
+        <div className="flex-none bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap">
+          <span className="text-slate-400 text-sm font-medium">Multiplicador PEN</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMultiplier(m => Math.max(1.5, parseFloat((m - 0.1).toFixed(1))))}
+              className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center transition-colors"
+            ><Minus size={14} /></button>
+            <span className="text-white font-bold w-10 text-center tabular-nums">{multiplier.toFixed(1)}</span>
+            <button
+              onClick={() => setMultiplier(m => Math.min(5.0, parseFloat((m + 0.1).toFixed(1))))}
+              className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center transition-colors"
+            ><Plus size={14} /></button>
+          </div>
+          <span className="text-slate-600 text-xs hidden sm:inline">CK USD × {multiplier.toFixed(1)} = S/ PEN</span>
+          <button
+            onClick={handleSaveMultiplier}
+            disabled={isSavingMultiplier}
+            className="ml-auto bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+          >
+            {isSavingMultiplier ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            Guardar
+          </button>
+        </div>
+      )}
+
       <div className="flex-none">
           <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} /><input type="text" placeholder="Filtra por el nombre de la carta" value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full bg-slate-900/50 border border-slate-800 rounded-lg pl-10 pr-10 py-3 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 focus:outline-none transition-all" />{filterText && (<button onClick={() => setFilterText('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white p-1"><X size={16} /></button>)}</div>
       </div>
@@ -682,7 +732,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                                     </div>
                                 )}
 
-                                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><input type="checkbox" id="foil" checked={isFoil} onChange={(e) => setIsFoil(e.target.checked)} className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500" /><label htmlFor="foil" className="text-white cursor-pointer select-none font-medium">Foil / Special Finish</label></div><div className="text-right"><div className="text-xs text-slate-400">{ckPriceData ? 'Card Kingdom' : 'Est. Scryfall'}</div><div className="text-xl font-bold text-green-400">${ckPriceData ? ckPriceData.sell.toFixed(2) : ((isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd) || '---')}</div>{ckPriceData && ckPriceData.buy > 0 && <div className="text-[10px] text-slate-500 mt-0.5">CK Compra: ${ckPriceData.buy.toFixed(2)}</div>}</div></div></div>
+                                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><input type="checkbox" id="foil" checked={isFoil} onChange={(e) => setIsFoil(e.target.checked)} className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500" /><label htmlFor="foil" className="text-white cursor-pointer select-none font-medium">Foil / Special Finish</label></div><div className="text-right"><div className="text-xs text-slate-400">{ckPriceData ? 'Card Kingdom' : 'Est. Scryfall'}</div><div className="text-xl font-bold text-green-400">${ckPriceData ? ckPriceData.sell.toFixed(2) : ((isFoil ? selectedCard.prices.usd_foil : selectedCard.prices.usd) || '---')}</div>{ckPriceData && ckPriceData.buy > 0 && <div className="text-[10px] text-slate-500 mt-0.5">CK Compra: ${ckPriceData.buy.toFixed(2)}</div>}{binder.type === BinderType.FOR_TRADE && ckPriceData && <div className="text-[11px] text-amber-400 mt-1 font-bold">→ S/ {(ckPriceData.sell * multiplier).toFixed(2)} (×{multiplier.toFixed(1)})</div>}</div></div></div>
 
                                 {binder.type === BinderType.AUCTION && (
                                     <div className="space-y-4 bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl"><h4 className="text-amber-400 font-bold flex items-center gap-2"><Gavel size={18} /> Configuración de Subasta</h4><div className="bg-blue-900/30 border border-blue-800 rounded p-3 text-xs text-blue-200 flex items-start gap-2"><Clock size={16} className="mt-0.5 shrink-0" /><p>Todas las subastas cierran a las <strong>22:00 GMT-5</strong> (Lima/Bogota/Quito) en la fecha seleccionada. Cada subasta es por exactamente <b>1</b> copia.</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Fecha de Cierre</label><div className="relative"><Calendar className="absolute left-3 top-2.5 text-slate-500" size={16} /><input type="date" value={auctionEndDate} onChange={(e) => setAuctionEndDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Moneda</label><select value={auctionCurrency} onChange={(e) => setAuctionCurrency(e.target.value as any)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none"><option value="USD">USD ($)</option><option value="PEN">SOL (S/)</option></select></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Precio Base</label><input type="number" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div><div><label className="block text-xs uppercase font-bold text-slate-500 mb-1">Precio de Compra Directa</label><input type="number" step="0.01" value={buyItNowPrice} onChange={(e) => setBuyItNowPrice(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-amber-500 outline-none" /></div></div></div>
