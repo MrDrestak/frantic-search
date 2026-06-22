@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: ['./tests/setup.ts'],
       env,
+      fileParallelism: false,
     },
   };
 });
