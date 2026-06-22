@@ -1131,8 +1131,7 @@ export const adminService = {
   },
 
   wipeDatabase: async () => {
-    // Requires service_role — execute from server-side or Edge Function
-    console.warn('wipeDatabase: not available from client. Use Supabase dashboard or Edge Function.');
+    await directFetch('POST', 'rpc/admin_wipe_binders', {});
   },
 
   getUserDisplayNames: async (ids: string[]): Promise<Record<string, string>> => {
