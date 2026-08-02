@@ -779,12 +779,27 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
                           type="email"
                           value={loanEmail}
                           onChange={e => { setLoanEmail(e.target.value); setEmailStatus('idle'); setVerifiedUser(null); setConfirmedUnregistered(false); }}
-                          onBlur={handleVerifyLoanEmail}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleVerifyLoanEmail(); } }}
                           placeholder="ejemplo@correo.com"
                           className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500/50 outline-none"
                         />
-                        {emailStatus === 'checking' && <div className="flex items-center px-2"><Loader2 size={16} className="animate-spin text-slate-400" /></div>}
+                        <button
+                          type="button"
+                          onClick={handleVerifyLoanEmail}
+                          disabled={!loanEmail.trim() || emailStatus === 'checking'}
+                          className="px-3 py-2 bg-teal-700 hover:bg-teal-600 disabled:opacity-40 text-white rounded-lg transition-colors flex items-center gap-1.5 text-sm font-medium shrink-0"
+                        >
+                          {emailStatus === 'checking'
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Search size={14} />}
+                        </button>
                       </div>
+
+                      {emailStatus === 'checking' && (
+                        <p className="mt-1.5 text-xs text-slate-400 flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin" /> Buscando usuario...
+                        </p>
+                      )}
 
                       {emailStatus === 'found' && verifiedUser && (
                         <div className="mt-2 flex items-center gap-2 text-sm text-green-400">
