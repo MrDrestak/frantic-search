@@ -5,6 +5,7 @@ import { MatchResult, Card } from '../types';
 import { MessageCircle, MapPin, AlertTriangle, ChevronDown, ChevronUp, Star, CheckCircle, Clock, Crown } from 'lucide-react';
 import { SubscriptionTier } from '../types';
 import PremiumLoading from '../components/PremiumLoading';
+import InfoButton from '../components/InfoButton';
 import { motion } from 'framer-motion';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -200,9 +201,12 @@ const MarketMatch: React.FC<MarketMatchProps> = ({ onViewProfile }) => {
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24">
-       <header>
-          <h1 className="text-2xl font-bold text-white">{t('market.title')}</h1>
-          <p className="text-slate-400">{t('market.subtitle')}</p>
+       <header className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-white">{t('market.title')}</h1>
+            <p className="text-slate-400">{t('market.subtitle')}</p>
+          </div>
+          <InfoButton moduleKey="market" />
        </header>
 
        {groupedMatches.length === 0 ? (

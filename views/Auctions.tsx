@@ -4,6 +4,7 @@ import { auctionService, auth } from '../services/store';
 import { Card, GameType } from '../types';
 import AuctionCard from '../components/AuctionCard';
 import PremiumLoading from '../components/PremiumLoading';
+import InfoButton from '../components/InfoButton';
 import { Gavel, Search, Filter } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -109,14 +110,17 @@ const Auctions: React.FC<AuctionsProps> = ({ onViewProfile }) => {
 
     return (
         <div className="p-4 md:p-8 space-y-6 pb-24">
-            <header>
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
-                        <Gavel size={24} />
+            <header className="flex items-start justify-between gap-3">
+                <div>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
+                            <Gavel size={24} />
+                        </div>
+                        <h1 className="text-2xl font-bold text-white">{t('auctions.title')}</h1>
                     </div>
-                    <h1 className="text-2xl font-bold text-white">{t('auctions.title')}</h1>
+                    <p className="text-slate-400">{t('auctions.subtitle')}</p>
                 </div>
-                <p className="text-slate-400">{t('auctions.subtitle')}</p>
+                <InfoButton moduleKey="auctions" />
             </header>
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center">

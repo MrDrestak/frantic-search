@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { showcaseService, auth, tradeService } from '../services/store';
 import { ShowcaseItem, GameType } from '../types';
 import PremiumLoading from '../components/PremiumLoading';
+import InfoButton from '../components/InfoButton';
 import { Star, Search, Filter, User, ExternalLink, MessageCircle } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -56,14 +57,17 @@ const Showcase: React.FC<ShowcaseProps> = ({ onViewProfile }) => {
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24">
-      <header>
-        <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
-                <Star size={24} fill="currentColor" />
-            </div>
-            <h1 className="text-2xl font-bold text-white">{t('showcase.title')}</h1>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
+                  <Star size={24} fill="currentColor" />
+              </div>
+              <h1 className="text-2xl font-bold text-white">{t('showcase.title')}</h1>
+          </div>
+          <p className="text-slate-400">{t('showcase.subtitle')}</p>
         </div>
-        <p className="text-slate-400">{t('showcase.subtitle')}</p>
+        <InfoButton moduleKey="showcase" />
       </header>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4">

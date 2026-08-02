@@ -6,6 +6,7 @@ import { UserProfile, SubscriptionTier, Card, BinderType, AuctionStatus, GameTyp
 // Added AlertTriangle to imports
 import { User, Mail, Phone, MapPin, Edit2, Save, X, Loader2, ArrowLeft, Crown, Shield, Star, Gavel, ExternalLink, CheckCircle, AlertCircle, AlertTriangle, Send, Zap, ShieldAlert, ChevronRight, Navigation, Share2, Layers, Search, Filter, ChevronLeft, Eye, MessageCircle, ThumbsUp, Gamepad2, Megaphone, Copy, Check, Bell, ThumbsDown, BellOff } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
+import InfoButton from '../components/InfoButton';
 import MTGCard from '../components/MTGCard';
 
 interface ProfileProps {
@@ -417,11 +418,14 @@ const Profile: React.FC<ProfileProps> = ({ viewingUserId, onBack, onViewProfile,
                     <p className="text-slate-400">{isOwnProfile ? 'Maneja tu Perfil, anuncios y Tienda principal.' : 'Conoce al trader y su inventario.'}</p>
                 </div>
             </div>
-            {!isEditing && (
-                <button onClick={handleShareProfile} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-slate-700 shadow-lg">
-                    <Share2 size={18} /> <span className="hidden md:inline">Share Profile</span>
-                </button>
-            )}
+            <div className="flex items-center gap-2">
+                <InfoButton moduleKey="profile" />
+                {!isEditing && (
+                    <button onClick={handleShareProfile} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-slate-700 shadow-lg">
+                        <Share2 size={18} /> <span className="hidden md:inline">Share Profile</span>
+                    </button>
+                )}
+            </div>
         </header>
 
         {isOwnProfile && (

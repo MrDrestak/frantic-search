@@ -37,6 +37,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage, user }) => {
             {navItems.map((item) => (
               <button
                 key={item.id}
+                id={`nav-${item.id}`}
                 onClick={() => setPage(item.id)}
                 title={item.label}
                 className={`${

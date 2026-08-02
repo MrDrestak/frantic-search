@@ -6,6 +6,7 @@ import BinderCard from '../components/BinderCard';
 import PremiumLoading from '../components/PremiumLoading';
 import { Plus, X, Lock, Gavel } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
+import InfoButton from '../components/InfoButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -142,12 +143,15 @@ const Binders: React.FC<BindersProps> = ({ onSelectBinder }) => {
           <h1 className="text-2xl font-bold text-white">{t('binders.title')}</h1>
           <p className="text-slate-400">{t('binders.subtitle')}</p>
         </div>
-        <button
-          onClick={() => setIsCreating(true)}
-          className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-lg shadow-violet-900/20"
-        >
-          <Plus size={18} /> {t('binders.newBinder')}
-        </button>
+        <div className="flex items-center gap-2">
+          <InfoButton moduleKey="binders" />
+          <button
+            onClick={() => setIsCreating(true)}
+            className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-lg shadow-violet-900/20"
+          >
+            <Plus size={18} /> {t('binders.newBinder')}
+          </button>
+        </div>
       </header>
       
       {/* Alert for locked binders */}

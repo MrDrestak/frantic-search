@@ -5,6 +5,7 @@ import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus, Bi
 import { Star, MapPin, Layers, Loader2, ChevronLeft, ChevronRight, Gavel, TrendingUp, Sparkles, Megaphone, Folder, Heart, MessageCircle, Calendar, X, ExternalLink, Zap, Handshake, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '../i18n/useTranslation';
+import InfoButton from '../components/InfoButton';
 
 interface HomeProps {
     onNavigate: (page: string) => void;
@@ -278,7 +279,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 <section className="col-span-1 md:col-span-5 flex flex-col order-1">
                     <div className="flex items-center gap-2 mb-4 px-1">
                         <Zap className="text-violet-400" size={20} />
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">Mi Resumen</h2>
+                        <h2 className="text-xl font-bold text-white uppercase tracking-wider flex-1">Mi Resumen</h2>
+                        <InfoButton moduleKey="home" id="info-btn-home" />
                     </div>
                     <div className="h-[380px] bg-slate-900/40 border border-slate-800 rounded-3xl p-4 space-y-3">
                         <StatCard
