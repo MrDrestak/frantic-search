@@ -4,7 +4,7 @@ import {
   Binder, BinderType, Card, CardCondition, GameType, MatchResult,
   UserProfile, ShowcaseItem, SubscriptionTier, GlobalConfig, AuctionStatus,
   SystemConfig, TradeInteraction, NewsItem, StoreProfile, AppNotification,
-  CardAlert, FeedbackValue, InventoryDecision, InventoryDecisionResult,
+  CardAlert, FeedbackValue, InventoryDecision, InventoryDecisionResult, CardLoan,
 } from '../types';
 
 // ─── DEFAULTS ────────────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ function mapToCard(row: any): Card {
     condition: mapDbToCondition(row.condition),
     isFoil: row.is_foil || false,
     rarity: row.rarity || '',
-    price: row.prices?.price_sell_usd ?? row.custom_price ?? undefined,
+    price: row.prices?.price_sell_usd ?? row.ck_price_usd ?? row.custom_price ?? undefined,
     customPrice: row.custom_price ?? undefined,
     currency: row.currency ?? undefined,
     purchaseUrl: row.purchase_url ?? undefined,
@@ -277,6 +277,23 @@ function mapToNotification(row: any): AppNotification {
     imageUrl: row.image_url ?? undefined,
     read: row.read || false,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  };
+}
+
+function mapToCardLoan(row: any): CardLoan {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    lenderId: row.lender_id,
+    borrowerId: row.borrower_id ?? null,
+    borrowerEmail: row.borrower_email,
+    borrowerName: row.borrower_name ?? null,
+    quantity: row.quantity,
+    loanDate: row.loan_date ? new Date(row.loan_date).getTime() : Date.now(),
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    cardName: row.cards?.name ?? undefined,
+    cardSetName: row.cards?.set_name ?? undefined,
+    cardImageUrl: row.cards?.image_url ?? undefined,
   };
 }
 
@@ -1437,13 +1454,12 @@ export const cardService = {
 export const showcaseService = {
   getShowcaseItems: async (_game: GameType = GameType.MTG): Promise<ShowcaseItem[]> => {
     try {
-      const data = await directGet<any>('cards', `is_showcase=eq.true&order=added_at.desc&limit=50&select=*,users!cards_user_id_fkey(id,display_name,trader_score,subscription_tier,whatsapp)`);
-      const rows = await attachPrices(data);
-      return rows.map((row: any) => ({
+      const data = await directGet<any>('v_showcase_items', `order=added_at.desc&limit=50`);
+      return data.map((row: any) => ({
         ...mapToCard(row),
         sellerId: row.user_id,
-        sellerName: row.users?.display_name || 'Unknown Trader',
-        sellerWhatsapp: row.users?.whatsapp || undefined,
+        sellerName: row.seller_name || 'Unknown Trader',
+        sellerWhatsapp: row.seller_whatsapp || undefined,
       }));
     } catch {
       return [];
@@ -1554,7 +1570,7 @@ export const matchingService = {
 
     console.log('[findMatches] searching for:', namesToSearch);
 
-    const matches = await directGet<any>('cards', `name=in.(${namesToSearch.map(n => `"${n}"`).join(',')})&binder_type=in.(FOR_TRADE)&user_id=neq.${currentUserId}&select=*`);
+    const matches = await directGet<any>('v_tradeable_cards', `name=in.(${namesToSearch.map(n => `"${n}"`).join(',')})&binder_type=eq.FOR_TRADE&user_id=neq.${currentUserId}&select=*`);
 
     console.log('[findMatches] raw matches:', matches.length);
 
@@ -1661,6 +1677,100 @@ export const storeDirectoryService = {
 
   deleteStore: async (id: string) => {
     await directFetch('DELETE', 'stores', null, `id=eq.${id}`);
+  },
+};
+
+// ─── LOAN SERVICE ────────────────────────────────────────────────────────────
+
+export const loanService = {
+  getCardLoans: async (cardId: string): Promise<CardLoan[]> => {
+    try {
+      const rows = await directGet<any>('card_loans', `card_id=eq.${cardId}&order=created_at.desc`);
+      return rows.map(mapToCardLoan);
+    } catch {
+      return [];
+    }
+  },
+
+  getBinderLoans: async (cardIds: string[], lenderId: string): Promise<CardLoan[]> => {
+    if (cardIds.length === 0) return [];
+    try {
+      const rows = await directGet<any>(
+        'card_loans',
+        `lender_id=eq.${lenderId}&card_id=in.(${cardIds.join(',')})&order=created_at.desc`,
+      );
+      return rows.map(mapToCardLoan);
+    } catch {
+      return [];
+    }
+  },
+
+  getUserLoans: async (userId: string): Promise<CardLoan[]> => {
+    try {
+      const rows = await directGet<any>(
+        'card_loans',
+        `lender_id=eq.${userId}&order=loan_date.desc&select=*,cards(id,name,set_name,image_url)`,
+      );
+      return rows.map(mapToCardLoan);
+    } catch {
+      return [];
+    }
+  },
+
+  getLoanedQuantity: async (cardId: string): Promise<number> => {
+    try {
+      const rows = await directGet<{ quantity: number }>('card_loans', `card_id=eq.${cardId}&select=quantity`);
+      return rows.reduce((sum, r) => sum + (r.quantity || 0), 0);
+    } catch {
+      return 0;
+    }
+  },
+
+  lookupByEmail: async (email: string): Promise<{ id: string; name: string } | null> => {
+    try {
+      const rows = await directGet<{ id: string; display_name: string }>(
+        'users',
+        `email=eq.${encodeURIComponent(email)}&select=id,display_name&limit=1`,
+      );
+      return rows[0] ? { id: rows[0].id, name: rows[0].display_name } : null;
+    } catch {
+      return null;
+    }
+  },
+
+  createLoan: async (params: {
+    cardId: string;
+    lenderUserId: string;
+    borrowerEmail: string;
+    quantity: number;
+    loanDate: Date;
+  }): Promise<string> => {
+    assertAuthenticated(params.lenderUserId);
+
+    const found = await loanService.lookupByEmail(params.borrowerEmail);
+
+    const loaned = await loanService.getLoanedQuantity(params.cardId);
+    const cardRows = await directGet<{ quantity: number }>('cards', `id=eq.${params.cardId}&select=quantity&limit=1`);
+    const total = cardRows[0]?.quantity ?? 0;
+    const available = Math.max(total - loaned, 0);
+    if (params.quantity > available) {
+      throw new Error(`Solo hay ${available} copia(s) disponibles para prestar.`);
+    }
+
+    const data = await directInsert<any>('card_loans', {
+      card_id: params.cardId,
+      lender_id: params.lenderUserId,
+      borrower_id: found?.id ?? null,
+      borrower_email: params.borrowerEmail,
+      borrower_name: found?.name ?? null,
+      quantity: params.quantity,
+      loan_date: params.loanDate.toISOString(),
+    });
+    return data.id;
+  },
+
+  deleteLoan: async (loanId: string): Promise<void> => {
+    await directFetch('DELETE', 'card_loans', null, `id=eq.${loanId}`);
   },
 };
 

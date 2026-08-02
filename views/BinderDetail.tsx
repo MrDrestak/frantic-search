@@ -1,12 +1,12 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { cardService, binderService, auth, subscriptionService, getCKPrice } from '../services/store';
+import { cardService, binderService, auth, subscriptionService, getCKPrice, loanService } from '../services/store';
 import { motion } from 'framer-motion';
 import { searchCards, getCardImage, getCardPrintings } from '../services/scryfallService';
-import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus } from '../types';
+import { Card, Binder, ScryfallCard, CardCondition, BinderType, AuctionStatus, CardLoan } from '../types';
 import MTGCard from '../components/MTGCard';
 import CSVImporter from '../components/CSVImporter';
-import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus, RefreshCw, Download } from 'lucide-react';
+import { Search, ArrowLeft, Plus, Check, Loader2, X, Upload, ChevronRight, Layers, Trash2, AlertTriangle, DollarSign, Calendar, Gavel, Share2, Eye, MessageCircle, Clock, Minus, RefreshCw, Download, Handshake } from 'lucide-react';
 import SubscriptionModal from '../components/SubscriptionModal';
 
 interface BinderDetailProps {
@@ -59,6 +59,21 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
   
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
+  // ── Loan modal state ──
+  const [loanModalCard, setLoanModalCard] = useState<Card | null>(null);
+  const [cardLoans, setCardLoans] = useState<CardLoan[]>([]);
+  const [loanCounts, setLoanCounts] = useState<Record<string, number>>({});
+  const [isLoadingLoans, setIsLoadingLoans] = useState(false);
+  const [showLoanForm, setShowLoanForm] = useState(false);
+  const [loanEmail, setLoanEmail] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'found' | 'not_found'>('idle');
+  const [verifiedUser, setVerifiedUser] = useState<{ id: string; name: string } | null>(null);
+  const [confirmedUnregistered, setConfirmedUnregistered] = useState(false);
+  const [loanQty, setLoanQty] = useState(1);
+  const [loanDateStr, setLoanDateStr] = useState('');
+  const [isAddingLoan, setIsAddingLoan] = useState(false);
+  const [deletingLoanId, setDeletingLoanId] = useState<string | null>(null);
+
   useEffect(() => {
     loadData();
   }, [binderId]);
@@ -86,6 +101,16 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         // SYNC PRICES IN BACKGROUND
         if (binderCards.length > 0) {
             triggerPriceSync(binderCards);
+        }
+
+        // LOAD LOAN COUNTS FOR FOR_TRADE BINDERS
+        if (currentBinder.type === BinderType.FOR_TRADE && currentUser && binderCards.length > 0) {
+            const ids = binderCards.map(c => c.id);
+            loanService.getBinderLoans(ids, currentUser.id).then(loans => {
+                const counts: Record<string, number> = {};
+                loans.forEach(l => { counts[l.cardId] = (counts[l.cardId] || 0) + l.quantity; });
+                setLoanCounts(counts);
+            }).catch(() => {});
         }
     }
   };
@@ -292,6 +317,90 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
         onBack();
       }
   }
+
+  // ── Loan handlers ──────────────────────────────────────────────────────────
+
+  const handleOpenLoanModal = async (card: Card) => {
+    setLoanModalCard(card);
+    setShowLoanForm(false);
+    setLoanEmail('');
+    setEmailStatus('idle');
+    setVerifiedUser(null);
+    setConfirmedUnregistered(false);
+    setLoanQty(1);
+    setLoanDateStr(new Date().toISOString().split('T')[0]);
+    setIsLoadingLoans(true);
+    const loans = await loanService.getCardLoans(card.id);
+    setCardLoans(loans);
+    setIsLoadingLoans(false);
+  };
+
+  const handleCloseLoanModal = () => {
+    setLoanModalCard(null);
+    setCardLoans([]);
+    setShowLoanForm(false);
+    setLoanEmail('');
+    setEmailStatus('idle');
+    setVerifiedUser(null);
+    setConfirmedUnregistered(false);
+  };
+
+  const handleVerifyLoanEmail = async () => {
+    const email = loanEmail.trim();
+    if (!email) return;
+    setEmailStatus('checking');
+    setVerifiedUser(null);
+    const found = await loanService.lookupByEmail(email);
+    if (found) {
+      setVerifiedUser(found);
+      setEmailStatus('found');
+    } else {
+      setEmailStatus('not_found');
+    }
+  };
+
+  const handleAddLoan = async () => {
+    if (!loanModalCard || !currentUser) return;
+    setIsAddingLoan(true);
+    try {
+      await loanService.createLoan({
+        cardId: loanModalCard.id,
+        lenderUserId: currentUser.id,
+        borrowerEmail: loanEmail.trim(),
+        quantity: loanQty,
+        loanDate: new Date(loanDateStr + 'T12:00:00'),
+      });
+      const loans = await loanService.getCardLoans(loanModalCard.id);
+      setCardLoans(loans);
+      const totalLoaned = loans.reduce((sum, l) => sum + l.quantity, 0);
+      setLoanCounts(prev => ({ ...prev, [loanModalCard.id]: totalLoaned }));
+      setShowLoanForm(false);
+      setLoanEmail('');
+      setEmailStatus('idle');
+      setVerifiedUser(null);
+      setConfirmedUnregistered(false);
+      setLoanQty(1);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsAddingLoan(false);
+    }
+  };
+
+  const handleDeleteLoan = async (loan: CardLoan) => {
+    if (!loanModalCard) return;
+    if (!confirm('¿Confirmar devolución?')) return;
+    setDeletingLoanId(loan.id);
+    try {
+      await loanService.deleteLoan(loan.id);
+      const updated = cardLoans.filter(l => l.id !== loan.id);
+      setCardLoans(updated);
+      const totalLoaned = updated.reduce((sum, l) => sum + l.quantity, 0);
+      setLoanCounts(prev => ({ ...prev, [loanModalCard.id]: totalLoaned > 0 ? totalLoaned : 0 }));
+    } finally {
+      setDeletingLoanId(null);
+    }
+  };
 
   const handleShareBinder = () => {
       if (!binder) return;
@@ -577,6 +686,183 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
       {showCSV && <CSVImporter onClose={() => setShowCSV(false)} onImport={handleBatchImport} />}
 
+      {/* ── Loan Management Modal ── */}
+      {loanModalCard && (() => {
+        const loaned = cardLoans.reduce((sum, l) => sum + l.quantity, 0);
+        const available = Math.max((loanModalCard.quantity || 1) - loaned, 0);
+        const canAdd = available > 0;
+        const emailOk = emailStatus === 'found' || (emailStatus === 'not_found' && confirmedUnregistered);
+
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex justify-between items-start p-5 border-b border-slate-800">
+                <div>
+                  <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                    <Handshake size={18} className="text-teal-400" /> Gestión de Préstamos
+                  </h3>
+                  <p className="text-white font-semibold mt-1">{loanModalCard.name}</p>
+                  <p className="text-slate-400 text-xs">{loanModalCard.setName}</p>
+                </div>
+                <button onClick={handleCloseLoanModal} className="text-slate-400 hover:text-white transition-colors mt-1"><X size={20} /></button>
+              </div>
+
+              {/* Stats row */}
+              <div className="flex gap-4 px-5 py-3 bg-slate-950/40 text-sm border-b border-slate-800">
+                <span className="text-slate-400">Totales: <span className="text-white font-bold">{loanModalCard.quantity}</span></span>
+                <span className="text-teal-400">Disponibles: <span className="font-bold">{available}</span></span>
+                <span className="text-amber-400">Prestadas: <span className="font-bold">{loaned}</span></span>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Loans list */}
+                {isLoadingLoans ? (
+                  <div className="flex justify-center py-6"><Loader2 size={24} className="animate-spin text-teal-400" /></div>
+                ) : cardLoans.length > 0 ? (
+                  <div className="space-y-2">
+                    {cardLoans.map(loan => (
+                      <div key={loan.id} className="flex items-center gap-3 bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white text-sm font-medium truncate">
+                              {loan.borrowerName || loan.borrowerEmail}
+                            </span>
+                            {!loan.borrowerId && (
+                              <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded font-bold">No registrado</span>
+                            )}
+                          </div>
+                          <div className="flex gap-3 mt-0.5 text-[11px] text-slate-500">
+                            <span>x{loan.quantity}</span>
+                            <span>{new Date(loan.loanDate).toLocaleDateString('es-PE')}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLoan(loan)}
+                          disabled={deletingLoanId === loan.id}
+                          className="w-7 h-7 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 transition-colors shrink-0"
+                        >
+                          {deletingLoanId === loan.id ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-600 text-sm text-center py-4">No hay préstamos activos para esta carta.</p>
+                )}
+
+                {/* Add loan section */}
+                {!canAdd && !showLoanForm && (
+                  <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-sm text-amber-400 text-center">
+                    No hay copias disponibles para prestar.
+                  </div>
+                )}
+
+                {canAdd && !showLoanForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLoanForm(true)}
+                    className="w-full py-2.5 border border-dashed border-teal-700/50 text-teal-400 hover:bg-teal-500/5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Plus size={16} /> Agregar Préstamo
+                  </button>
+                )}
+
+                {showLoanForm && (
+                  <div className="border border-slate-700 rounded-xl p-4 space-y-4 bg-slate-950/30">
+                    {/* Email field */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Email del prestatario</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={loanEmail}
+                          onChange={e => { setLoanEmail(e.target.value); setEmailStatus('idle'); setVerifiedUser(null); setConfirmedUnregistered(false); }}
+                          onBlur={handleVerifyLoanEmail}
+                          placeholder="ejemplo@correo.com"
+                          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500/50 outline-none"
+                        />
+                        {emailStatus === 'checking' && <div className="flex items-center px-2"><Loader2 size={16} className="animate-spin text-slate-400" /></div>}
+                      </div>
+
+                      {emailStatus === 'found' && verifiedUser && (
+                        <div className="mt-2 flex items-center gap-2 text-sm text-green-400">
+                          <Check size={14} />
+                          <span className="font-medium">{verifiedUser.name}</span>
+                          <span className="text-slate-500 text-xs">registrado en Frantic Search</span>
+                        </div>
+                      )}
+
+                      {emailStatus === 'not_found' && !confirmedUnregistered && (
+                        <div className="mt-2 bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-sm">
+                          <p className="text-amber-400">Este correo no está registrado en Frantic Search. ¿Agregar préstamo de todas formas?</p>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmedUnregistered(true)}
+                            className="mt-2 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 px-3 py-1 rounded text-xs font-bold transition-colors"
+                          >
+                            Sí, agregar
+                          </button>
+                        </div>
+                      )}
+
+                      {emailStatus === 'not_found' && confirmedUnregistered && (
+                        <p className="mt-1.5 text-xs text-amber-500/70">Préstamo sin cuenta registrada — se vinculará si el usuario se registra después.</p>
+                      )}
+                    </div>
+
+                    {/* Quantity + Date (only shown when email is resolved) */}
+                    {(emailStatus === 'found' || confirmedUnregistered) && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Cantidad</label>
+                            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden h-10">
+                              <button type="button" onClick={() => setLoanQty(q => Math.max(1, q - 1))} className="w-10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><Minus size={14} /></button>
+                              <span className="flex-1 text-center text-white font-bold tabular-nums">{loanQty}</span>
+                              <button type="button" onClick={() => setLoanQty(q => Math.min(available, q + 1))} className="w-10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><Plus size={14} /></button>
+                            </div>
+                            <p className="text-[10px] text-slate-600 mt-1">Máx: {available}</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Fecha del préstamo</label>
+                            <input
+                              type="date"
+                              value={loanDateStr}
+                              onChange={e => setLoanDateStr(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-teal-500/50 outline-none h-10"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-1">
+                          <button type="button" onClick={() => { setShowLoanForm(false); setLoanEmail(''); setEmailStatus('idle'); setVerifiedUser(null); setConfirmedUnregistered(false); }} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors">Cancelar</button>
+                          <button
+                            type="button"
+                            onClick={handleAddLoan}
+                            disabled={isAddingLoan || !loanEmail.trim() || !loanDateStr}
+                            className="flex-1 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                          >
+                            {isAddingLoan ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            Confirmar Préstamo
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Cancel if no email action yet */}
+                    {emailStatus !== 'found' && !confirmedUnregistered && (
+                      <button type="button" onClick={() => { setShowLoanForm(false); setLoanEmail(''); setEmailStatus('idle'); }} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-sm transition-colors">Cancelar</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-sm w-full p-6 shadow-2xl animate-in fade-in zoom-in-95">
@@ -749,7 +1035,7 @@ const BinderDetail: React.FC<BinderDetailProps> = ({ binderId, onBack }) => {
 
       <div className="flex-1 overflow-y-auto pr-2 pb-20">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {filteredCards.map(card => (<MTGCard key={card.id} card={card} onRemove={isOwner ? () => handleRemoveCard(card.id) : undefined} enableShowcase={isOwner && binder.type === BinderType.FOR_TRADE} onToggleShowcase={isOwner ? () => handleToggleShowcase(card) : undefined} onSetPrice={isOwner && binder.type === BinderType.FOR_TRADE ? () => handleOpenPriceModal(card) : undefined} />))}
+            {filteredCards.map(card => (<MTGCard key={card.id} card={card} onRemove={isOwner ? () => handleRemoveCard(card.id) : undefined} enableShowcase={isOwner && binder.type === BinderType.FOR_TRADE} onToggleShowcase={isOwner ? () => handleToggleShowcase(card) : undefined} onSetPrice={isOwner && binder.type === BinderType.FOR_TRADE ? () => handleOpenPriceModal(card) : undefined} onLoan={isOwner && binder.type === BinderType.FOR_TRADE ? () => handleOpenLoanModal(card) : undefined} loanCount={loanCounts[card.id] || 0} />))}
             {cards.length === 0 && (<div className="col-span-full text-center py-20 text-slate-500"><Layers className="w-16 h-16 mx-auto mb-4 opacity-20" /><p>Este folder está vacío.</p>{isOwner && <button onClick={() => setShowSearch(true)} className="text-violet-400 underline mt-2">Comienza a agregar cartas</button>}</div>)}
             {cards.length > 0 && filteredCards.length === 0 && (<div className="col-span-full text-center py-12 text-slate-500"><p>Ninguna carta coincide con "{filterText}"</p><button onClick={() => setFilterText('')} className="text-violet-400 hover:text-violet-300 mt-2 text-sm font-medium">Limpiar filtro</button></div>)}
         </div>

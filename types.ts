@@ -263,3 +263,19 @@ export interface CardAlert {
     cardName: string;
     createdAt: number;
 }
+
+export interface CardLoan {
+    id: string;
+    cardId: string;
+    lenderId: string;
+    borrowerId: string | null;
+    borrowerEmail: string;
+    borrowerName: string | null;
+    quantity: number;
+    loanDate: number;
+    createdAt: number;
+    // Populated by getUserLoans join:
+    cardName?: string;
+    cardSetName?: string;
+    cardImageUrl?: string;
+}

@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { showcaseService, newsService, storeDirectoryService, auth, auctionService, userStatsService } from '../services/store';
-import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus, BinderType } from '../types';
-import { Star, MapPin, Layers, Loader2, ChevronLeft, ChevronRight, Gavel, TrendingUp, Sparkles, Megaphone, Folder, Heart, MessageCircle, Calendar, X, ExternalLink, Zap } from 'lucide-react';
+import { showcaseService, newsService, storeDirectoryService, auth, auctionService, userStatsService, loanService } from '../services/store';
+import { ShowcaseItem, NewsItem, StoreProfile, GameType, Card, AuctionStatus, BinderType, CardLoan } from '../types';
+import { Star, MapPin, Layers, Loader2, ChevronLeft, ChevronRight, Gavel, TrendingUp, Sparkles, Megaphone, Folder, Heart, MessageCircle, Calendar, X, ExternalLink, Zap, Handshake, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -51,6 +51,10 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
     const [showcaseFilter, setShowcaseFilter] = useState<string>('');
     const [eventsModalStore, setEventsModalStore] = useState<StoreProfile | null>(null);
     const [userStats, setUserStats] = useState({ folderCards: 0, auctionCards: 0, wishlistCards: 0, pendingFeedbacks: 0 });
+    const [loanedCount, setLoanedCount] = useState(0);
+    const [userLoans, setUserLoans] = useState<CardLoan[]>([]);
+    const [showLoansPopup, setShowLoansPopup] = useState(false);
+    const [deletingLoanId, setDeletingLoanId] = useState<string | null>(null);
 
     const currentUser = auth.getCurrentUser();
 
@@ -77,10 +81,15 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 setAuctions(auc);
 
                 if (currentUser) {
-                    const stats = await userStatsService.getUserStats(currentUser.id).catch(() => ({
-                        folderCards: 0, auctionCards: 0, wishlistCards: 0, pendingFeedbacks: 0,
-                    }));
+                    const [stats, loans] = await Promise.all([
+                        userStatsService.getUserStats(currentUser.id).catch(() => ({
+                            folderCards: 0, auctionCards: 0, wishlistCards: 0, pendingFeedbacks: 0,
+                        })),
+                        loanService.getUserLoans(currentUser.id).catch(() => []),
+                    ]);
                     setUserStats(stats);
+                    setUserLoans(loans);
+                    setLoanedCount(loans.reduce((sum, l) => sum + l.quantity, 0));
                 }
             } catch (e) {
                 console.error('[Home] loadAll error', e);
@@ -188,6 +197,80 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                 )}
             </AnimatePresence>
 
+            {/* ── Loans Popup ── */}
+            <AnimatePresence>
+                {showLoansPopup && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                        onClick={() => setShowLoansPopup(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.92, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.92, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 20 }}
+                            className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[80vh] flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0">
+                                <h3 className="text-white font-bold flex items-center gap-2">
+                                    <Handshake size={18} className="text-teal-400" />
+                                    Mis Préstamos Activos
+                                    <span className="text-teal-400 font-black">({loanedCount})</span>
+                                </h3>
+                                <button onClick={() => setShowLoansPopup(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+                            </div>
+
+                            <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                                {userLoans.length === 0 ? (
+                                    <p className="text-slate-600 text-sm text-center py-8">No hay préstamos activos.</p>
+                                ) : userLoans.map(loan => (
+                                    <div key={loan.id} className="flex items-center gap-3 bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3">
+                                        {loan.cardImageUrl && (
+                                            <img src={loan.cardImageUrl} alt={loan.cardName} className="w-8 h-11 object-cover rounded shrink-0" />
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-white text-sm font-bold truncate">{loan.cardName || '—'}</p>
+                                            <p className="text-slate-500 text-[11px] truncate">{loan.cardSetName}</p>
+                                            <div className="flex gap-3 mt-0.5 text-[11px] text-slate-400 flex-wrap">
+                                                <span>x{loan.quantity}</span>
+                                                <span className="flex items-center gap-1">
+                                                    {loan.borrowerName || loan.borrowerEmail}
+                                                    {!loan.borrowerId && <span className="text-[9px] bg-amber-500/10 border border-amber-500/30 text-amber-500 px-1 rounded">No reg.</span>}
+                                                </span>
+                                                <span>{new Date(loan.loanDate).toLocaleDateString('es-PE')}</span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                if (!confirm('¿Confirmar devolución?')) return;
+                                                setDeletingLoanId(loan.id);
+                                                try {
+                                                    await loanService.deleteLoan(loan.id);
+                                                    const updated = userLoans.filter(l => l.id !== loan.id);
+                                                    setUserLoans(updated);
+                                                    setLoanedCount(updated.reduce((s, l) => s + l.quantity, 0));
+                                                } finally {
+                                                    setDeletingLoanId(null);
+                                                }
+                                            }}
+                                            disabled={deletingLoanId === loan.id}
+                                            className="w-7 h-7 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 transition-colors shrink-0"
+                                        >
+                                            {deletingLoanId === loan.id ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* ── ROW 1: Info Panel | Subasta Destacada | Tiendas Aliadas ── */}
             <div className="grid grid-cols-1 md:grid-cols-20 gap-6 items-stretch">
 
@@ -222,6 +305,13 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onViewProfile }) => {
                             value={userStats.pendingFeedbacks}
                             onClick={() => onNavigate('profile')}
                             highlight={userStats.pendingFeedbacks > 0}
+                        />
+                        <StatCard
+                            icon={<Handshake size={18} className="text-teal-400" />}
+                            label="Cartas prestadas"
+                            value={loanedCount}
+                            onClick={() => loanedCount > 0 && setShowLoansPopup(true)}
+                            highlight={loanedCount > 0}
                         />
                     </div>
                 </section>

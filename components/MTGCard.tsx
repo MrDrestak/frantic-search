@@ -1,17 +1,19 @@
 
 import React from 'react';
 import { Card } from '../types';
-import { Sparkles, X, Star, Link, DollarSign } from 'lucide-react';
+import { Sparkles, X, Star, Link, DollarSign, Handshake } from 'lucide-react';
 
 interface MTGCardProps {
   card: Card;
   onRemove?: () => void;
   onToggleShowcase?: () => void;
   onSetPrice?: () => void;
+  onLoan?: () => void;
+  loanCount?: number;
   enableShowcase?: boolean;
 }
 
-const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onSetPrice, enableShowcase }) => {
+const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onSetPrice, onLoan, loanCount = 0, enableShowcase }) => {
   
   const handleCKLink = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -137,7 +139,24 @@ const MTGCard: React.FC<MTGCardProps> = ({ card, onRemove, onToggleShowcase, onS
                     title={card.isShowcase ? "Remove from Showcase" : "Add to Showcase"}
                     className={`flex-1 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border ${card.isShowcase ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 hover:bg-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-amber-200 hover:border-amber-700'}`}
                 >
-                    <Star size={14} fill={card.isShowcase ? "currentColor" : "none"} /> 
+                    <Star size={14} fill={card.isShowcase ? "currentColor" : "none"} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (onLoan) onLoan();
+                    }}
+                    title="Gestionar Préstamos"
+                    className={`flex-1 text-xs py-1.5 px-2 rounded flex items-center justify-center transition-colors border relative ${loanCount > 0 ? 'bg-teal-500/10 border-teal-500/50 text-teal-400 hover:bg-teal-500/20' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-teal-200 hover:border-teal-700'}`}
+                >
+                    <Handshake size={14} />
+                    {loanCount > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-teal-500 text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center leading-none">
+                            {loanCount}
+                        </span>
+                    )}
                 </button>
             </>
           )}
